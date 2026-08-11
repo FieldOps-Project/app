@@ -1,10 +1,8 @@
 import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
 
-/** Typographic role of the text. */
 export type TextVariant = 'title' | 'subtitle' | 'body' | 'label' | 'caption' | 'code';
 
-/** Semantic color of the text. */
-export type TextTone = 'default' | 'muted' | 'brand' | 'success' | 'warning' | 'danger';
+export type TextTone = 'default' | 'muted' | 'brand' | 'success' | 'warning' | 'danger' | 'inverse';
 
 const variantClasses: Record<TextVariant, string> = {
   title: 'text-3xl font-bold',
@@ -22,22 +20,22 @@ const toneClasses: Record<TextTone, string> = {
   success: 'text-success-strong dark:text-success',
   warning: 'text-warning-strong dark:text-warning',
   danger: 'text-danger-strong dark:text-danger',
+  inverse: 'text-neutral-0',
 };
 
 export interface TextProps extends RNTextProps {
-  /** Typographic role. Defaults to `body`. */
   variant?: TextVariant;
-  /** Semantic color. Defaults to `default`. */
   tone?: TextTone;
-  /** Extra utility classes appended after the variant and tone classes. */
   className?: string;
 }
 
 /**
  * Design system text.
  *
- * Size and color are chosen from a fixed set of variants and tones so screens
- * stay consistent and keep their contrast ratios.
+ * Colour must be chosen through `tone`, never through `className`. Tailwind
+ * resolves conflicting utilities by their order in the generated stylesheet,
+ * not by the order they appear in the class string, so a colour passed in
+ * `className` can silently lose to the tone class.
  */
 export function Text({ variant = 'body', tone = 'default', className, ...props }: TextProps) {
   return (
