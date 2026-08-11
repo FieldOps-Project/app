@@ -2,6 +2,14 @@ import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
+/**
+ * Safe area edges for a screen rendered under a navigation header.
+ *
+ * The header already covers the top inset, so repeating it here would push the
+ * content down twice.
+ */
+export const BELOW_HEADER_EDGES = ['bottom', 'left', 'right'] as const;
+
 export interface ScreenProps {
   children: ReactNode;
   /**
