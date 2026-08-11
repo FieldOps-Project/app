@@ -1,43 +1,47 @@
+import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
+import { useSession } from '@/application/session/session-context';
 import { env } from '@/config/env';
 import { Button } from '@/design-system/components/button';
+import { Card } from '@/design-system/components/card';
 import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import type { DomainError } from '@/domain/result';
 import { useApiHealth } from '@/features/home/hooks/use-api-health';
 
 /**
- * Home screen.
+ * Home tab.
  *
- * Shows the active environment configuration and the result of the API health
- * check, which doubles as a diagnostic for local network setup.
+ * Opens with the actions the technician reaches most often, and keeps the
+ * environment and API diagnostic below them, which is what turns a
+ * misconfigured local network into visible information.
  */
 export function HomeScreen() {
+  const { session } = useSession();
   const health = useApiHealth();
+  const router = useRouter();
 
   return (
     <Screen scrollable>
       <View className="gap-1">
-        <Text variant="title">FieldOps</Text>
+        <Text variant="title">Olá, {session?.name.split(' ')[0] ?? 'técnico'}</Text>
         <Text variant="body" tone="muted">
-          Aplicativo de inspeções em campo. Este é o esqueleto técnico do projeto: rotas, camadas,
-          design system e configuração por ambiente.
+          Acompanhe suas inspeções do dia.
         </Text>
       </View>
 
-      <View className="gap-3 rounded-card bg-neutral-0 p-4 dark:bg-neutral-900">
-        <Text variant="label" tone="muted">
-          Ambiente
-        </Text>
+      <Card title="Ações rápidas">
+        <Button label="Ver inspeções" onPress={() => router.push('/inspections')} />
+        <Button label="Ler código" variant="secondary" onPress={() => router.push('/scanner')} />
+      </Card>
+
+      <Card title="Ambiente">
         <Row label="Perfil" value={env.appEnv} />
         <Row label="API" value={env.apiUrl} />
-      </View>
+      </Card>
 
-      <View className="gap-3 rounded-card bg-neutral-0 p-4 dark:bg-neutral-900">
-        <Text variant="label" tone="muted">
-          Conexão com a API
-        </Text>
+      <Card title="Conexão com a API">
         <ApiHealthStatus
           isPending={health.isPending}
           isFetching={health.isFetching}
@@ -50,7 +54,7 @@ export function HomeScreen() {
           loading={health.isFetching}
           onPress={() => void health.refetch()}
         />
-      </View>
+      </Card>
     </Screen>
   );
 }
