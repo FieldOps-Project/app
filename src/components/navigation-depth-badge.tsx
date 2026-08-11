@@ -6,14 +6,10 @@ import { isDevelopment } from '@/config/env';
 import { Text } from '@/design-system/components/text';
 
 /**
- * Shows how many screens the enclosing stack holds.
+ * Stack depth, shown only in development.
  *
- * Document 13.3 requires that repeatedly opening the camera does not pile up
- * screens. That property is invisible in a normal screenshot, so this badge
- * makes it observable while testing: the number must return to the same value
- * after each capture cycle.
- *
- * Rendered only in development builds, so it never reaches a technician.
+ * Makes the "camera does not pile up screens" rule observable: the number must
+ * return to the same value after each capture cycle.
  */
 export function NavigationDepthBadge() {
   const navigation = useNavigation();

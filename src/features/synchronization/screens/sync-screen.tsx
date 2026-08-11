@@ -10,11 +10,8 @@ import { syncStateLabel } from '@/domain/inspection';
 import { sampleInspections } from '@/features/inspections/data/sample-inspections';
 
 /**
- * Synchronization tab.
- *
- * Document 13.8 requires the delivery state to stay visible rather than appear
- * as a temporary message, which is why synchronization is a tab reachable in
- * one touch and not a screen hidden behind a menu.
+ * A tab, not a screen behind a menu: document 13.8 requires the delivery state
+ * to stay visible, and one-touch reach is part of that.
  */
 export function SyncScreen() {
   const router = useRouter();
@@ -50,7 +47,7 @@ export function SyncScreen() {
   );
 }
 
-/** Maps a delivery state to a text tone. The label always carries the meaning on its own. */
+/** Colour only reinforces; the label always carries the meaning on its own. */
 function toneFor(state: SyncState): 'success' | 'warning' | 'danger' | 'muted' {
   if (state === 'enviado') {
     return 'success';

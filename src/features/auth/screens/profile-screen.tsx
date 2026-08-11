@@ -7,7 +7,6 @@ import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { canReviewInspections } from '@/domain/session';
 
-/** Profile tab, showing the active session and ending it. */
 export function ProfileScreen() {
   const { session, signOut } = useSession();
   const [isLeaving, setIsLeaving] = useState(false);

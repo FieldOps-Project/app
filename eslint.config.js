@@ -1,12 +1,7 @@
 const expoConfig = require('eslint-config-expo/flat');
 const prettierConfig = require('eslint-config-prettier');
 
-/**
- * Interface layers, from the outermost inwards.
- *
- * Referenced by the boundary rules below so that no inner layer imports from a
- * layer closer to the screen.
- */
+/** Interface layers. No inner layer may import from a layer closer to the screen. */
 const UI_LAYERS = [
   '@/app',
   '@/app/*',
@@ -18,24 +13,11 @@ const UI_LAYERS = [
   '@/design-system/*',
 ];
 
-/** Infrastructure layer: API, database, files and connectivity. */
 const INFRASTRUCTURE_LAYER = ['@/infrastructure', '@/infrastructure/*'];
 
-/**
- * Relative paths climbing two or more levels.
- *
- * Blocked because they cross a layer boundary while bypassing the alias-based
- * rules below. Imports between folders use the `@/` alias.
- */
+/** Relative paths climbing two or more levels bypass the alias-based rules below. */
 const DEEP_RELATIVE = ['../../*', '../../**'];
 
-/**
- * Builds a `no-restricted-imports` rule entry.
- *
- * @param {string[]} patterns Import patterns to reject.
- * @param {string} message Explanation reported on violation.
- * @returns {Record<string, unknown>} Rules object for a flat config block.
- */
 function restrict(patterns, message) {
   return {
     'no-restricted-imports': ['error', { patterns: [{ group: patterns, message }] }],

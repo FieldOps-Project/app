@@ -7,7 +7,6 @@ import { Card } from '@/design-system/components/card';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 
-/** Code scanner used to identify equipment and locations. */
 export function ScannerScreen() {
   const router = useRouter();
 

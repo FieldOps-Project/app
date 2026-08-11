@@ -8,7 +8,6 @@ import type { InspectionSummary } from '@/domain/inspection';
 import { inspectionStatusLabel, syncStateLabel } from '@/domain/inspection';
 import { sampleInspections } from '@/features/inspections/data/sample-inspections';
 
-/** List of inspections assigned to the technician. */
 export function InspectionsListScreen() {
   const router = useRouter();
 
@@ -39,12 +38,7 @@ export function InspectionsListScreen() {
   );
 }
 
-/**
- * Inspection row.
- *
- * The delivery state is shown as text, not only as colour, so the information
- * survives for a technician who cannot distinguish the hues (document 13.9).
- */
+/** Delivery state as text, not only colour, per document 13.9. */
 function InspectionCard({ inspection }: { inspection: InspectionSummary }) {
   return (
     <Card>

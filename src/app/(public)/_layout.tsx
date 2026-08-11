@@ -4,11 +4,8 @@ import { useSession } from '@/application/session/session-context';
 import { Loading } from '@/design-system/components/loading';
 
 /**
- * Public area layout.
- *
- * Sends an already signed-in person to the protected area, which keeps the
- * login screen out of the history and makes the Android back button leave the
- * app instead of returning to a screen that no longer applies.
+ * Sends an already signed-in person to the protected area, keeping the login
+ * screen out of the history so the Android back button leaves the app.
  */
 export default function PublicLayout() {
   const { session, isRestoring } = useSession();

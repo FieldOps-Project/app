@@ -8,13 +8,7 @@ import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import type { SessionRole } from '@/domain/session';
 
-/**
- * Sign-in screen.
- *
- * The session is simulated in this sprint: choosing a role starts a session and
- * releases the protected area. EP-02 replaces the origin of the session without
- * changing this screen's place in the route tree.
- */
+/** The session is simulated in this sprint; EP-02 replaces only its origin. */
 export function LoginScreen() {
   const { signIn } = useSession();
   const [pendingRole, setPendingRole] = useState<SessionRole | null>(null);

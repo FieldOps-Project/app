@@ -3,13 +3,7 @@ import { Tabs } from 'expo-router';
 
 import { colors } from '@/design-system/tokens/design-tokens';
 
-/**
- * Tab navigation of the protected area.
- *
- * Synchronization is a tab, not a screen behind a menu: document 13.8 requires
- * the delivery state to stay visible, and reaching it in one touch is part of
- * that.
- */
+/** Synchronization is a tab, not a screen behind a menu (document 13.8). */
 export default function TabsLayout() {
   return (
     <Tabs

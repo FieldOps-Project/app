@@ -14,11 +14,8 @@ import { SessionProvider } from '@/application/session/session-context';
 import { darkNavigationTheme, lightNavigationTheme } from '@/design-system/theme/navigation-theme';
 
 /**
- * Root layout.
- *
- * Installs the providers every route depends on and holds the two top-level
- * groups: the public area and the protected area. The guard itself lives in
- * each group layout, so this file has no knowledge of the session.
+ * Installs the shared providers and holds the two top-level groups. The guard
+ * lives in each group layout, so this file knows nothing about the session.
  */
 export default function RootLayout() {
   const colorScheme = useColorScheme();

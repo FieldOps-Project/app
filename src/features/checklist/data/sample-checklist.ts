@@ -1,11 +1,6 @@
 import type { ChecklistItem } from '@/domain/inspection';
 
-/**
- * Fixed checklist used while the API integration is not delivered.
- *
- * The list is deliberately long enough to scroll, so returning from the camera
- * to the same item can be observed rather than assumed.
- */
+/** Long enough to scroll, so returning to the same item can be observed. */
 export const sampleChecklist: readonly ChecklistItem[] = [
   { id: 'chk-01', order: 1, question: 'Extintores dentro da validade', requiresEvidence: true },
   {

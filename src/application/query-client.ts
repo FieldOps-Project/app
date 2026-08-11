@@ -1,11 +1,8 @@
 import { QueryClient } from '@tanstack/react-query';
 
 /**
- * Creates the TanStack Query client used by the whole app.
- *
- * Defaults target field use: loaded data stays valid for a few minutes and
- * automatic retry is limited. Retrying write operations is handled by the
- * synchronization outbox (EP-08), not by the cache.
+ * Defaults target field use: insisting on a request with no network only drains
+ * battery. Retrying writes belongs to the synchronization outbox (EP-08).
  */
 export function createQueryClient(): QueryClient {
   return new QueryClient({

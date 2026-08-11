@@ -10,13 +10,6 @@ import { Text } from '@/design-system/components/text';
 import type { DomainError } from '@/domain/result';
 import { useApiHealth } from '@/features/home/hooks/use-api-health';
 
-/**
- * Home tab.
- *
- * Opens with the actions the technician reaches most often, and keeps the
- * environment and API diagnostic below them, which is what turns a
- * misconfigured local network into visible information.
- */
 export function HomeScreen() {
   const { session } = useSession();
   const health = useApiHealth();
@@ -66,7 +59,6 @@ interface ApiHealthStatusProps {
   status: string | undefined;
 }
 
-/** Renders the loading, failure and success states of the health check. */
 function ApiHealthStatus({ isPending, isFetching, error, status }: ApiHealthStatusProps) {
   if (isPending || isFetching) {
     return (
@@ -97,12 +89,6 @@ function ApiHealthStatus({ isPending, isFetching, error, status }: ApiHealthStat
   );
 }
 
-/**
- * Extracts the user-facing message from a caught error.
- *
- * @param error Value thrown by the query function.
- * @returns The `DomainError` message, or a generic fallback.
- */
 function messageFor(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
     return String((error as DomainError).message);
@@ -115,7 +101,6 @@ interface RowProps {
   value: string;
 }
 
-/** Label and value pair used by the environment card. */
 function Row({ label, value }: RowProps) {
   return (
     <View className="flex-row items-baseline justify-between gap-4">

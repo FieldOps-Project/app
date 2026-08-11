@@ -8,14 +8,9 @@ import {
 import { env } from '@/config/env';
 import { domainError, fail, ok, type DomainError, type Result } from '@/domain/result';
 
-/** Maximum time in milliseconds to wait for a response before aborting. */
 const REQUEST_TIMEOUT_MS = 15_000;
 
-/**
- * Shared axios instance pointing at the configured API.
- *
- * Interceptors for the session token are added in EP-02.
- */
+/** Session token interceptors are added here in EP-02. */
 export const httpClient: AxiosInstance = createAxiosInstance({
   baseURL: env.apiUrl,
   timeout: REQUEST_TIMEOUT_MS,
@@ -23,19 +18,13 @@ export const httpClient: AxiosInstance = createAxiosInstance({
 });
 
 export interface HttpRequest extends Omit<AxiosRequestConfig, 'url'> {
-  /** Path appended to the configured base URL. */
   path: string;
 }
 
 /**
- * Performs an HTTP request and returns a `Result` instead of throwing.
- *
- * Network loss, timeout and server error responses are expected conditions in
- * field use, so the caller decides between showing a message, queueing for
- * resend or requesting a new sign-in.
- *
- * @param options Request path plus any axios configuration.
- * @returns The parsed response body, or a `DomainError` describing the failure.
+ * Returns a `Result` instead of throwing: network loss, timeout and server
+ * errors are expected in field use, and the caller decides between showing a
+ * message, queueing for resend or requesting a new sign-in.
  */
 export async function request<TResponse>(
   options: HttpRequest
@@ -50,12 +39,7 @@ export async function request<TResponse>(
   }
 }
 
-/**
- * Maps an axios failure to a `DomainError`.
- *
- * The request body is never copied into the error, so no sensitive value
- * reaches a log through this path.
- */
+/** The request body never reaches the error, so no sensitive value is logged. */
 function toDomainError(cause: unknown): DomainError {
   if (!isAxiosError(cause)) {
     return domainError('unknown', 'Falha inesperada ao consultar a API.', cause);

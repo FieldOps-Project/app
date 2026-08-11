@@ -9,14 +9,8 @@ import { Text } from '@/design-system/components/text';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
 /**
- * Evidence capture.
- *
- * The camera itself arrives in EP-05; this screen holds its place in the route
- * tree and the navigation contract around it.
- *
- * Moving to the preview uses `replace`, so the capture and the preview share a
- * single stack entry. Combined with `dismissTo` on the way back, a full capture
- * cycle leaves the stack exactly as deep as it was.
+ * The camera arrives in EP-05; this screen holds the navigation contract around
+ * it. Moving to the preview uses `replace`, so both share one stack entry.
  */
 export function EvidenceCaptureScreen() {
   const inspectionId = useInspectionId();

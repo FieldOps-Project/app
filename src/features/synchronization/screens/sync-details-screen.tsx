@@ -4,7 +4,6 @@ import { Card } from '@/design-system/components/card';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 
-/** Detail of the pending operations queue. */
 export function SyncDetailsScreen() {
   return (
     <Screen scrollable edges={BELOW_HEADER_EDGES}>

@@ -7,7 +7,6 @@ import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
-/** Confirmation step before opening the checklist of an inspection. */
 export function InspectionStartScreen() {
   const inspectionId = useInspectionId();
   const router = useRouter();

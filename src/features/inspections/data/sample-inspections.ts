@@ -1,11 +1,6 @@
 import type { InspectionSummary } from '@/domain/inspection';
 
-/**
- * Fixed inspections used while the API integration is not delivered.
- *
- * They exist so the parameterized routes have real identifiers to carry. The
- * list is replaced by the API query in EP-03 without any route changing.
- */
+/** Fixed data so the parameterized routes carry real identifiers. Replaced in EP-03. */
 export const sampleInspections: readonly InspectionSummary[] = [
   {
     id: 'INS-2401',
@@ -33,12 +28,6 @@ export const sampleInspections: readonly InspectionSummary[] = [
   },
 ];
 
-/**
- * Finds one inspection by identifier.
- *
- * @param inspectionId Identifier taken from the route parameter.
- * @returns The inspection, or `undefined` when the identifier does not exist.
- */
 export function findInspection(inspectionId: string): InspectionSummary | undefined {
   return sampleInspections.find((inspection) => inspection.id === inspectionId);
 }

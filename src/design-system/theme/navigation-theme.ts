@@ -3,12 +3,9 @@ import { DarkTheme, DefaultTheme, type Theme } from 'expo-router';
 import { colors } from '@/design-system/tokens/design-tokens';
 
 /**
- * React Navigation themes derived from the same tokens used by the utility
- * classes, so headers and screen transitions match the styled content.
- *
- * The symbols come from `expo-router`, which re-exports the React Navigation
- * theme. Importing `@react-navigation/native` directly would depend on a
- * package the project does not declare.
+ * Derived from the same tokens as the utility classes, so headers and screen
+ * transitions match the styled content. The symbols come from `expo-router` to
+ * avoid depending on a package the project does not declare.
  */
 export const lightNavigationTheme: Theme = {
   ...DefaultTheme,
@@ -23,7 +20,6 @@ export const lightNavigationTheme: Theme = {
   },
 };
 
-/** Dark counterpart of {@link lightNavigationTheme}. */
 export const darkNavigationTheme: Theme = {
   ...DarkTheme,
   colors: {

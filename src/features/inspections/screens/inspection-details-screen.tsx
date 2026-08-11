@@ -9,12 +9,7 @@ import { inspectionStatusLabel, syncStateLabel } from '@/domain/inspection';
 import { findInspection } from '@/features/inspections/data/sample-inspections';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
-/**
- * Details of one inspection, and the entry point to its sub-routes.
- *
- * Reads the identifier from the route so every sub-route below carries the same
- * parameter.
- */
+/** Entry point to the sub-routes, all carrying the same route parameter. */
 export function InspectionDetailsScreen() {
   const inspectionId = useInspectionId();
   const router = useRouter();

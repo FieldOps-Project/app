@@ -12,12 +12,9 @@ import { sampleChecklist } from '@/features/checklist/data/sample-checklist';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
 /**
- * Checklist of an inspection.
- *
- * The screen stays mounted while the camera is open, because the evidence
- * routes are pushed on top of it and unwound with `dismissTo`. That is what
- * preserves the scroll position, and the focused item is highlighted so the
- * technician sees where they left off (document 13.9).
+ * The screen stays mounted while the camera is open, which is what preserves
+ * the scroll position. The focused item is highlighted so the technician sees
+ * where they left off (document 13.9).
  */
 export function ChecklistScreen() {
   const inspectionId = useInspectionId();
@@ -74,7 +71,6 @@ interface ChecklistRowProps {
   onFocus: () => void;
 }
 
-/** Single checklist item, highlighted when it is the one being worked on. */
 function ChecklistRow({ item, isFocused, evidenceCount, onCapture, onFocus }: ChecklistRowProps) {
   return (
     <Pressable onPress={onFocus} accessibilityRole="button">

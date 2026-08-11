@@ -10,12 +10,7 @@ import { Text } from '@/design-system/components/text';
 import { useReturnToChecklist } from '@/features/evidence/hooks/use-return-to-checklist';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
-/**
- * Review of a captured evidence before attaching it to the checklist item.
- *
- * Every exit either replaces this entry or unwinds to the checklist, so no path
- * out of this screen leaves an extra entry in the stack.
- */
+/** Every exit replaces this entry or unwinds, so no path leaves an extra one. */
 export function EvidencePreviewScreen() {
   const inspectionId = useInspectionId();
   const { itemId } = useLocalSearchParams<{ itemId?: string }>();

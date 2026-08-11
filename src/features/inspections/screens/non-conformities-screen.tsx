@@ -5,7 +5,6 @@ import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
-/** Non-conformities recorded during an inspection. */
 export function NonConformitiesScreen() {
   const inspectionId = useInspectionId();
 
