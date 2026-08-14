@@ -1,13 +1,8 @@
 /**
- * Visual tokens for FieldOps.
- *
- * Written in plain JavaScript because it is read both by `tailwind.config.js`,
- * which runs as CommonJS outside the bundler, and by the TypeScript app code.
- * A single file keeps the utility-class palette and the navigation-theme
- * palette from diverging.
+ * Visual tokens, in plain JavaScript because `tailwind.config.js` runs as
+ * CommonJS outside the bundler while the app code is TypeScript. One file keeps
+ * the utility-class palette and the navigation theme from diverging.
  */
-
-/** Color scale. `DEFAULT` is the shade applied when a class carries no suffix. */
 const colors = {
   brand: {
     50: '#eff6ff',
@@ -42,19 +37,17 @@ const colors = {
   info: { DEFAULT: '#0369a1', soft: '#e0f2fe', strong: '#075985' },
 };
 
-/** Additional spacing steps that complement the default Tailwind scale. */
 const spacing = {
   screen: '16px',
   'field-gap': '12px',
 };
 
-/** Border radii used by cards, fields and buttons. */
 const borderRadius = {
   field: '10px',
   card: '14px',
 };
 
-/** Minimum touch target in pixels recommended by the Android accessibility guidelines. */
+/** Android accessibility guideline for touch targets, in pixels. */
 const minTouchTarget = 48;
 
 module.exports = { colors, spacing, borderRadius, minTouchTarget };

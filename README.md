@@ -129,6 +129,48 @@ src/
 ├── hooks/  schemas/  utils/  config/
 ```
 
+## Navegação
+
+A árvore de rotas segue o documento
+[13 - Aplicativo Mobile](https://github.com/FieldOps-Project/docs/blob/main/notion/13-aplicativo-mobile.md),
+seção 13.3, com dois grupos no topo:
+
+```text
+src/app/
+├── _layout.tsx                 # provedores e grupos
+├── (public)/login.tsx          # área pública
+└── (protected)/                # exige sessão
+    ├── (tabs)/                 # Início · Inspeções · Sincronização · Perfil
+    ├── inspections/[inspectionId]/{index,start,checklist,summary,non-conformities}.tsx
+    ├── scanner.tsx
+    ├── evidence/{capture,preview}.tsx
+    └── sync/details.tsx
+```
+
+**Proteção de rota.** O layout de `(protected)` verifica a sessão: sem sessão, redireciona
+para `/login`. O `Redirect` substitui a entrada em vez de empilhar, então o botão voltar do
+Android nunca retorna a uma tela protegida depois da saída. O layout de `(public)` faz o
+inverso: com sessão ativa, manda para a área protegida. O redirecionamento espera a leitura
+do armazenamento seguro terminar, senão quem já entrou seria mandado ao login a cada
+abertura do aplicativo.
+
+**Sessão simulada.** Nesta sprint a sessão é criada escolhendo um perfil na tela de login e
+guardada no `expo-secure-store`, sobrevivendo ao reinício do aplicativo. EP-02 substitui
+apenas a origem da sessão, em
+[`src/application/session/session-context.tsx`](src/application/session/session-context.tsx);
+o guarda e as telas não mudam.
+
+**Sincronização é aba, não tela escondida.** O documento 13.8 exige que o estado de envio
+permaneça visível, e alcance em um toque faz parte disso.
+
+**Contexto preservado entre checklist e câmera.** As rotas de evidência são empilhadas sobre
+o checklist e desfeitas com `dismissTo`, de modo que a tela do checklist nunca é
+desmontada — a posição de rolagem e o item em foco continuam onde estavam. Dentro do ciclo,
+captura e conferência trocam de lugar com `replace` e ocupam uma única entrada da pilha.
+Abrir e fechar a câmera várias vezes mantém a profundidade constante. Em build de
+desenvolvimento, um indicador na tela mostra o tamanho da pilha para tornar isso
+verificável.
+
 ## Decisões técnicas
 
 **Expo Router com pasta `src/app`.** Rota é arquivo, o que mantém a navegação previsível e

@@ -2,30 +2,18 @@ import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
+/** For screens under a navigation header, which already covers the top inset. */
+export const BELOW_HEADER_EDGES = ['bottom', 'left', 'right'] as const;
+
 export interface ScreenProps {
   children: ReactNode;
-  /**
-   * Wraps the content in a scroll view. Defaults to `false`.
-   *
-   * Form and checklist screens grow beyond the usable height of the device,
-   * especially with the keyboard open.
-   */
+  /** Wraps the content in a scroll view. */
   scrollable?: boolean;
-  /**
-   * Safe area edges to respect. Defaults to all four.
-   *
-   * Routes that show their own header should pass
-   * `['bottom', 'left', 'right']`, since the header covers the top edge.
-   */
+  /** Defaults to all four. Under a header, pass {@link BELOW_HEADER_EDGES}. */
   edges?: readonly Edge[];
-  /** Extra utility classes applied to the content container. */
   className?: string;
 }
 
-/**
- * Default screen container providing safe area, background color and
- * horizontal padding.
- */
 export function Screen({
   children,
   scrollable = false,

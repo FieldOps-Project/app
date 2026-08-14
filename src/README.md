@@ -5,7 +5,7 @@ seção 11.4.
 
 ```text
 src/
-├── app/                      # Rotas do Expo Router
+├── app/                      # Rotas do Expo Router: (public) e (protected)
 ├── features/                 # auth, home, inspections, checklist,
 │                             # evidence, scanner, location, synchronization
 ├── components/               # Componentes compartilhados entre features
@@ -21,15 +21,15 @@ src/
 
 ## Responsabilidade de cada camada
 
-| Pasta            | Responsabilidade                                                              |
-| ---------------- | ----------------------------------------------------------------------------- |
-| `app`            | Navegação e composição de tela. Arquivo de rota só escolhe e monta a tela.    |
-| `features`       | Organização por capacidade de negócio: telas, hooks e componentes da feature. |
-| `components`     | Componentes compartilhados que não pertencem a uma feature só.                |
-| `design-system`  | Tokens, tema e componentes visuais. Sem regra de negócio, sem acesso a dado.  |
-| `application`    | Coordena ações: iniciar, salvar, concluir, sincronizar.                       |
-| `domain`         | Tipos, estados e validações independentes de plataforma.                      |
-| `infrastructure` | API, SQLite, arquivos e conectividade.                                        |
+| Pasta            | Responsabilidade                                                                 |
+| ---------------- | -------------------------------------------------------------------------------- |
+| `app`            | Navegação, grupos de rota e guarda de sessão. O arquivo de rota só monta a tela. |
+| `features`       | Organização por capacidade de negócio: telas, hooks e componentes da feature.    |
+| `components`     | Componentes compartilhados que não pertencem a uma feature só.                   |
+| `design-system`  | Tokens, tema e componentes visuais. Sem regra de negócio, sem acesso a dado.     |
+| `application`    | Coordena ações: iniciar, salvar, concluir, sincronizar.                          |
+| `domain`         | Tipos, estados e validações independentes de plataforma.                         |
+| `infrastructure` | API, SQLite, arquivos e conectividade.                                           |
 
 ## Direção das dependências
 
