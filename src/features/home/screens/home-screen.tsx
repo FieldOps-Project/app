@@ -5,6 +5,8 @@ import { useSession } from '@/application/session/session-context';
 import { env } from '@/config/env';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
+import { ErrorState } from '@/design-system/components/error-state';
+import { OfflineNotice } from '@/design-system/components/offline-notice';
 import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import type { DomainError } from '@/domain/result';
@@ -40,12 +42,7 @@ export function HomeScreen() {
           isFetching={health.isFetching}
           error={health.error}
           status={health.data?.status}
-        />
-        <Button
-          label="Testar novamente"
-          variant="secondary"
-          loading={health.isFetching}
-          onPress={() => void health.refetch()}
+          onRetry={() => void health.refetch()}
         />
       </Card>
     </Screen>
@@ -57,9 +54,10 @@ interface ApiHealthStatusProps {
   isFetching: boolean;
   error: unknown;
   status: string | undefined;
+  onRetry: () => void;
 }
 
-function ApiHealthStatus({ isPending, isFetching, error, status }: ApiHealthStatusProps) {
+function ApiHealthStatus({ isPending, isFetching, error, status, onRetry }: ApiHealthStatusProps) {
   if (isPending || isFetching) {
     return (
       <Text variant="body" tone="muted">
@@ -69,23 +67,41 @@ function ApiHealthStatus({ isPending, isFetching, error, status }: ApiHealthStat
   }
 
   if (error) {
+    if (isOffline(error)) {
+      return (
+        <View className="gap-3">
+          <OfflineNotice message="Sem conexão com a API. O aplicativo continua utilizável offline." />
+          <Button label="Testar novamente" variant="secondary" onPress={onRetry} />
+        </View>
+      );
+    }
+
     return (
-      <View className="gap-1">
-        <Text variant="body" tone="danger">
-          {messageFor(error)}
-        </Text>
-        <Text variant="caption" tone="muted">
-          Confirme se a API está no ar e se EXPO_PUBLIC_API_URL usa um endereço alcançável pelo
-          aparelho. O aplicativo continua utilizável sem a API.
-        </Text>
-      </View>
+      <ErrorState
+        title="Sem resposta da API"
+        description={messageFor(error)}
+        retryLabel="Testar novamente"
+        onRetry={onRetry}
+      />
     );
   }
 
   return (
-    <Text variant="body" tone="success">
-      API respondeu{status ? `: ${status}` : ' com sucesso'}.
-    </Text>
+    <View className="gap-3">
+      <Text variant="body" tone="success">
+        API respondeu{status ? `: ${status}` : ' com sucesso'}.
+      </Text>
+      <Button label="Testar novamente" variant="secondary" onPress={onRetry} />
+    </View>
+  );
+}
+
+function isOffline(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'kind' in error &&
+    (error as DomainError).kind === 'offline'
   );
 }
 
