@@ -2,7 +2,8 @@ import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
 
 export type TextVariant = 'title' | 'subtitle' | 'body' | 'label' | 'caption' | 'code';
 
-export type TextTone = 'default' | 'muted' | 'brand' | 'success' | 'warning' | 'danger' | 'inverse';
+export type TextTone =
+  'default' | 'muted' | 'brand' | 'info' | 'success' | 'warning' | 'danger' | 'inverse';
 
 const variantClasses: Record<TextVariant, string> = {
   title: 'text-3xl font-bold',
@@ -17,6 +18,7 @@ const toneClasses: Record<TextTone, string> = {
   default: 'text-neutral-900 dark:text-neutral-50',
   muted: 'text-neutral-500 dark:text-neutral-400',
   brand: 'text-brand-700 dark:text-brand-300',
+  info: 'text-info-strong dark:text-info',
   success: 'text-success-strong dark:text-success',
   warning: 'text-warning-strong dark:text-warning',
   danger: 'text-danger-strong dark:text-danger',

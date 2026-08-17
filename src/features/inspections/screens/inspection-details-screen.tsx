@@ -1,11 +1,13 @@
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
+import { InspectionStatusBadge } from '@/components/inspection-status-badge';
+import { SyncStateBadge } from '@/components/sync-state-badge';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
+import { EmptyState } from '@/design-system/components/empty-state';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
-import { inspectionStatusLabel, syncStateLabel } from '@/domain/inspection';
 import { findInspection } from '@/features/inspections/data/sample-inspections';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
@@ -18,11 +20,13 @@ export function InspectionDetailsScreen() {
   if (inspection === undefined) {
     return (
       <Screen edges={BELOW_HEADER_EDGES}>
-        <Text variant="subtitle">Inspeção não encontrada</Text>
-        <Text variant="body" tone="muted">
-          Nenhuma inspeção corresponde ao identificador {inspectionId || 'informado'}.
-        </Text>
-        <Button label="Voltar para a lista" variant="secondary" onPress={() => router.back()} />
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Inspeção não encontrada"
+          description={`Nenhuma inspeção corresponde ao identificador ${inspectionId || 'informado'}.`}
+          actionLabel="Voltar para a lista"
+          onAction={() => router.back()}
+        />
       </Screen>
     );
   }
@@ -41,10 +45,10 @@ export function InspectionDetailsScreen() {
         <Text variant="body" tone="muted">
           {inspection.scheduledFor}
         </Text>
-        <Text variant="body">{inspectionStatusLabel(inspection.status)}</Text>
-        <Text variant="body" tone={inspection.syncState === 'enviado' ? 'success' : 'warning'}>
-          {syncStateLabel(inspection.syncState)}
-        </Text>
+        <View className="flex-row flex-wrap items-center gap-2">
+          <InspectionStatusBadge status={inspection.status} />
+          <SyncStateBadge state={inspection.syncState} />
+        </View>
       </Card>
 
       <Card title="Ações">
