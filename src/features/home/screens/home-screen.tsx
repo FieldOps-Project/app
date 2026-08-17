@@ -9,8 +9,8 @@ import { ErrorState } from '@/design-system/components/error-state';
 import { OfflineNotice } from '@/design-system/components/offline-notice';
 import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
-import type { DomainError } from '@/domain/result';
 import { useApiHealth } from '@/features/home/hooks/use-api-health';
+import { describeApiFailure, isNetworkFailure, type ApiFailure } from '@/infrastructure/api';
 
 export function HomeScreen() {
   const { session } = useSession();
@@ -52,7 +52,7 @@ export function HomeScreen() {
 interface ApiHealthStatusProps {
   isPending: boolean;
   isFetching: boolean;
-  error: unknown;
+  error: ApiFailure | null;
   status: string | undefined;
   onRetry: () => void;
 }
@@ -67,7 +67,8 @@ function ApiHealthStatus({ isPending, isFetching, error, status, onRetry }: ApiH
   }
 
   if (error) {
-    if (isOffline(error)) {
+    // Losing the network is normal offline operation, never an error banner.
+    if (isNetworkFailure(error)) {
       return (
         <View className="gap-3">
           <OfflineNotice message="Sem conexão com a API. O aplicativo continua utilizável offline." />
@@ -79,7 +80,7 @@ function ApiHealthStatus({ isPending, isFetching, error, status, onRetry }: ApiH
     return (
       <ErrorState
         title="Sem resposta da API"
-        description={messageFor(error)}
+        description={describeApiFailure(error)}
         retryLabel="Testar novamente"
         onRetry={onRetry}
       />
@@ -94,22 +95,6 @@ function ApiHealthStatus({ isPending, isFetching, error, status, onRetry }: ApiH
       <Button label="Testar novamente" variant="secondary" onPress={onRetry} />
     </View>
   );
-}
-
-function isOffline(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'kind' in error &&
-    (error as DomainError).kind === 'offline'
-  );
-}
-
-function messageFor(error: unknown): string {
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    return String((error as DomainError).message);
-  }
-  return 'Falha inesperada ao consultar a API.';
 }
 
 interface RowProps {

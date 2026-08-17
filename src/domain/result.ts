@@ -3,8 +3,12 @@
  *
  * Returning the failure in the type forces the caller to handle it to compile.
  * `throw` is reserved for programming defects and invalid configuration.
+ *
+ * The error channel is intentionally generic: each boundary declares its own
+ * failure vocabulary — the API layer uses `ApiFailure` — so `src/domain` stays
+ * free of any transport or platform concern (document 11.4).
  */
-export type Result<TValue, TError = DomainError> =
+export type Result<TValue, TError> =
   { readonly ok: true; readonly value: TValue } | { readonly ok: false; readonly error: TError };
 
 export function ok<TValue>(value: TValue): Result<TValue, never> {
@@ -13,24 +17,4 @@ export function ok<TValue>(value: TValue): Result<TValue, never> {
 
 export function fail<TError>(error: TError): Result<never, TError> {
   return { ok: false, error };
-}
-
-/** Failure categories the interface distinguishes when guiding the user. */
-export type DomainErrorKind =
-  'offline' | 'server' | 'unauthorized' | 'validation' | 'not-found' | 'unknown';
-
-/**
- * Business failure described independently of platform.
- *
- * `message` is displayed to the user. Technical detail belongs in `cause` and
- * must never carry a password, token or file content.
- */
-export interface DomainError {
-  readonly kind: DomainErrorKind;
-  readonly message: string;
-  readonly cause?: unknown;
-}
-
-export function domainError(kind: DomainErrorKind, message: string, cause?: unknown): DomainError {
-  return { kind, message, cause };
 }
