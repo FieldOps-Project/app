@@ -127,9 +127,10 @@ recusa `network` em tempo de compilação — quem chama precisa descartá-lo an
 `isNetworkFailure`.
 
 **Erro de negócio** (409/422) é lido do envelope padronizado da API (documento 12.2 e o
-record `ApiError` do backend), analisado com Zod em
-[`api-error.ts`](src/infrastructure/api/api-error.ts). Falha de rede e erro de negócio ficam,
-assim, distinguidos desde a primeira chamada.
+record `ApiError` do backend) em
+[`api-error.ts`](src/infrastructure/api/api-error.ts), que confia no contrato e só confere o
+par `code`/`message`. Falha de rede e erro de negócio ficam, assim, distinguidos desde a
+primeira chamada.
 
 **Sem log de dado sensível.** A `ApiFailure` carrega apenas `kind` e, quando existe, os
 campos seguros do envelope do servidor. Nada da requisição (cabeçalhos, corpo, token) é

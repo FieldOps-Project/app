@@ -67,7 +67,6 @@ function ApiHealthStatus({ isPending, isFetching, error, status, onRetry }: ApiH
   }
 
   if (error) {
-    // Losing the network is normal offline operation, never an error banner.
     if (isNetworkFailure(error)) {
       return (
         <View className="gap-3">

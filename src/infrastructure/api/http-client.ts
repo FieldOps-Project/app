@@ -52,14 +52,19 @@ export async function request<TResponse>(
 /**
  * Translates a transport-level error into the app's failure taxonomy.
  *
+ * A missing response means the round-trip never completed — offline, DNS
+ * failure or the timeout above — and all three map to `network`, the failure
+ * that is never shown. 422 is the canonical business status (12.2); a 400 is
+ * accepted as business only when it carries the same envelope, since some
+ * validations surface that way, and a rejection without the envelope, like any
+ * other unmapped status, is a `server` fault the user cannot resolve.
+ *
  * Nothing from the request — headers, body, bearer token — is ever copied onto
- * the failure. Only the server's own error envelope (safe business data) and
- * the HTTP status shape the result, which keeps credentials out of every
- * failure value and, in turn, out of any log (RN-007).
+ * the failure: only the server's own error envelope and the HTTP status shape
+ * the result, which keeps credentials out of every failure value and out of any
+ * log (RN-007).
  */
 function toApiFailure(cause: unknown): ApiFailure {
-  // No `response` means the round-trip never completed: offline, DNS failure or
-  // the timeout above. All three are `network` — the failure that is never shown.
   if (!isAxiosError(cause) || cause.response === undefined) {
     return { kind: 'network' };
   }
@@ -77,14 +82,10 @@ function toApiFailure(cause: unknown): ApiFailure {
       const body = parseApiErrorBody(data);
       return { kind: 'conflict', code: body?.code ?? 'CONFLICT' };
     }
-    // 422 is the canonical business status (12.2); a 400 is accepted only when
-    // it carries the same envelope, since some validations surface that way.
     case 400:
     case 422: {
       const body = parseApiErrorBody(data);
       if (body === null) {
-        // A rejection without the agreed envelope is a contract break, not a
-        // business rule the user can act on: treat it as a server fault.
         return { kind: 'server' };
       }
       return {
@@ -95,7 +96,6 @@ function toApiFailure(cause: unknown): ApiFailure {
       };
     }
     default:
-      // 5xx and any unmapped status: a fault the user cannot resolve.
       return { kind: 'server' };
   }
 }

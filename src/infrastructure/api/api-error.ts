@@ -1,44 +1,40 @@
-import { z } from 'zod';
-
 /**
- * The canonical error envelope every endpoint returns on failure.
+ * The canonical error envelope every endpoint returns on failure: a
+ * machine-readable `code`, a human `message` and optional per-field errors
+ * (document 12.2 and the backend `ApiError` record).
  *
- * Mirrors the contract fixed in document 12.2 and the backend `ApiError`
- * record: a machine-readable `code`, a human `message` and optional per-field
- * errors, wrapped with tracing metadata.
- *
- * This file is hand-authored on purpose. Until the API publishes its OpenAPI
- * document (backend#3) there is no schema to generate from, so this envelope is
- * the interim source of truth. See `generated/README.md`: once
- * `npm run types:api` produces the real types, this shape must be reconciled
- * against them.
+ * Hand-authored on purpose. Until the API publishes its OpenAPI document
+ * (backend#3) there is no schema to generate from, so this shape is the interim
+ * source of truth and must be reconciled against the generated types once
+ * `npm run types:api` can run. See `generated/README.md`.
  */
-const fieldErrorSchema = z.object({
-  field: z.string(),
-  message: z.string(),
-});
+export interface ApiFieldError {
+  field: string;
+  message: string;
+}
 
-const apiErrorSchema = z.object({
-  timestamp: z.string().optional(),
-  status: z.number().optional(),
-  code: z.string(),
-  message: z.string(),
-  path: z.string().optional(),
-  requestId: z.string().optional(),
-  fieldErrors: z.array(fieldErrorSchema).optional(),
-});
-
-export type ApiErrorBody = z.infer<typeof apiErrorSchema>;
-export type ApiFieldError = z.infer<typeof fieldErrorSchema>;
+export interface ApiErrorBody {
+  code: string;
+  message: string;
+  fieldErrors?: ApiFieldError[];
+}
 
 /**
- * Parses an error payload into the canonical envelope without ever throwing.
- *
- * A malformed or absent body — a proxy timeout page, an empty 502, an HTML
- * error from a misconfigured gateway — is expected in the field, so a parse
- * miss is a normal `null` the caller handles, not an exception.
+ * Reads an error payload into the canonical envelope, trusting the contract for
+ * its shape and only guarding the `code`/`message` pair that drives the
+ * business failure and its message. A body missing that pair — a proxy timeout
+ * page, an empty 502, an HTML gateway error — is a normal `null` the caller
+ * handles, never an exception.
  */
 export function parseApiErrorBody(data: unknown): ApiErrorBody | null {
-  const parsed = apiErrorSchema.safeParse(data);
-  return parsed.success ? parsed.data : null;
+  if (typeof data !== 'object' || data === null) {
+    return null;
+  }
+
+  const body = data as Partial<ApiErrorBody>;
+  if (typeof body.code !== 'string' || typeof body.message !== 'string') {
+    return null;
+  }
+
+  return body as ApiErrorBody;
 }
