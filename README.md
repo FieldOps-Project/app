@@ -96,6 +96,64 @@ Checklist quando o aplicativo não alcança a API:
 A primeira tela do aplicativo mostra a URL configurada e o resultado de uma consulta ao
 endpoint de saúde da API, o que serve como diagnóstico rápido dessa configuração.
 
+## Comunicação com a API
+
+Toda chamada passa por uma única função `request` em
+[`src/infrastructure/api`](src/infrastructure/api), sobre uma única instância do Axios com
+**tempo limite explícito** (15 s). Em campo a rede trava; sem prazo, a requisição fica
+pendurada e a tela presa em carregamento. O `request` devolve
+[`Result`](src/domain/result.ts) — sucesso ou falha no tipo — em vez de lançar exceção, para
+que a tela seja obrigada a tratar a falha para compilar.
+
+### Taxonomia de falha
+
+A falha é traduzida para `ApiFailure`
+([`api-failure.ts`](src/infrastructure/api/api-failure.ts)), o vocabulário que o resto do
+aplicativo consome. Nenhuma tela olha status HTTP cru:
+
+| `kind`         | Origem                                   | O que a tela faz                              |
+| -------------- | ---------------------------------------- | --------------------------------------------- |
+| `network`      | Sem conexão/timeout                      | **Modo offline, nunca erro** (documento 13.8) |
+| `unauthorized` | 401                                      | Pede novo login                               |
+| `forbidden`    | 403                                      | Informa falta de permissão                    |
+| `notFound`     | 404                                      | Registro inexistente                          |
+| `conflict`     | 409 (+ `code`)                           | Recarrega o dado e reapresenta                |
+| `business`     | 422 (+ `code`, `message`, `fieldErrors`) | Mostra a mensagem/erros de campo              |
+| `server`       | 5xx                                      | Falha do servidor; oferece tentar de novo     |
+
+**`network` nunca vira erro na tela.** Em um aplicativo offline-first a ausência de rede é
+estado normal de operação: a interface mostra o modo offline. Por isso `describeApiFailure`
+recusa `network` em tempo de compilação — quem chama precisa descartá-lo antes com
+`isNetworkFailure`.
+
+**Erro de negócio** (409/422) é lido do envelope padronizado da API (documento 12.2 e o
+record `ApiError` do backend) em
+[`api-error.ts`](src/infrastructure/api/api-error.ts), que confia no contrato e só confere o
+par `code`/`message`. Falha de rede e erro de negócio ficam, assim, distinguidos desde a
+primeira chamada.
+
+**Sem log de dado sensível.** A `ApiFailure` carrega apenas `kind` e, quando existe, os
+campos seguros do envelope do servidor. Nada da requisição (cabeçalhos, corpo, token) é
+copiado para a falha, então nada sensível chega a um log, nem em desenvolvimento (RN-007).
+
+### Tipos gerados do OpenAPI — pendência
+
+Os tipos do contrato devem ser **gerados**, não escritos à mão, a partir do OpenAPI da API
+(`npm run types:api` → [`generated/`](src/infrastructure/api/generated/README.md)). O
+contrato depende de `backend#3`, ainda aberto: sem `/v3/api-docs` publicado, não há de onde
+gerar. Até lá, apenas o formato de erro — a única parte que este card consome — é espelhado
+à mão em `api-error.ts`, para ser reconciliado com os tipos gerados quando o backend#3
+fechar. Pendência aceita de forma explícita, como o próprio card autoriza.
+
+### Chaves de consulta
+
+O TanStack Query usa chaves padronizadas em
+[`query-keys.ts`](src/infrastructure/api/query-keys.ts), declaradas de forma hierárquica para
+que uma invalidação em `queryKeys.inspections.all()` alcance listas e detalhes aninhados.
+Concentrá-las em um arquivo evita chaves divergentes entre telas e deixa claro, a partir da
+sprint 6 (documento 13.6), o que ainda é de fato remoto quando o SQLite passa a ser a fonte
+operacional.
+
 ## Scripts
 
 | Comando                | O que faz                                              |
@@ -107,6 +165,7 @@ endpoint de saúde da API, o que serve como diagnóstico rápido dessa configura
 | `npm run lint`         | ESLint, incluindo as regras de fronteira entre camadas |
 | `npm run format`       | Aplica o Prettier                                      |
 | `npm run format:check` | Verifica formatação sem alterar arquivos               |
+| `npm run types:api`    | Gera os tipos TypeScript a partir do OpenAPI da API    |
 | `npm run verify`       | Tipos + lint + formatação. Rode antes de abrir um PR   |
 
 ## Estrutura

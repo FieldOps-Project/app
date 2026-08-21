@@ -28,7 +28,15 @@ module.exports = [
   ...expoConfig,
   prettierConfig,
   {
-    ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'expo-env.d.ts', '*.log'],
+    ignores: [
+      'node_modules/**',
+      '.expo/**',
+      'dist/**',
+      'web-build/**',
+      'expo-env.d.ts',
+      'src/infrastructure/api/generated/schema.d.ts',
+      '*.log',
+    ],
   },
   {
     rules: {
