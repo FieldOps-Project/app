@@ -1,26 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { Session, SessionRole } from '@/domain/session';
+import { ok, type Result } from '@/domain/result';
+import type { Session } from '@/domain/session';
+import { login, type ApiFailure, type LoginCredentials } from '@/infrastructure/api';
 import { clearSession, readSession, writeSession } from '@/infrastructure/storage/session-storage';
+import { clearTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 
 interface SessionContextValue {
   session: Session | null;
   isRestoring: boolean;
-  signIn: (role: SessionRole) => Promise<void>;
+  signIn: (credentials: LoginCredentials) => Promise<Result<void, ApiFailure>>;
   signOut: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
-
-/** Only this is replaced by the real authentication in EP-02. */
-function simulateSignIn(role: SessionRole): Session {
-  return {
-    userId: role === 'supervisor' ? 'sup-001' : 'tec-001',
-    name: role === 'supervisor' ? 'Marina Duarte' : 'Rafael Nogueira',
-    role,
-  };
-}
 
 /**
  * Restores the session from secure storage on mount so it survives a restart.
@@ -51,13 +45,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = useCallback(async (role: SessionRole) => {
-    const next = simulateSignIn(role);
-    await writeSession(next);
-    setSession(next);
+  const signIn = useCallback(async (credentials: LoginCredentials) => {
+    const result = await login(credentials);
+    if (!result.ok) {
+      return result;
+    }
+
+    await writeTokens(result.value.tokens);
+    await writeSession(result.value.user);
+    setSession(result.value.user);
+    return ok(undefined);
   }, []);
 
   const signOut = useCallback(async () => {
+    await clearTokens();
     await clearSession();
     setSession(null);
   }, []);

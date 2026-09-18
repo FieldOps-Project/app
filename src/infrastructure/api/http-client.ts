@@ -9,6 +9,7 @@ import { env } from '@/config/env';
 import { fail, ok, type Result } from '@/domain/result';
 import { parseApiErrorBody } from '@/infrastructure/api/api-error';
 import type { ApiFailure } from '@/infrastructure/api/api-failure';
+import { readTokens } from '@/infrastructure/storage/token-storage';
 
 /**
  * A request must never hang the screen. On an unstable field network a request
@@ -18,11 +19,27 @@ import type { ApiFailure } from '@/infrastructure/api/api-failure';
  */
 const REQUEST_TIMEOUT_MS = 15_000;
 
-/** The single HTTP client for the whole app. Auth interceptors arrive in EP-02. */
+/** The single HTTP client for the whole app. */
 export const httpClient: AxiosInstance = createAxiosInstance({
   baseURL: env.apiUrl,
   timeout: REQUEST_TIMEOUT_MS,
   headers: { Accept: 'application/json' },
+});
+
+/**
+ * Attaches the stored access token to every request that has one.
+ *
+ * The token never lives in app state, only in secure storage (RN-007), so it
+ * is read fresh on each request rather than cached in a variable that could
+ * drift after sign-out. Refreshing an expired token and retrying a 401 is
+ * card #8's scope — this only carries whatever is currently valid.
+ */
+httpClient.interceptors.request.use(async (config) => {
+  const tokens = await readTokens();
+  if (tokens !== null) {
+    config.headers.set('Authorization', `Bearer ${tokens.accessToken}`);
+  }
+  return config;
 });
 
 export interface HttpRequest extends Omit<AxiosRequestConfig, 'url'> {

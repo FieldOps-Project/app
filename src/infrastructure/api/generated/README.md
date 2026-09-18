@@ -4,21 +4,16 @@ Esta pasta guarda os tipos TypeScript **gerados** a partir do contrato OpenAPI d
 API (`schema.d.ts`). Eles não são escritos à mão: a fonte da verdade é o
 documento OpenAPI publicado pelo backend.
 
-## Estado atual — pendência consciente
+## Estado atual
 
-O card #4 depende de `FieldOps-Project/backend#3` (OpenAPI/Swagger versionado),
-que ainda está **aberto**: nenhum `openapi.json` foi versionado e não há servidor
-publicando `/v3/api-docs`. Sem contrato, não há de onde gerar.
+`FieldOps-Project/backend#3` (OpenAPI/Swagger versionado) foi concluído: o
+contrato vive em `backend/openapi/openapi.json` e `schema.d.ts` aqui é gerado a
+partir dele. O card #6 (login) já consome os tipos gerados (`LoginRequest`,
+`LoginResponse`, `AuthUser`) em `src/features/auth/api/auth-api.ts`.
 
-Enquanto isso, o formato de erro — a única parte do contrato que este card
-precisa consumir — está fixado em dois lugares equivalentes e é espelhado à mão
-em [`../api-error.ts`](../api-error.ts):
-
-- documento **12.2** (`docs/notion/12-api-rest.md`);
-- o record `ApiError` do backend (`shared/presentation/dto/ApiError.java`).
-
-Quando o backend#3 for concluído, gere os tipos e **reconcilie** `api-error.ts`
-com o `schema.d.ts` resultante (removendo o espelhamento manual do envelope).
+O formato de erro segue espelhado à mão em [`../api-error.ts`](../api-error.ts)
+em vez de usar `components["schemas"]["ApiError"]` diretamente — essa
+reconciliação é o escopo do card #4, não deste card.
 
 ## Como gerar
 
