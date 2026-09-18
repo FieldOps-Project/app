@@ -16,3 +16,4 @@ export {
   type ApiFieldError,
 } from '@/infrastructure/api/api-error';
 export { queryKeys } from '@/infrastructure/api/query-keys';
+export { login, type AuthSession, type LoginCredentials } from '@/infrastructure/api/auth-api';

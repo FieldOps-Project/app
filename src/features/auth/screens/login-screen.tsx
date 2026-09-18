@@ -4,25 +4,49 @@ import { View } from 'react-native';
 import { useSession } from '@/application/session/session-context';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
+import { Input } from '@/design-system/components/input';
+import { OfflineNotice } from '@/design-system/components/offline-notice';
 import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
-import type { SessionRole } from '@/domain/session';
+import {
+  describeApiFailure,
+  isNetworkFailure,
+  type ApiFailure,
+  type PresentableApiFailure,
+} from '@/infrastructure/api';
 
-/** The session is simulated in this sprint; EP-02 replaces only its origin. */
+/**
+ * Login copy never reveals whether the e-mail exists (document 17.2, AC-AUTH):
+ * a bad password and an unknown e-mail both surface this same generic message,
+ * overriding `describeApiFailure`'s session-expiry wording for `unauthorized`,
+ * which belongs to an already-signed-in context, not this one.
+ */
+function describeLoginFailure(failure: PresentableApiFailure): string {
+  if (failure.kind === 'unauthorized') {
+    return 'E-mail ou senha inválidos.';
+  }
+  return describeApiFailure(failure);
+}
+
 export function LoginScreen() {
   const { signIn } = useSession();
-  const [pendingRole, setPendingRole] = useState<SessionRole | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isPending, setIsPending] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
 
-  async function enter(role: SessionRole) {
-    setPendingRole(role);
-    setError(null);
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !isPending;
+
+  async function submit() {
+    setIsPending(true);
+    setFailure(null);
     try {
-      await signIn(role);
-    } catch {
-      setError('Não foi possível iniciar a sessão neste aparelho. Tente novamente.');
+      const result = await signIn({ email: email.trim(), password });
+      if (!result.ok) {
+        setFailure(result.error);
+      }
     } finally {
-      setPendingRole(null);
+      setIsPending(false);
     }
   }
 
@@ -36,26 +60,41 @@ export function LoginScreen() {
       </View>
 
       <Card title="Acesso">
-        <Text variant="body" tone="muted">
-          A autenticação real entra em EP-02. Nesta sprint, escolha um perfil para simular a sessão.
-        </Text>
-        {error === null ? null : (
+        <Input
+          label="E-mail"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          textContentType="username"
+          editable={!isPending}
+        />
+        <Input
+          label="Senha"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoCapitalize="none"
+          autoComplete="password"
+          textContentType="password"
+          editable={!isPending}
+          onSubmitEditing={() => void submit()}
+        />
+
+        {failure === null ? null : isNetworkFailure(failure) ? (
+          <OfflineNotice message="Sem conexão com a API. Verifique a internet e tente novamente." />
+        ) : (
           <Text variant="body" tone="danger">
-            {error}
+            {describeLoginFailure(failure)}
           </Text>
         )}
+
         <Button
-          label="Entrar como técnico"
-          loading={pendingRole === 'tecnico'}
-          disabled={pendingRole !== null}
-          onPress={() => void enter('tecnico')}
-        />
-        <Button
-          label="Entrar como supervisor"
-          variant="secondary"
-          loading={pendingRole === 'supervisor'}
-          disabled={pendingRole !== null}
-          onPress={() => void enter('supervisor')}
+          label="Entrar"
+          loading={isPending}
+          disabled={!canSubmit}
+          onPress={() => void submit()}
         />
       </Card>
     </Screen>
