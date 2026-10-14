@@ -213,11 +213,10 @@ inverso: com sessão ativa, manda para a área protegida. O redirecionamento esp
 do armazenamento seguro terminar, senão quem já entrou seria mandado ao login a cada
 abertura do aplicativo.
 
-**Sessão simulada.** Nesta sprint a sessão é criada escolhendo um perfil na tela de login e
-guardada no `expo-secure-store`, sobrevivendo ao reinício do aplicativo. EP-02 substitui
-apenas a origem da sessão, em
-[`src/application/session/session-context.tsx`](src/application/session/session-context.tsx);
-o guarda e as telas não mudam.
+**Sessão real.** A sessão nasce do login na API e vive em
+[`src/application/session/session-context.tsx`](src/application/session/session-context.tsx).
+Enquanto o armazenamento seguro é lido na abertura, os dois grupos mostram a tela de
+carregamento, então a tela de login não pisca para quem já entrou.
 
 **Sincronização é aba, não tela escondida.** O documento 13.8 exige que o estado de envio
 permaneça visível, e alcance em um toque faz parte disso.
@@ -229,6 +228,20 @@ captura e conferência trocam de lugar com `replace` e ocupam uma única entrada
 Abrir e fechar a câmera várias vezes mantém a profundidade constante. Em build de
 desenvolvimento, um indicador na tela mostra o tamanho da pilha para tornar isso
 verificável.
+
+## Sessão
+
+**Armazenamento.** `accessToken` e `refreshToken` ficam exclusivamente no
+`expo-secure-store` (Keystore no Android), nunca em `AsyncStorage` ou arquivo comum. O
+perfil (nome, e-mail, papel) também fica lá. Um perfil guardado sem os tokens é tratado como
+sessão encerrada.
+
+**Saída.** O perfil pede confirmação antes de sair. A saída apaga primeiro as credenciais
+locais e o cache de consultas, e depois tenta revogar o refresh token em
+`POST /api/v1/auth/logout`. Sem rede, a pessoa sai do mesmo jeito. Nem a saída nem a
+expiração apagam o que foi registrado no aparelho. O comportamento com operações pendentes
+na outbox está em
+[ADR-001](docs/adr/ADR-001-logout-with-pending-sync.md).
 
 ## Decisões técnicas
 
@@ -281,10 +294,12 @@ gasta bateria. A repetição de operações de escrita fica a cargo da outbox de
 ## Contribuição
 
 Fluxo de trabalho, padrão de branch, mensagem de commit e template de PR estão definidos no
-`CONTRIBUTING.md` do repositório
-[docs](https://github.com/FieldOps-Project/docs) (card
-[docs#1](https://github.com/FieldOps-Project/docs/issues/1), em aberto no momento desta
-entrega).
+[`CONTRIBUTING.md`](https://github.com/FieldOps-Project/docs/blob/main/CONTRIBUTING.md) do
+repositório [docs](https://github.com/FieldOps-Project/docs). Em resumo: branch no formato
+`<tipo>/<epico>-<slug-curto>` a partir de `develop`, commits em
+[Conventional Commits](https://www.conventionalcommits.org/) no modo imperativo e em inglês,
+e Pull Request para `develop` usando o template padrão, com CI passando e revisão de outra
+pessoa da equipe antes do merge.
 
 Antes de abrir um PR:
 
