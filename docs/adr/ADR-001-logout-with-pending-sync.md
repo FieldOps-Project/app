@@ -39,11 +39,10 @@ We adopt **option 2: warn and require confirmation**.
 - Signing out removes **only credentials**: the tokens and the cached profile
   in SecureStore, and the in-memory query cache. The local database, the outbox
   and captured files are never touched by sign-out or by session expiry.
-- Pending operations belong to the user who recorded them. When that same user
-  signs in again, synchronization picks them up where it stopped. If a
-  different user signs in on the device, the previous user's operations are
-  neither sent under the new identity nor shown to them. They wait until their
-  author signs in again.
+- Signing in again picks the pending operations up where synchronization
+  stopped. What happens when a _different_ user signs in on a device that
+  still holds someone else's pending work is out of scope here and must be
+  decided with EP-08, before the outbox ships.
 - Signing out works offline. Revoking the refresh token on the API
   (`POST /api/v1/auth/logout`) is best effort and runs after the local
   credentials are already gone. If the API cannot be reached, the token stays
@@ -62,9 +61,8 @@ We adopt **option 2: warn and require confirmation**.
 
 ### Negative
 
-- A shared device can hold several users' unsent work at the same time.
-  EP-08 has to key outbox entries by user id and filter them on read and on
-  send.
+- A shared device can hold unsent work from a previous session. EP-08 has to
+  decide how that work is attributed and shown before the outbox ships.
 - A refresh token that could not be revoked offline stays valid until it
   expires. This is limited by the token lifetime set on the API and by RN-008,
   which invalidates sessions when the password changes or the user is blocked.
