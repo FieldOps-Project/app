@@ -166,6 +166,15 @@ describe('signOut', () => {
     expect(queryClient.getQueryData(['cached'])).toBeUndefined();
   });
 
+  it('does not hold the person while the revocation is still in flight', async () => {
+    jest.mocked(logout).mockReturnValue(new Promise(() => undefined));
+
+    await act(() => current.signOut());
+
+    expect(current.session).toBeNull();
+    expect(logout).toHaveBeenCalledWith('refresh-1');
+  });
+
   it('signs out even when the revocation cannot reach the API', async () => {
     jest.mocked(logout).mockResolvedValue({ ok: false, error: { kind: 'network' } });
 

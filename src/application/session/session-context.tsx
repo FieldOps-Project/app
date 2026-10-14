@@ -70,6 +70,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
    * token on the API is then attempted on a best-effort basis (card #7) — if it
    * cannot be reached the token stays valid server-side until it expires, which
    * is the price of never trapping someone in a session they asked to leave.
+   * The revocation is not awaited, so a slow network never holds the person on
+   * the screen they are leaving.
    *
    * Only credentials are dropped. Nothing recorded on the device is touched.
    */
@@ -82,7 +84,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
 
     if (tokens !== null) {
-      await logout(tokens.refreshToken);
+      void logout(tokens.refreshToken);
     }
   }, [queryClient]);
 
