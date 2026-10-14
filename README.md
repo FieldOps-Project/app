@@ -236,6 +236,23 @@ verificável.
 perfil (nome, e-mail, papel) também fica lá. Um perfil guardado sem os tokens é tratado como
 sessão encerrada.
 
+**Renovação.** O interceptor de resposta do
+[`http-client.ts`](src/infrastructure/api/http-client.ts) trata o 401:
+
+```text
+401 -> POST /auth/refresh -> sucesso         -> grava os novos tokens -> repete a requisição 1x
+                          -> recusa 401/403  -> encerra a sessão e avisa no login
+                          -> falha de rede   -> mantém a sessão e devolve "sem conexão"
+```
+
+Requisições que expiram juntas compartilham uma única renovação
+([`token-refresh.ts`](src/infrastructure/api/token-refresh.ts)): com refresh token rotativo,
+renovações paralelas invalidariam umas às outras. Login, refresh e logout nunca disparam
+renovação, e a requisição repetida não renova de novo, então não há laço.
+
+**Sem rede não desloga.** Uma renovação que não alcança o servidor não diz nada sobre a
+validade do refresh token. A sessão só termina quando o servidor recusa a renovação.
+
 **Saída.** O perfil pede confirmação antes de sair. A saída apaga primeiro as credenciais
 locais e o cache de consultas, e depois tenta revogar o refresh token em
 `POST /api/v1/auth/logout`. Sem rede, a pessoa sai do mesmo jeito. Nem a saída nem a
@@ -273,8 +290,8 @@ paleta das classes e a paleta das transições de tela divergirem.
 
 **Axios como cliente HTTP.** Uma única instância em
 [`src/infrastructure/api/http-client.ts`](src/infrastructure/api/http-client.ts) concentra a
-URL base, o tempo limite e a tradução de erro. Os interceptors de sessão entram nesse mesmo
-ponto em EP-02, sem tocar nas telas.
+URL base, o tempo limite, a tradução de erro e os interceptors de sessão (token e
+renovação), sem que as telas precisem saber deles.
 
 **`Result` em vez de exceção para falha esperada.** O aplicativo roda em campo, com rede
 intermitente. Sem conexão, credencial inválida e conflito de sincronização são situações
