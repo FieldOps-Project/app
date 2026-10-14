@@ -28,19 +28,22 @@ jest.mock('@/infrastructure/storage/token-storage', () => {
 const SIGNED_IN = { accessToken: 'access-1', refreshToken: 'refresh-1', expiresAt: 0 };
 
 let calls: { body: unknown; authorization: unknown }[];
-let reply: Reply;
+let paths: (string | undefined)[];
+let reply: Reply | (() => Promise<Reply>);
 let rejectedListener: jest.Mock;
 let unsubscribe: () => void;
 
 beforeEach(async () => {
   calls = [];
+  paths = [];
   reply = { status: 200, data: RENEWED_TOKENS_BODY };
   refreshClient.defaults.adapter = fakeAdapter(async (config) => {
     calls.push({
       body: JSON.parse(String(config.data)),
       authorization: config.headers.get('Authorization'),
     });
-    return reply;
+    paths.push(config.url);
+    return typeof reply === 'function' ? reply() : reply;
   });
   await writeTokens(SIGNED_IN);
   jest.clearAllMocks();
@@ -100,14 +103,28 @@ describe('refreshSession', () => {
     expect(await readTokens()).toEqual(SIGNED_IN);
   });
 
-  it('ends the session when no tokens are stored', async () => {
+  it('does not announce an expiry when nobody is signed in', async () => {
     await clearTokens();
     jest.clearAllMocks();
 
     await expect(refreshSession()).resolves.toEqual({ kind: 'rejected' });
 
     expect(calls).toHaveLength(0);
-    expect(rejectedListener).toHaveBeenCalledTimes(1);
+    expect(rejectedListener).not.toHaveBeenCalled();
+  });
+
+  it('does not bring back a session that was signed out during the refresh', async () => {
+    reply = async () => {
+      await clearTokens();
+      return { status: 200, data: RENEWED_TOKENS_BODY };
+    };
+
+    await expect(refreshSession()).resolves.toEqual({ kind: 'rejected' });
+
+    expect(await readTokens()).toBeNull();
+    expect(rejectedListener).not.toHaveBeenCalled();
+    expect(paths).toEqual(['/api/v1/auth/refresh', '/api/v1/auth/logout']);
+    expect(calls[1]?.body).toEqual({ refreshToken: RENEWED_TOKENS_BODY.refreshToken });
   });
 
   it('shares one round trip between concurrent callers', async () => {
