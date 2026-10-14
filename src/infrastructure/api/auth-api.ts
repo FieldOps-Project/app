@@ -76,3 +76,20 @@ export async function login(
 
   return ok(session);
 }
+
+/**
+ * Revokes the refresh token on the server (`POST /api/v1/auth/logout`, card #7).
+ *
+ * The request body is the only thing that matters — the endpoint is public and
+ * answers 204 even for a token it does not know — so this is safe to call after
+ * the local credentials are already gone. It returns a `Result` like every
+ * other call and never throws; the caller decides that a failure here (no
+ * signal, most often) must not keep the person signed in.
+ */
+export function logout(refreshToken: string): Promise<Result<void, ApiFailure>> {
+  return request<void>({
+    method: 'POST',
+    path: '/api/v1/auth/logout',
+    data: { refreshToken },
+  });
+}

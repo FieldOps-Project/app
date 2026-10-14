@@ -47,7 +47,7 @@ const borderRadius = {
   card: '14px',
 };
 
-/** Android accessibility guideline for touch targets, in pixels. */
+/** Android accessibility guideline for touch targets (48dp — React Native's numeric sizes are already density-independent). */
 const minTouchTarget = 48;
 
 module.exports = { colors, spacing, borderRadius, minTouchTarget };
