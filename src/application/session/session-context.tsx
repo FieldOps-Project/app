@@ -1,11 +1,12 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { ok, type Result } from '@/domain/result';
 import type { Session } from '@/domain/session';
-import { login, type ApiFailure, type LoginCredentials } from '@/infrastructure/api';
+import { login, logout, type ApiFailure, type LoginCredentials } from '@/infrastructure/api';
 import { clearSession, readSession, writeSession } from '@/infrastructure/storage/session-storage';
-import { clearTokens, writeTokens } from '@/infrastructure/storage/token-storage';
+import { clearTokens, readTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 
 interface SessionContextValue {
   session: Session | null;
@@ -20,15 +21,21 @@ const SessionContext = createContext<SessionContextValue | null>(null);
  * Restores the session from secure storage on mount so it survives a restart.
  * `isRestoring` keeps the guard from bouncing a signed-in person to the login
  * screen while that read is in flight.
+ *
+ * Whenever the session ends, the in-memory query cache goes with it, so the
+ * next person to sign in on the same device never sees the previous one's
+ * server data. That cache is only a copy of the API: work recorded on the
+ * device lives elsewhere and is never touched here (RN-066).
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
 
   useEffect(() => {
     let active = true;
 
-    readSession()
+    restoreSession()
       .then((stored) => {
         if (active) {
           setSession(stored);
@@ -57,11 +64,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return ok(undefined);
   }, []);
 
+  /**
+   * Signing out always works, with or without a connection: the local
+   * credentials go first and the person is out at once. Revoking the refresh
+   * token on the API is then attempted on a best-effort basis (card #7) — if it
+   * cannot be reached the token stays valid server-side until it expires, which
+   * is the price of never trapping someone in a session they asked to leave.
+   *
+   * Only credentials are dropped. Nothing recorded on the device is touched.
+   */
   const signOut = useCallback(async () => {
+    const tokens = await readTokens();
+
     await clearTokens();
     await clearSession();
     setSession(null);
-  }, []);
+    queryClient.clear();
+
+    if (tokens !== null) {
+      await logout(tokens.refreshToken);
+    }
+  }, [queryClient]);
 
   const value = useMemo<SessionContextValue>(
     () => ({ session, isRestoring, signIn, signOut }),
@@ -69,6 +92,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+}
+
+/**
+ * A stored profile without its tokens cannot be a working session: every
+ * request would be refused with no way to renew. Treat it as signed out and
+ * tidy the leftover, rather than showing protected screens that cannot load.
+ */
+async function restoreSession(): Promise<Session | null> {
+  const [stored, tokens] = await Promise.all([readSession(), readTokens()]);
+  if (stored !== null && tokens === null) {
+    await clearSession();
+    return null;
+  }
+  return stored;
 }
 
 export function useSession(): SessionContextValue {
