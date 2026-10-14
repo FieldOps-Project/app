@@ -3,12 +3,14 @@ import {
   isAxiosError,
   type AxiosInstance,
   type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
 } from 'axios';
 
 import { env } from '@/config/env';
 import { fail, ok, type Result } from '@/domain/result';
 import { parseApiErrorBody } from '@/infrastructure/api/api-error';
 import type { ApiFailure } from '@/infrastructure/api/api-failure';
+import { RefreshUnavailableError, refreshSession } from '@/infrastructure/api/token-refresh';
 import { readTokens } from '@/infrastructure/storage/token-storage';
 
 /**
@@ -31,8 +33,7 @@ export const httpClient: AxiosInstance = createAxiosInstance({
  *
  * The token never lives in app state, only in secure storage (RN-007), so it
  * is read fresh on each request rather than cached in a variable that could
- * drift after sign-out. Refreshing an expired token and retrying a 401 is
- * card #8's scope — this only carries whatever is currently valid.
+ * drift after sign-out. Expiry is handled by the response interceptor below.
  */
 httpClient.interceptors.request.use(async (config) => {
   const tokens = await readTokens();
@@ -41,6 +42,65 @@ httpClient.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+/**
+ * The endpoints that start, renew or end a session. A 401 from them is an
+ * answer, not an expired token: bad credentials on login, a refused refresh
+ * token on refresh. Renewing on those would loop or hide the real failure.
+ */
+const SESSION_ENDPOINTS = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout'];
+
+interface RetriableRequestConfig extends InternalAxiosRequestConfig {
+  /** Set on the repeated request so a second 401 is returned, never renewed again. */
+  retriedAfterRefresh?: boolean;
+}
+
+/**
+ * Renews the session on a 401 and repeats the request once (card #8).
+ *
+ * - Concurrent 401s share a single refresh (see `refreshSession`).
+ * - A request that carried an older token than the one now stored was already
+ *   overtaken by another refresh, so it is repeated without refreshing again —
+ *   with rotating tokens a second refresh would be refused.
+ * - If the server refuses the refresh, the original 401 is returned as-is and
+ *   the session listeners have already been told.
+ * - If the refresh could not reach the server, the failure is `network`/`server`
+ *   and the session is kept: no signal must never mean signed out.
+ * - The repeat happens at most once, so a request that keeps failing cannot loop.
+ */
+httpClient.interceptors.response.use(undefined, async (error: unknown) => {
+  if (!isAxiosError(error) || error.response?.status !== 401 || error.config === undefined) {
+    throw error;
+  }
+
+  const config: RetriableRequestConfig = error.config;
+  if (config.retriedAfterRefresh === true || isSessionEndpoint(config.url)) {
+    throw error;
+  }
+
+  const stored = await readTokens();
+  if (stored === null) {
+    throw error;
+  }
+
+  const wasOvertaken = config.headers.get('Authorization') !== `Bearer ${stored.accessToken}`;
+  if (!wasOvertaken) {
+    const outcome = await refreshSession();
+    if (outcome.kind === 'rejected') {
+      throw error;
+    }
+    if (outcome.kind === 'unavailable') {
+      throw new RefreshUnavailableError(outcome.failure);
+    }
+  }
+
+  config.retriedAfterRefresh = true;
+  return httpClient.request(config);
+});
+
+function isSessionEndpoint(url: string | undefined): boolean {
+  return url !== undefined && SESSION_ENDPOINTS.some((endpoint) => url.startsWith(endpoint));
+}
 
 export interface HttpRequest extends Omit<AxiosRequestConfig, 'url'> {
   path: string;
@@ -82,6 +142,10 @@ export async function request<TResponse>(
  * log (RN-007).
  */
 function toApiFailure(cause: unknown): ApiFailure {
+  if (cause instanceof RefreshUnavailableError) {
+    return { kind: cause.failure };
+  }
+
   if (!isAxiosError(cause) || cause.response === undefined) {
     return { kind: 'network' };
   }
