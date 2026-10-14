@@ -5,6 +5,8 @@ import { create, type ReactTestRenderer } from 'react-test-renderer';
 import { SessionProvider, useSession } from '@/application/session/session-context';
 import type { Session } from '@/domain/session';
 import { login, logout } from '@/infrastructure/api';
+import { fakeAdapter } from '@/infrastructure/api/testing/fake-api';
+import { refreshClient, refreshSession } from '@/infrastructure/api/token-refresh';
 import { clearSession, readSession, writeSession } from '@/infrastructure/storage/session-storage';
 import { clearTokens, readTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 
@@ -182,5 +184,53 @@ describe('signOut', () => {
 
     expect(current.session).toBeNull();
     expect(await readTokens()).toBeNull();
+  });
+});
+
+describe('session ended by the server', () => {
+  beforeEach(async () => {
+    await writeSession(USER);
+    await writeTokens(TOKENS);
+    await mountProvider();
+  });
+
+  it('signs the person out with a notice when the refresh is refused', async () => {
+    refreshClient.defaults.adapter = fakeAdapter(() => ({ status: 401 }));
+
+    await act(async () => {
+      await refreshSession();
+    });
+
+    expect(current.session).toBeNull();
+    expect(current.sessionExpired).toBe(true);
+    expect(await readSession()).toBeNull();
+    expect(queryClient.getQueryData(['cached'])).toBeUndefined();
+  });
+
+  it('keeps the person signed in when the refresh only failed for lack of network', async () => {
+    refreshClient.defaults.adapter = fakeAdapter(() => 'network');
+
+    await act(async () => {
+      await refreshSession();
+    });
+
+    expect(current.session).toEqual(USER);
+    expect(current.sessionExpired).toBe(false);
+    expect(queryClient.getQueryData(['cached'])).toBe('server data');
+  });
+
+  it('clears the notice on the next sign-in', async () => {
+    refreshClient.defaults.adapter = fakeAdapter(() => ({ status: 401 }));
+    await act(async () => {
+      await refreshSession();
+    });
+    jest.mocked(login).mockResolvedValue({ ok: true, value: { tokens: TOKENS, user: USER } });
+
+    await act(async () => {
+      await current.signIn({ email: USER.email, password: 'secret' });
+    });
+
+    expect(current.sessionExpired).toBe(false);
+    expect(current.session).toEqual(USER);
   });
 });

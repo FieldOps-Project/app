@@ -29,7 +29,7 @@ function describeLoginFailure(failure: PresentableApiFailure): string {
 }
 
 export function LoginScreen() {
-  const { signIn } = useSession();
+  const { signIn, sessionExpired } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isPending, setIsPending] = useState(false);
@@ -60,6 +60,11 @@ export function LoginScreen() {
       </View>
 
       <Card title="Acesso">
+        {sessionExpired ? (
+          <Text variant="body" tone="warning" accessibilityRole="alert">
+            {describeApiFailure({ kind: 'unauthorized' })}
+          </Text>
+        ) : null}
         <Input
           label="E-mail"
           value={email}

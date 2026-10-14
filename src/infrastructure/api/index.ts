@@ -22,3 +22,4 @@ export {
   type AuthSession,
   type LoginCredentials,
 } from '@/infrastructure/api/auth-api';
+export { onSessionRejected } from '@/infrastructure/api/token-refresh';

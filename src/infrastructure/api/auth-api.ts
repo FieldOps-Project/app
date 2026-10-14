@@ -5,6 +5,7 @@ import type { ApiFailure } from '@/infrastructure/api/api-failure';
 import type { components } from '@/infrastructure/api/generated/schema';
 import { request } from '@/infrastructure/api/http-client';
 import type { AuthTokens } from '@/infrastructure/storage/token-storage';
+import { AUTH_PATHS } from '@/infrastructure/api/auth-paths';
 
 export interface LoginCredentials {
   readonly email: string;
@@ -61,7 +62,7 @@ export async function login(
 ): Promise<Result<AuthSession, ApiFailure>> {
   const result = await request<LoginResponseBody>({
     method: 'POST',
-    path: '/api/v1/auth/login',
+    path: AUTH_PATHS.login,
     data: credentials,
   });
 
@@ -89,7 +90,7 @@ export async function login(
 export function logout(refreshToken: string): Promise<Result<void, ApiFailure>> {
   return request<void>({
     method: 'POST',
-    path: '/api/v1/auth/logout',
+    path: AUTH_PATHS.logout,
     data: { refreshToken },
   });
 }
