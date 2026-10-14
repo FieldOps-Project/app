@@ -4,13 +4,25 @@ import type { ReactNode } from 'react';
 
 import { ok, type Result } from '@/domain/result';
 import type { Session } from '@/domain/session';
-import { login, logout, type ApiFailure, type LoginCredentials } from '@/infrastructure/api';
+import {
+  login,
+  logout,
+  onSessionRejected,
+  type ApiFailure,
+  type LoginCredentials,
+} from '@/infrastructure/api';
 import { clearSession, readSession, writeSession } from '@/infrastructure/storage/session-storage';
 import { clearTokens, readTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 
 interface SessionContextValue {
   session: Session | null;
   isRestoring: boolean;
+  /**
+   * True after the server refused to renew the session (expired refresh token,
+   * or the user was blocked — RN-008). Lets the login screen say why the person
+   * is back there. Cleared by the next sign-in.
+   */
+  sessionExpired: boolean;
   signIn: (credentials: LoginCredentials) => Promise<Result<void, ApiFailure>>;
   signOut: () => Promise<void>;
 }
@@ -31,6 +43,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -52,6 +65,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  /**
+   * The HTTP layer clears the tokens itself when the server refuses to renew
+   * them; what remains is the profile, the cache and the screen, which are ours.
+   */
+  useEffect(
+    () =>
+      onSessionRejected(() => {
+        setSession(null);
+        setSessionExpired(true);
+        queryClient.clear();
+        clearSession().catch(() => undefined);
+      }),
+    [queryClient]
+  );
+
   const signIn = useCallback(async (credentials: LoginCredentials) => {
     const result = await login(credentials);
     if (!result.ok) {
@@ -60,6 +88,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     await writeTokens(result.value.tokens);
     await writeSession(result.value.user);
+    setSessionExpired(false);
     setSession(result.value.user);
     return ok(undefined);
   }, []);
@@ -80,6 +109,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     await clearTokens();
     await clearSession();
+    setSessionExpired(false);
     setSession(null);
     queryClient.clear();
 
@@ -89,8 +119,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const value = useMemo<SessionContextValue>(
-    () => ({ session, isRestoring, signIn, signOut }),
-    [session, isRestoring, signIn, signOut]
+    () => ({ session, isRestoring, sessionExpired, signIn, signOut }),
+    [session, isRestoring, sessionExpired, signIn, signOut]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
