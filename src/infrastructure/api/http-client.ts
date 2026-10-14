@@ -9,6 +9,7 @@ import {
 import { env } from '@/config/env';
 import { fail, ok, type Result } from '@/domain/result';
 import { parseApiErrorBody } from '@/infrastructure/api/api-error';
+import { AUTH_PATHS } from '@/infrastructure/api/auth-paths';
 import type { ApiFailure } from '@/infrastructure/api/api-failure';
 import { RefreshUnavailableError, refreshSession } from '@/infrastructure/api/token-refresh';
 import { readTokens } from '@/infrastructure/storage/token-storage';
@@ -21,7 +22,11 @@ import { readTokens } from '@/infrastructure/storage/token-storage';
  */
 const REQUEST_TIMEOUT_MS = 15_000;
 
-/** The single HTTP client for the whole app. */
+/**
+ * The HTTP client every API call goes through. The session renewal is the one
+ * exception and uses its own `refreshClient`, which must bypass these
+ * interceptors.
+ */
 export const httpClient: AxiosInstance = createAxiosInstance({
   baseURL: env.apiUrl,
   timeout: REQUEST_TIMEOUT_MS,
@@ -44,11 +49,11 @@ httpClient.interceptors.request.use(async (config) => {
 });
 
 /**
- * The endpoints that start, renew or end a session. A 401 from them is an
- * answer, not an expired token: bad credentials on login, a refused refresh
- * token on refresh. Renewing on those would loop or hide the real failure.
+ * A 401 from these is an answer, not an expired token: bad credentials on
+ * login, a refused refresh token on refresh. Renewing on those would loop or
+ * hide the real failure.
  */
-const SESSION_ENDPOINTS = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout'];
+const SESSION_ENDPOINTS: readonly string[] = Object.values(AUTH_PATHS);
 
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   /** Set on the repeated request so a second 401 is returned, never renewed again. */

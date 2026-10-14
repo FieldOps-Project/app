@@ -91,8 +91,8 @@ describe('httpClient token renewal', () => {
     expect(refreshCalls).toBe(1);
   });
 
+  /** The request is sent with access-1, but by the time its 401 arrives the tokens have rotated. */
   it('repeats a request that another refresh already overtook without refreshing again', async () => {
-    // Sent with access-1, but by the time its 401 arrives the tokens have rotated.
     httpClient.defaults.adapter = fakeAdapter(async (config) => {
       const authorization = config.headers.get('Authorization');
       apiCalls.push({ path: config.url, authorization });

@@ -288,10 +288,11 @@ em tempo de build, sem custo de runtime. Os tokens ficam em um único arquivo
 consumido tanto pelo `tailwind.config.js` quanto pelo tema de navegação, o que impede a
 paleta das classes e a paleta das transições de tela divergirem.
 
-**Axios como cliente HTTP.** Uma única instância em
+**Axios como cliente HTTP.** A instância em
 [`src/infrastructure/api/http-client.ts`](src/infrastructure/api/http-client.ts) concentra a
 URL base, o tempo limite, a tradução de erro e os interceptors de sessão (token e
-renovação), sem que as telas precisem saber deles.
+renovação), sem que as telas precisem saber deles. A única exceção é a própria renovação,
+que usa um cliente sem interceptors para não renovar a si mesma.
 
 **`Result` em vez de exceção para falha esperada.** O aplicativo roda em campo, com rede
 intermitente. Sem conexão, credencial inválida e conflito de sincronização são situações
