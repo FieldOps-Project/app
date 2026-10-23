@@ -77,6 +77,8 @@ export interface InspectionDetail extends InspectionSummary {
   /** Device clock at the moment the technician completed (RN-042). */
   readonly completedAtDevice: string | null;
   readonly review: InspectionReview | null;
+  /** Why the last send failed, in business language; `null` when nothing failed. */
+  readonly syncError: string | null;
 }
 
 /** Business language, not API wording (document 13.9). */
