@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View } from 'react-native';
 
-import { useInspectionDraft } from '@/application/inspection-draft/inspection-draft-context';
+import { useRegisterEvidence } from '@/application/inspections/use-checklist-actions';
 import { NavigationDepthBadge } from '@/components/navigation-depth-badge';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
@@ -15,14 +15,15 @@ export function EvidencePreviewScreen() {
   const inspectionId = useInspectionId();
   const { itemId } = useLocalSearchParams<{ itemId?: string }>();
   const router = useRouter();
-  const { registerEvidence } = useInspectionDraft();
+  const registerEvidence = useRegisterEvidence(inspectionId);
   const returnToChecklist = useReturnToChecklist(inspectionId);
 
   function attach() {
-    if (itemId !== undefined && itemId !== '') {
-      registerEvidence(itemId);
+    if (itemId === undefined || itemId === '') {
+      returnToChecklist();
+      return;
     }
-    returnToChecklist();
+    registerEvidence.mutate({ inspectionItemId: itemId }, { onSettled: returnToChecklist });
   }
 
   return (
@@ -41,7 +42,7 @@ export function EvidencePreviewScreen() {
             Imagem capturada (EP-05)
           </Text>
         </View>
-        <Button label="Usar esta evidência" onPress={attach} />
+        <Button label="Usar esta evidência" loading={registerEvidence.isPending} onPress={attach} />
         <Button
           label="Repetir captura"
           variant="secondary"
