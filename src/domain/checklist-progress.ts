@@ -42,7 +42,7 @@ export interface ChecklistProgress {
   readonly total: number;
   /** Answered items, "não aplicável" excluded (RN-040). */
   readonly answered: number;
-  /** Items that count toward progress: all but "não aplicável" and unsupported ones. */
+  /** Items that count toward progress: all but "não aplicável" and optional unsupported ones. */
   readonly applicable: number;
   /** 0–100, rounded down so 99.6% never reads as done. */
   readonly percent: number;
@@ -58,26 +58,40 @@ export interface ProgressInput {
   readonly evidenceCounts: ReadonlyMap<string, number>;
 }
 
-function pendingReasonFor(
+/** Every reason the item blocks, so a failure missing both shows both at once. */
+function pendingReasonsFor(
   item: ChecklistItem,
   response: ChecklistResponse | undefined,
   evidenceCount: number
-): PendingReason | null {
+): PendingReason[] {
   if (!isKnownResponseType(item.responseType)) {
-    return item.required ? 'UNSUPPORTED_TYPE' : null;
+    return item.required ? ['UNSUPPORTED_TYPE'] : [];
   }
   if (!hasAnswer(item, response)) {
-    return item.required ? 'REQUIRED_UNANSWERED' : null;
+    return item.required ? ['REQUIRED_UNANSWERED'] : [];
   }
+  const reasons: PendingReason[] = [];
   if (isFailure(response)) {
     if (item.rules.observationRequiredOnFailure && (response?.observation ?? '').trim() === '') {
-      return 'OBSERVATION_REQUIRED';
+      reasons.push('OBSERVATION_REQUIRED');
     }
     if (item.rules.evidenceRequiredOnFailure && evidenceCount === 0) {
-      return 'EVIDENCE_REQUIRED';
+      reasons.push('EVIDENCE_REQUIRED');
     }
   }
-  return null;
+  return reasons;
+}
+
+/**
+ * Whether the item counts toward progress. An optional item of an unknown
+ * type is left out — nothing can be done about it — but a required one stays
+ * in, unanswered, so the bar never reads 100% while it blocks the completion.
+ */
+function countsTowardProgress(item: ChecklistItem, response: ChecklistResponse | undefined) {
+  if (!isKnownResponseType(item.responseType)) {
+    return item.required;
+  }
+  return !isNotApplicable(response);
 }
 
 /**
@@ -103,9 +117,9 @@ export function computeProgress({
 
     for (const item of section.items) {
       const response = responses.get(item.id);
-      const reason = pendingReasonFor(item, response, evidenceCounts.get(item.id) ?? 0);
+      const reasons = pendingReasonsFor(item, response, evidenceCounts.get(item.id) ?? 0);
 
-      if (reason !== null) {
+      for (const reason of reasons) {
         pending.push({
           itemId: item.id,
           itemTitle: item.itemTitle,
@@ -117,7 +131,7 @@ export function computeProgress({
       if (isFailure(response)) {
         nonConformities += 1;
       }
-      if (!isKnownResponseType(item.responseType) || isNotApplicable(response)) {
+      if (!countsTowardProgress(item, response)) {
         continue;
       }
       sectionApplicable += 1;

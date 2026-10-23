@@ -49,6 +49,9 @@ export function useInspectionDetail(inspectionId: string): InspectionDetailState
     };
   }, [stored.data]);
 
+  if (inspectionId === '') {
+    return { state: 'not-found' };
+  }
   if (stored.isError) {
     return { state: 'error', retry: () => void stored.refetch() };
   }

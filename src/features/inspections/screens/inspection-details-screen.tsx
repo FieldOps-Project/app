@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import type { ComponentProps, ReactNode } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { Linking, View } from 'react-native';
 
 import {
@@ -20,7 +20,11 @@ import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
 import { isUrgentPriority, priorityLabel } from '@/domain/inspection';
-import { contextualAction, contextualActionLabel } from '@/domain/inspection-actions';
+import {
+  canEditAnswers,
+  contextualAction,
+  contextualActionLabel,
+} from '@/domain/inspection-actions';
 import { isOverdue } from '@/domain/inspection-schedule';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 import { formatDateTime } from '@/utils/format-date';
@@ -119,9 +123,9 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
       {detail.syncError !== null &&
       (detail.syncState === 'falha' || detail.syncState === 'conflito') ? (
         <Card title="Atenção" className="border-2 border-warning">
-          <Text variant="body" tone="warning">
+          <Line icon="alert-circle-outline" tone="warning">
             {detail.syncError}
-          </Text>
+          </Line>
         </Card>
       ) : null}
 
@@ -130,7 +134,7 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
           percent={progress.percent}
           label={`${progress.answered} de ${plural(progress.applicable, 'item aplicável respondido', 'itens aplicáveis respondidos')}`}
         />
-        {progress.pending.length > 0 && detail.status === 'IN_PROGRESS' ? (
+        {progress.pending.length > 0 && canEditAnswers(detail.status) ? (
           <Text variant="caption" tone="warning">
             {plural(progress.pending.length, 'pendência impede', 'pendências impedem')} a conclusão.
           </Text>
@@ -205,6 +209,8 @@ interface SiteCoordinatesProps {
  * field, which belongs to the start and the completion (card #19).
  */
 function SiteCoordinates({ latitude, longitude }: SiteCoordinatesProps) {
+  const [mapFailed, setMapFailed] = useState(false);
+
   if (latitude === null || longitude === null) {
     return (
       <Text variant="caption" tone="muted">
@@ -223,9 +229,14 @@ function SiteCoordinates({ latitude, longitude }: SiteCoordinatesProps) {
         onPress={() =>
           void Linking.openURL(
             `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
-          ).catch(() => undefined)
+          ).catch(() => setMapFailed(true))
         }
       />
+      {mapFailed ? (
+        <Text variant="caption" tone="danger">
+          Nenhum aplicativo de mapas conseguiu abrir o local. Use as coordenadas acima.
+        </Text>
+      ) : null}
     </View>
   );
 }

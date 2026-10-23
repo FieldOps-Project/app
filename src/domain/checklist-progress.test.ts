@@ -86,6 +86,7 @@ describe('computeProgress', () => {
     expect(progress.pending.map((pending) => [pending.itemId, pending.reason])).toEqual([
       ['i1', 'REQUIRED_UNANSWERED'],
       ['i2', 'OBSERVATION_REQUIRED'],
+      ['i2', 'EVIDENCE_REQUIRED'],
       ['i3', 'EVIDENCE_REQUIRED'],
     ]);
     expect(progress.nonConformities).toBe(2);
@@ -111,15 +112,42 @@ describe('computeProgress', () => {
     expect(progressOf([item('i1', { required: false })], []).pending).toEqual([]);
   });
 
-  it('blocks on a required item of an unknown type and leaves it out of the progress', () => {
+  it('blocks on a required item of an unknown type and never reads 100% because of it', () => {
     const progress = progressOf(
       [item('i1'), item('i2', { responseType: 'THERMAL_IMAGE' })],
       [answer('i1')]
     );
 
-    expect(progress).toMatchObject({ applicable: 1, percent: 100 });
+    expect(progress).toMatchObject({ answered: 1, applicable: 2, percent: 50 });
     expect(progress.pending).toEqual([
       expect.objectContaining({ itemId: 'i2', reason: 'UNSUPPORTED_TYPE' }),
+    ]);
+  });
+
+  it('leaves an optional item of an unknown type out of the progress', () => {
+    const progress = progressOf(
+      [item('i1'), item('i2', { responseType: 'THERMAL_IMAGE', required: false })],
+      [answer('i1')]
+    );
+
+    expect(progress).toMatchObject({ applicable: 1, percent: 100, pending: [] });
+  });
+
+  it('reports a missing observation and a missing evidence together', () => {
+    const rules = {
+      observationRequiredOnFailure: true,
+      evidenceRequiredOnFailure: true,
+      min: null,
+      max: null,
+    };
+    const progress = progressOf(
+      [item('i1', { rules })],
+      [answer('i1', { conformity: 'NON_CONFORMING' })]
+    );
+
+    expect(progress.pending.map((pending) => pending.reason)).toEqual([
+      'OBSERVATION_REQUIRED',
+      'EVIDENCE_REQUIRED',
     ]);
   });
 
