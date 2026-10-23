@@ -8,6 +8,7 @@ export * from './input';
 export * from './list';
 export * from './loading';
 export * from './offline-notice';
+export * from './option-button';
 export * from './progress-bar';
 export * from './screen';
 export * from './text';

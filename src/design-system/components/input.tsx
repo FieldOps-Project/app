@@ -11,6 +11,8 @@ export interface InputProps extends Omit<TextInputProps, 'style' | 'className'> 
   error?: string;
   /** Supporting text shown while the field is valid. */
   hint?: string;
+  /** Taller field for multi-line text; never below the touch target. */
+  minHeight?: number;
   className?: string;
 }
 
@@ -23,7 +25,7 @@ export interface InputProps extends Omit<TextInputProps, 'style' | 'className'> 
  * by border, icon and text together, never colour alone.
  */
 export const Input = forwardRef<TextInput, InputProps>(function Input(
-  { label, error, hint, className, ...props },
+  { label, error, hint, minHeight, className, ...props },
   ref
 ) {
   const isInvalid = error !== undefined;
@@ -38,7 +40,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
         accessibilityLabel={label}
         aria-invalid={isInvalid}
         placeholderTextColor={colors.neutral[400]}
-        style={{ minHeight: minTouchTarget }}
+        style={{ minHeight: Math.max(minHeight ?? 0, minTouchTarget) }}
         className={`rounded-field border bg-neutral-0 px-3 text-base text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50 ${
           isInvalid
             ? 'border-danger'
