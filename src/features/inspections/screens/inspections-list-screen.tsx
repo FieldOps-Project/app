@@ -12,6 +12,7 @@ import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import type { InspectionSummary } from '@/domain/inspection';
 import { sampleInspections } from '@/features/inspections/data/sample-inspections';
+import { formatDateTime } from '@/utils/format-date';
 
 export function InspectionsListScreen() {
   const router = useRouter();
@@ -91,7 +92,7 @@ function InspectionCard({ inspection }: { inspection: InspectionSummary }) {
         {inspection.siteName}
       </Text>
       <Text variant="caption" tone="muted">
-        {inspection.scheduledFor}
+        {formatDateTime(inspection.scheduledFor)}
       </Text>
       <View className="flex-row flex-wrap items-center gap-2">
         <InspectionStatusBadge status={inspection.status} />

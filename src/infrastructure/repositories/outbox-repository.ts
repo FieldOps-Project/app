@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { getDatabase } from '@/infrastructure/database/database';
+import { writeTransaction } from '@/infrastructure/database/write-transaction';
 
 /**
  * Persistent outbox (document 10.13.3). Every confirmed change on the device
@@ -138,14 +139,19 @@ export async function openOperationIds(
   return rows.map((row) => row.operation_id);
 }
 
-/** Operations still to send, oldest first. Failed ones are retried on the next run. */
+const OPERATION_COLUMNS = `operation_id, entity_type, entity_id, inspection_id, operation_type,
+  base_version, payload_json, dependency_ids, status, attempt_count, last_error`;
+
+/**
+ * Operations not yet confirmed, oldest first. CONFLICT ones are listed too:
+ * they are not resent (card #28 resolves them), but whatever depends on them
+ * must be held back.
+ */
 export async function listOpenOperations(ownerUserId: string): Promise<QueuedOperation[]> {
   const database = await getDatabase();
   const rows = await database.getAllAsync<OperationRow>(
-    `SELECT operation_id, entity_type, entity_id, inspection_id, operation_type, base_version,
-            payload_json, dependency_ids, status, attempt_count, last_error
-       FROM sync_operations
-      WHERE owner_user_id = ? AND status IN ('PENDING', 'PROCESSING', 'FAILED')
+    `SELECT ${OPERATION_COLUMNS} FROM sync_operations
+      WHERE owner_user_id = ? AND status <> 'COMPLETED'
       ORDER BY created_at, rowid`,
     ownerUserId
   );
@@ -163,16 +169,52 @@ export async function countOpenOperations(ownerUserId: string): Promise<number> 
   return row?.total ?? 0;
 }
 
-export async function markProcessing(operationId: string, now: string): Promise<void> {
-  const database = await getDatabase();
-  await database.runAsync(
-    `UPDATE sync_operations
-        SET status = 'PROCESSING', attempt_count = attempt_count + 1,
-            last_attempt_at = ?, updated_at = ?
-      WHERE operation_id = ?`,
-    now,
-    now,
-    operationId
+/**
+ * Takes an operation for sending and returns it as stored at that instant.
+ *
+ * The payload is read again here, inside the same write, because an edit may
+ * have been folded into the operation after the run listed it; sending the
+ * listed copy would mark the newer answer as delivered without ever sending
+ * it. Once PROCESSING, the operation no longer folds, so a later edit opens a
+ * new one. Returns `null` when the operation is no longer waiting.
+ */
+export function claimOperation(operationId: string, now: string): Promise<QueuedOperation | null> {
+  return writeTransaction(async (transaction) => {
+    const claimed = await transaction.runAsync(
+      `UPDATE sync_operations
+          SET status = 'PROCESSING', attempt_count = attempt_count + 1,
+              last_attempt_at = ?, updated_at = ?
+        WHERE operation_id = ? AND status IN ('PENDING', 'FAILED')`,
+      now,
+      now,
+      operationId
+    );
+    if (claimed.changes === 0) {
+      return null;
+    }
+    const row = await transaction.getFirstAsync<OperationRow>(
+      `SELECT ${OPERATION_COLUMNS} FROM sync_operations WHERE operation_id = ?`,
+      operationId
+    );
+    return row === null ? null : toQueuedOperation(row);
+  });
+}
+
+/**
+ * Puts back operations left PROCESSING by a run that never finished — the app
+ * closed mid-send. Resending them is safe: the id is the same (RN-068).
+ */
+export async function releaseInterruptedOperations(
+  ownerUserId: string,
+  now: string
+): Promise<void> {
+  await writeTransaction((transaction) =>
+    transaction.runAsync(
+      `UPDATE sync_operations SET status = 'PENDING', updated_at = ?
+        WHERE owner_user_id = ? AND status = 'PROCESSING'`,
+      now,
+      ownerUserId
+    )
   );
 }
 
@@ -181,8 +223,7 @@ export async function markProcessing(operationId: string, now: string): Promise<
  * marks the response and the inspection as confirmed by the server.
  */
 export async function markCompleted(operation: QueuedOperation, now: string): Promise<void> {
-  const database = await getDatabase();
-  await database.withExclusiveTransactionAsync(async (transaction) => {
+  await writeTransaction(async (transaction) => {
     await transaction.runAsync(
       `UPDATE sync_operations
           SET status = 'COMPLETED', last_error = NULL, completed_at = ?, updated_at = ?
@@ -229,10 +270,9 @@ export async function markFailed(
   error: string,
   now: string
 ): Promise<void> {
-  const database = await getDatabase();
   const localStatus = status === 'CONFLICT' ? 'CONFLICT' : 'ERROR';
 
-  await database.withExclusiveTransactionAsync(async (transaction) => {
+  await writeTransaction(async (transaction) => {
     await transaction.runAsync(
       `UPDATE sync_operations SET status = ?, last_error = ?, updated_at = ? WHERE operation_id = ?`,
       status,
@@ -257,13 +297,42 @@ export async function markFailed(
   });
 }
 
+/**
+ * The server refused the completion — an answer it requires is missing, for
+ * instance (backend#20). The inspection goes back to IN_PROGRESS so the
+ * technician can fix it (RN-043), the refused submit leaves the queue, and
+ * the reason stays on the inspection. Completing again queues a new submit.
+ */
+export async function reopenAfterRefusedSubmit(
+  operation: QueuedOperation,
+  error: string,
+  now: string
+): Promise<void> {
+  await writeTransaction(async (transaction) => {
+    await transaction.runAsync(
+      'DELETE FROM sync_operations WHERE operation_id = ?',
+      operation.operationId
+    );
+    await transaction.runAsync(
+      `UPDATE inspections
+          SET status = 'IN_PROGRESS', completed_at_device = NULL, local_sync_status = 'ERROR',
+              sync_error = ?, local_updated_at = ?
+        WHERE id = ? AND status = 'SUBMITTED'`,
+      error,
+      now,
+      operation.inspectionId
+    );
+  });
+}
+
 /** An attempt cut short by the network goes back to the queue unchanged. */
 export async function releaseOperation(operationId: string, now: string): Promise<void> {
-  const database = await getDatabase();
-  await database.runAsync(
-    `UPDATE sync_operations SET status = 'PENDING', updated_at = ?
-      WHERE operation_id = ? AND status = 'PROCESSING'`,
-    now,
-    operationId
+  await writeTransaction((transaction) =>
+    transaction.runAsync(
+      `UPDATE sync_operations SET status = 'PENDING', updated_at = ?
+        WHERE operation_id = ? AND status = 'PROCESSING'`,
+      now,
+      operationId
+    )
   );
 }

@@ -14,10 +14,12 @@ import {
   startInspection,
 } from '@/infrastructure/repositories/inspection-repository';
 import {
+  claimOperation,
   countOpenOperations,
   listOpenOperations,
   markCompleted,
   markFailed,
+  reopenAfterRefusedSubmit,
 } from '@/infrastructure/repositories/outbox-repository';
 import type { MobileInspection } from '@/schemas/mobile-inspection';
 
@@ -100,6 +102,7 @@ async function started() {
     inspectionId: 'insp-1',
     operationId: 'op-start',
     startedAtDevice: NOW,
+    location: null,
   });
 }
 
@@ -190,6 +193,7 @@ describe('start', () => {
         inspectionId: 'insp-1',
         operationId: 'op-start',
         startedAtDevice: NOW,
+        location: null,
       })
     ).rejects.toBeInstanceOf(InspectionStateError);
     expect(await countOpenOperations(OWNER)).toBe(0);
@@ -281,6 +285,7 @@ describe('completion', () => {
       inspectionId: 'insp-1',
       operationId: 'op-submit',
       completedAtDevice: NOW,
+      location: null,
     });
 
     const stored = await findInspection(OWNER, 'insp-1');
@@ -320,6 +325,87 @@ describe('outbox results', () => {
     expect(await listOpenOperations(OWNER)).toEqual([
       expect.objectContaining({ status: 'FAILED', lastError: 'Valor inválido.' }),
     ]);
+  });
+});
+
+describe('claiming', () => {
+  it('sends the payload as stored when claimed, not as it was listed', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: answer({ conformity: 'CONFORMING' }),
+    });
+    await listOpenOperations(OWNER);
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-ignored',
+      response: answer({ conformity: 'NON_CONFORMING', observation: 'Trinca.' }),
+    });
+
+    const claimed = await claimOperation('op-r', NOW);
+
+    expect(claimed?.payload).toMatchObject({ conformity: 'NON_CONFORMING' });
+    expect(await claimOperation('op-r', NOW)).toBeNull();
+  });
+
+  it('keeps an edit made during the send for the next run', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: answer(),
+    });
+    const claimed = await claimOperation('op-r', NOW);
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r2',
+      response: answer({ conformity: 'NOT_APPLICABLE' }),
+    });
+
+    await markCompleted(claimed!, NOW);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.responses[0]?.conformity).toBe('NOT_APPLICABLE');
+    expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toContain('op-r2');
+  });
+});
+
+describe('refused completion', () => {
+  it('reopens the inspection for correction and drops the refused submit', async () => {
+    await started();
+    await completeInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-submit',
+      completedAtDevice: NOW,
+      location: null,
+    });
+    const submit = (await listOpenOperations(OWNER)).find((op) => op.operationId === 'op-submit');
+
+    await reopenAfterRefusedSubmit(submit!, 'Item obrigatório sem resposta.', NOW);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.status).toBe('IN_PROGRESS');
+    expect(stored?.detail.completedAtDevice).toBeNull();
+    expect(stored?.detail.syncState).toBe('falha');
+    expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toEqual(['op-start']);
+  });
+});
+
+describe('integrity', () => {
+  it('enforces foreign keys on writes', async () => {
+    await expect(
+      database.runAsync(
+        `INSERT INTO evidences (id, inspection_id, inspection_item_id, created_at_device)
+         VALUES ('ev', 'missing', 'missing', ?)`,
+        NOW
+      )
+    ).rejects.toThrow();
   });
 });
 

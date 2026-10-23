@@ -19,14 +19,19 @@ export const queryKeys = {
     all: () => ['inspections'] as const,
     list: (filters?: Record<string, unknown>) =>
       [...queryKeys.inspections.all(), 'list', filters ?? {}] as const,
-    detail: (inspectionId: string) =>
-      [...queryKeys.inspections.all(), 'detail', inspectionId] as const,
+    detail: (ownerUserId: string, inspectionId: string) =>
+      [...queryKeys.inspections.all(), 'detail', ownerUserId, inspectionId] as const,
   },
 
   synchronization: {
     all: () => ['synchronization'] as const,
     /** Operations still owed to the server (RN-071). */
-    pending: () => [...queryKeys.synchronization.all(), 'pending'] as const,
-    lastRun: () => [...queryKeys.synchronization.all(), 'last-run'] as const,
+    pending: (ownerUserId: string) =>
+      [...queryKeys.synchronization.all(), 'pending', ownerUserId] as const,
+    lastRun: (ownerUserId: string) =>
+      [...queryKeys.synchronization.all(), 'last-run', ownerUserId] as const,
+    /** The download itself, kept apart so local reads can be invalidated without re-running it. */
+    download: (ownerUserId: string) =>
+      [...queryKeys.synchronization.all(), 'download', ownerUserId] as const,
   },
 } as const;

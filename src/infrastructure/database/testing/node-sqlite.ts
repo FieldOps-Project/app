@@ -32,16 +32,6 @@ export async function openTestDatabase(): Promise<SQLiteDatabase> {
       native.prepare(source).get(...bind(params)) ?? null,
     getAllAsync: async (source: string, ...params: Params) =>
       native.prepare(source).all(...bind(params)),
-    withExclusiveTransactionAsync: async (task: (transaction: SQLiteDatabase) => Promise<void>) => {
-      native.exec('BEGIN EXCLUSIVE');
-      try {
-        await task(database as unknown as SQLiteDatabase);
-        native.exec('COMMIT');
-      } catch (error) {
-        native.exec('ROLLBACK');
-        throw error;
-      }
-    },
   };
 
   const typed = database as unknown as SQLiteDatabase;

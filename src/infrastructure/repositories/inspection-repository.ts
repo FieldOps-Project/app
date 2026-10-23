@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { ChecklistItem, ChecklistResponse } from '@/domain/checklist';
 import type { InspectionDetail, InspectionStatus, InspectionSummary } from '@/domain/inspection';
 import { getDatabase } from '@/infrastructure/database/database';
+import { writeTransaction } from '@/infrastructure/database/write-transaction';
 import {
   enqueueOperation,
   openOperationIds,
@@ -16,6 +17,7 @@ import {
   type ItemRow,
   type ResponseRow,
 } from '@/infrastructure/repositories/inspection-rows';
+import type { LocationPayload } from '@/infrastructure/api/mobile-inspections-api';
 import type { MobileInspection } from '@/schemas/mobile-inspection';
 
 /**
@@ -98,15 +100,17 @@ export async function findServerUpdates(ownerUserId: string): Promise<Map<string
  * replaced (card #22). The one server fact applied over local work is a
  * cancellation, which is recorded without discarding anything (RN-077).
  * The snapshot is immutable, so items already stored are left as they are.
+ *
+ * The local check is by id on purpose: if another technician left unsent
+ * work on this device for an inspection now assigned elsewhere, that work is
+ * kept rather than handed over (ADR-001 leaves shared devices to EP-08).
  */
 export async function saveDownloadedInspection(
   ownerUserId: string,
   remote: MobileInspection,
   now: string
 ): Promise<void> {
-  const database = await getDatabase();
-
-  await database.withExclusiveTransactionAsync(async (transaction) => {
+  await writeTransaction(async (transaction) => {
     const local = await transaction.getFirstAsync<{ is_dirty: number }>(
       'SELECT is_dirty FROM inspections WHERE id = ?',
       remote.id
@@ -317,14 +321,15 @@ export interface StartCommand {
   readonly operationId: string;
   /** Device clock at the moment of the confirmation (RN-034). */
   readonly startedAtDevice: string;
+  /** Position at the start, or `null` when it was not captured (card #19). */
+  readonly location: LocationPayload | null;
 }
 
 /** UC-09: the local state and its queued operation are written together. */
 export async function startInspection(command: StartCommand): Promise<void> {
-  const database = await getDatabase();
   const now = command.startedAtDevice;
 
-  await database.withExclusiveTransactionAsync(async (transaction) => {
+  await writeTransaction(async (transaction) => {
     const { base_version } = await lockInspection(
       transaction,
       command.ownerUserId,
@@ -348,7 +353,11 @@ export async function startInspection(command: StartCommand): Promise<void> {
         inspectionId: command.inspectionId,
         operationType: 'TRANSITION',
         baseVersion: base_version,
-        payload: { action: 'START', startedAtDevice: command.startedAtDevice, location: null },
+        payload: {
+          action: 'START',
+          startedAtDevice: command.startedAtDevice,
+          location: command.location,
+        },
       },
       now
     );
@@ -372,13 +381,11 @@ export async function saveResponse({
   operationId,
   response,
 }: SaveResponseCommand): Promise<void> {
-  const database = await getDatabase();
   const now = response.answeredAtDevice;
 
-  await database.withExclusiveTransactionAsync(async (transaction) => {
+  await writeTransaction(async (transaction) => {
     const { base_version } = await lockInspection(transaction, ownerUserId, inspectionId, [
       'IN_PROGRESS',
-      'REJECTED',
     ]);
 
     const existing = await transaction.getFirstAsync<{ id: string; last_synced_at: string | null }>(
@@ -452,13 +459,8 @@ export interface RegisterEvidenceCommand {
  * file and its upload operation arrive with the camera (card #17).
  */
 export async function registerEvidence(command: RegisterEvidenceCommand): Promise<void> {
-  const database = await getDatabase();
-
-  await database.withExclusiveTransactionAsync(async (transaction) => {
-    await lockInspection(transaction, command.ownerUserId, command.inspectionId, [
-      'IN_PROGRESS',
-      'REJECTED',
-    ]);
+  await writeTransaction(async (transaction) => {
+    await lockInspection(transaction, command.ownerUserId, command.inspectionId, ['IN_PROGRESS']);
     await transaction.runAsync(
       `INSERT INTO evidences (id, inspection_id, inspection_item_id, created_at_device)
        VALUES (?, ?, ?, ?)`,
@@ -476,6 +478,8 @@ export interface CompleteCommand {
   readonly operationId: string;
   /** Device clock at the moment of the confirmation (RN-042). */
   readonly completedAtDevice: string;
+  /** Position at the completion, or `null` when it was not captured (card #19). */
+  readonly location: LocationPayload | null;
 }
 
 /**
@@ -484,15 +488,14 @@ export interface CompleteCommand {
  * dependencies — the server must receive the answers before the submit.
  */
 export async function completeInspection(command: CompleteCommand): Promise<void> {
-  const database = await getDatabase();
   const now = command.completedAtDevice;
 
-  await database.withExclusiveTransactionAsync(async (transaction) => {
+  await writeTransaction(async (transaction) => {
     const { base_version } = await lockInspection(
       transaction,
       command.ownerUserId,
       command.inspectionId,
-      ['IN_PROGRESS', 'REJECTED']
+      ['IN_PROGRESS']
     );
     const dependencyIds = await openOperationIds(transaction, command.inspectionId);
 
@@ -515,7 +518,7 @@ export async function completeInspection(command: CompleteCommand): Promise<void
         payload: {
           action: 'SUBMIT',
           completedAtDevice: command.completedAtDevice,
-          location: null,
+          location: command.location,
         },
         dependencyIds,
       },
@@ -531,18 +534,19 @@ export async function recordSyncRun(
   startedAt: string,
   finishedAt: string
 ): Promise<void> {
-  const database = await getDatabase();
-  await database.runAsync(
-    `INSERT INTO sync_metadata (owner_user_id, last_sync_started_at, last_sync_result, last_successful_sync)
+  await writeTransaction((transaction) =>
+    transaction.runAsync(
+      `INSERT INTO sync_metadata (owner_user_id, last_sync_started_at, last_sync_result, last_successful_sync)
      VALUES (?, ?, ?, ?)
      ON CONFLICT (owner_user_id) DO UPDATE SET
        last_sync_started_at = excluded.last_sync_started_at,
        last_sync_result = excluded.last_sync_result,
        last_successful_sync = COALESCE(excluded.last_successful_sync, sync_metadata.last_successful_sync)`,
-    ownerUserId,
-    startedAt,
-    result,
-    result === 'SUCCESS' ? finishedAt : null
+      ownerUserId,
+      startedAt,
+      result,
+      result === 'SUCCESS' ? finishedAt : null
+    )
   );
 }
 

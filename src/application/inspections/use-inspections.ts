@@ -38,7 +38,7 @@ export function useInspectionSummaries() {
 export function useStoredInspection(inspectionId: string) {
   const ownerUserId = useOwnerUserId();
   return useQuery<StoredInspection | null, Error>({
-    queryKey: queryKeys.inspections.detail(inspectionId),
+    queryKey: queryKeys.inspections.detail(ownerUserId, inspectionId),
     queryFn: () => findInspection(ownerUserId, inspectionId),
     enabled: ownerUserId !== '' && inspectionId !== '',
     staleTime: Infinity,
@@ -49,7 +49,7 @@ export function useStoredInspection(inspectionId: string) {
 export function usePendingOperationsCount() {
   const ownerUserId = useOwnerUserId();
   return useQuery<number, Error>({
-    queryKey: queryKeys.synchronization.pending(),
+    queryKey: queryKeys.synchronization.pending(ownerUserId),
     queryFn: () => countOpenOperations(ownerUserId),
     enabled: ownerUserId !== '',
     staleTime: Infinity,
@@ -59,7 +59,7 @@ export function usePendingOperationsCount() {
 export function useLastSuccessfulSync() {
   const ownerUserId = useOwnerUserId();
   return useQuery<string | null, Error>({
-    queryKey: queryKeys.synchronization.lastRun(),
+    queryKey: queryKeys.synchronization.lastRun(ownerUserId),
     queryFn: () => readLastSuccessfulSync(ownerUserId),
     enabled: ownerUserId !== '',
     staleTime: Infinity,

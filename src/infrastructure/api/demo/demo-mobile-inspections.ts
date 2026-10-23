@@ -78,9 +78,7 @@ function generatorChecklist(inspection: string): DemoItem[] {
     item(inspection, 2, 'Condições gerais', 1, 'Proteções laterais íntegras', 'CONFORMITY', {
       rules: FAILURE_RULES,
     }),
-    item(inspection, 2, 'Condições gerais', 2, 'Há vazamento de óleo?', 'BOOLEAN', {
-      rules: { ...NO_RULES, observationRequiredOnFailure: true },
-    }),
+    item(inspection, 2, 'Condições gerais', 2, 'Equipamento ligado durante a inspeção?', 'BOOLEAN'),
     item(inspection, 2, 'Condições gerais', 3, 'Nível de combustível', 'SINGLE_CHOICE', {
       options: ['Vazio', '1/4', '1/2', '3/4', 'Cheio'],
     }),

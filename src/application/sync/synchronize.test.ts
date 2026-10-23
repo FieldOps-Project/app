@@ -7,10 +7,12 @@ import {
   saveDownloadedInspection,
 } from '@/infrastructure/repositories/inspection-repository';
 import {
+  claimOperation,
   listOpenOperations,
   markCompleted,
   markFailed,
   releaseOperation,
+  reopenAfterRefusedSubmit,
   type QueuedOperation,
 } from '@/infrastructure/repositories/outbox-repository';
 
@@ -51,7 +53,15 @@ function gateway(overrides: Partial<MobileInspectionsGateway> = {}): MobileInspe
 beforeEach(() => {
   jest.clearAllMocks();
   jest.mocked(findServerUpdates).mockResolvedValue(new Map());
+  jest.mocked(claimOperation).mockImplementation(async (operationId) => {
+    const queued = await jest.mocked(listOpenOperations).getMockImplementation()?.('u-1');
+    return queued?.find((op) => op.operationId === operationId) ?? null;
+  });
 });
+
+function queue(operations: QueuedOperation[]) {
+  jest.mocked(listOpenOperations).mockImplementation(async () => operations);
+}
 
 describe('synchronize', () => {
   it('sends each operation with the payload it was queued with, then downloads', async () => {
@@ -63,7 +73,7 @@ describe('synchronize', () => {
       operationType: 'CREATE',
       payload: { id: 'resp-1', inspectionItemId: 'item-1', conformity: 'CONFORMING' },
     });
-    jest.mocked(listOpenOperations).mockResolvedValue([start, answer]);
+    queue([start, answer]);
     const api = gateway();
 
     const result = await synchronize('u-1', api, now);
@@ -119,7 +129,7 @@ describe('synchronize', () => {
       entityId: 'insp-2',
       inspectionId: 'insp-2',
     });
-    jest.mocked(listOpenOperations).mockResolvedValue([refused, submit, other]);
+    queue([refused, submit, other]);
     const api = gateway({
       putResponse: jest.fn(async () =>
         fail({ kind: 'business' as const, code: 'RESPONSE_INVALID', message: 'Valor inválido.' })
@@ -147,7 +157,7 @@ describe('synchronize', () => {
 
   it('records a refused transition as a conflict', async () => {
     const start = operation({});
-    jest.mocked(listOpenOperations).mockResolvedValue([start]);
+    queue([start]);
     const api = gateway({
       start: jest.fn(async () =>
         fail({ kind: 'conflict' as const, code: 'INSPECTION_INVALID_TRANSITION' })
@@ -165,9 +175,91 @@ describe('synchronize', () => {
   });
 });
 
+describe('ordering', () => {
+  it('waits while a dependency is still open, even one in conflict', async () => {
+    const conflicted = operation({
+      operationId: 'op-answer',
+      entityType: 'RESPONSE',
+      entityId: 'resp-1',
+      operationType: 'CREATE',
+      status: 'CONFLICT',
+      payload: { id: 'resp-1' },
+    });
+    const submit = operation({
+      operationId: 'op-submit',
+      payload: { action: 'SUBMIT', completedAtDevice: 'x', location: null },
+      dependencyIds: ['op-answer'],
+    });
+    queue([conflicted, submit]);
+    const api = gateway();
+
+    await synchronize('u-1', api, now);
+
+    expect(api.putResponse).not.toHaveBeenCalled();
+    expect(api.submit).not.toHaveBeenCalled();
+  });
+
+  it('reopens the inspection when the server refuses the completion', async () => {
+    const submit = operation({
+      operationId: 'op-submit',
+      payload: { action: 'SUBMIT', completedAtDevice: 'x', location: null },
+    });
+    queue([submit]);
+    const api = gateway({
+      submit: jest.fn(async () =>
+        fail({
+          kind: 'business' as const,
+          code: 'INSPECTION_REQUIRED_ITEMS_MISSING',
+          message: 'Há itens obrigatórios sem resposta.',
+        })
+      ),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(reopenAfterRefusedSubmit).toHaveBeenCalledWith(
+      submit,
+      'Há itens obrigatórios sem resposta.',
+      expect.any(String)
+    );
+    expect(markFailed).not.toHaveBeenCalled();
+  });
+
+  it('sends the claimed copy of the operation', async () => {
+    const listed = operation({
+      operationId: 'op-answer',
+      entityType: 'RESPONSE',
+      entityId: 'resp-1',
+      operationType: 'CREATE',
+      payload: { id: 'resp-1', conformity: 'CONFORMING' },
+    });
+    queue([listed]);
+    jest
+      .mocked(claimOperation)
+      .mockResolvedValue({ ...listed, payload: { id: 'resp-1', conformity: 'NON_CONFORMING' } });
+    const api = gateway();
+
+    await synchronize('u-1', api, now);
+
+    expect(api.putResponse).toHaveBeenCalledWith('insp-1', {
+      id: 'resp-1',
+      conformity: 'NON_CONFORMING',
+    });
+  });
+
+  it('shares one run between concurrent calls', async () => {
+    queue([operation({})]);
+    const api = gateway();
+
+    await Promise.all([synchronize('u-1', api, now), synchronize('u-1', api, now)]);
+
+    expect(api.start).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('refresh as part of synchronize', () => {
   it('keeps what is stored when one detail fails and saves the others', async () => {
-    jest.mocked(listOpenOperations).mockResolvedValue([]);
+    queue([]);
     const remote = { id: 'b' };
     const api = gateway({
       list: jest.fn(async () =>
@@ -189,7 +281,7 @@ describe('refresh as part of synchronize', () => {
   });
 
   it('skips an inspection whose server version is already stored', async () => {
-    jest.mocked(listOpenOperations).mockResolvedValue([]);
+    queue([]);
     jest.mocked(findServerUpdates).mockResolvedValue(new Map([['a', 'v1']]));
     const api = gateway({ list: jest.fn(async () => ok([{ id: 'a', updatedAt: 'v1' }])) });
 

@@ -138,19 +138,12 @@ export function isNotApplicable(response: ChecklistResponse | undefined): boolea
 }
 
 /**
- * A failed answer is what the failure rules (RN-038, RN-039) react to. The API
- * accepts those rules on CONFORMITY and BOOLEAN items only; for BOOLEAN, "Não"
- * is the failure.
+ * A failed answer is what the failure rules (RN-038, RN-039) react to: a
+ * non-conforming answer, exactly as the server checks it on submit
+ * (backend#20). Kept identical to the server on purpose — a stricter app would
+ * block completions the server accepts, a looser one would let through
+ * completions it refuses.
  */
-export function isFailure(item: ChecklistItem, response: ChecklistResponse | undefined): boolean {
-  if (response === undefined) {
-    return false;
-  }
-  if (item.responseType === 'CONFORMITY') {
-    return response.conformity === 'NON_CONFORMING';
-  }
-  if (item.responseType === 'BOOLEAN') {
-    return response.valueBoolean === false;
-  }
-  return false;
+export function isFailure(response: ChecklistResponse | undefined): boolean {
+  return response?.conformity === 'NON_CONFORMING';
 }

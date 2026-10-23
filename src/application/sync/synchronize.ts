@@ -10,25 +10,32 @@ import {
 } from '@/infrastructure/api';
 import { recordSyncRun } from '@/infrastructure/repositories/inspection-repository';
 import {
+  claimOperation,
   listOpenOperations,
   markCompleted,
   markFailed,
-  markProcessing,
+  releaseInterruptedOperations,
   releaseOperation,
+  reopenAfterRefusedSubmit,
   type QueuedOperation,
 } from '@/infrastructure/repositories/outbox-repository';
 import { refreshInspections, type RefreshOutcome } from '@/application/sync/refresh-inspections';
 
+const locationSchema = z
+  .object({
+    latitude: z.number(),
+    longitude: z.number(),
+    accuracy: z.number().nullable(),
+    capturedAt: z.string(),
+  })
+  .nullable();
+
 const transitionPayloadSchema = z.discriminatedUnion('action', [
-  z.object({
-    action: z.literal('START'),
-    startedAtDevice: z.string(),
-    location: z.null(),
-  }),
+  z.object({ action: z.literal('START'), startedAtDevice: z.string(), location: locationSchema }),
   z.object({
     action: z.literal('SUBMIT'),
     completedAtDevice: z.string(),
-    location: z.null(),
+    location: locationSchema,
   }),
 ]);
 
@@ -39,12 +46,16 @@ export interface SyncOutcome {
   readonly refresh: RefreshOutcome;
 }
 
+/**
+ * Response payloads are written by `saveResponse` in exactly the shape the API
+ * takes, and the server validates them again; transitions carry an `action`
+ * the API does not, so they are parsed back into the endpoint's body.
+ */
 function send(
   gateway: MobileInspectionsGateway,
   operation: QueuedOperation
 ): Promise<Result<void, ApiFailure>> {
   if (operation.entityType === 'RESPONSE') {
-    // Written by `saveResponse` in this exact shape; the server validates it again.
     return gateway.putResponse(operation.inspectionId, operation.payload as ResponsePayload);
   }
 
@@ -70,39 +81,73 @@ function send(
       });
 }
 
+function isSubmit(operation: QueuedOperation): boolean {
+  return (
+    operation.entityType === 'INSPECTION' &&
+    (operation.payload as { action?: unknown } | null)?.action === 'SUBMIT'
+  );
+}
+
+let running: Promise<Result<SyncOutcome, ApiFailure>> | null = null;
+
 /**
  * Sends the outbox, then downloads (document 10.14.5).
  *
  * Operations go oldest first, one at a time, each with the id it was created
- * with, so a resend is never a duplicate (RN-068). A refusal is recorded on
- * the operation and holds back the rest of that inspection — the submit must
- * not overtake an answer the server rejected — while other inspections carry
- * on (RN-070). Losing the network stops the run and leaves the queue exactly
- * as it was.
+ * with, so a resend is never a duplicate (RN-068). An operation waits while
+ * any operation it depends on is still open, and a refusal holds back the
+ * rest of its inspection — the submit must not overtake an answer the server
+ * rejected — while other inspections carry on (RN-070). A completion the
+ * server refuses reopens the inspection for correction (RN-043). Losing the
+ * network stops the run and leaves the queue exactly as it was.
  *
- * This is the sprint 4 minimum; batches, explicit dependency ordering and the
- * retry policy are card #24's scope.
+ * Concurrent calls share one run. This is the sprint 4 minimum; batches and
+ * the retry policy are card #24's scope.
  */
-export async function synchronize(
+export function synchronize(
   ownerUserId: string,
   gateway: MobileInspectionsGateway,
   now: () => string = () => new Date().toISOString()
 ): Promise<Result<SyncOutcome, ApiFailure>> {
+  running ??= run(ownerUserId, gateway, now).finally(() => {
+    running = null;
+  });
+  return running;
+}
+
+async function run(
+  ownerUserId: string,
+  gateway: MobileInspectionsGateway,
+  now: () => string
+): Promise<Result<SyncOutcome, ApiFailure>> {
   const startedAt = now();
+  await releaseInterruptedOperations(ownerUserId, startedAt);
+
+  const queue = await listOpenOperations(ownerUserId);
+  const open = new Set(queue.map((operation) => operation.operationId));
   const held = new Set<string>();
   let sent = 0;
   let refused = 0;
 
-  for (const operation of await listOpenOperations(ownerUserId)) {
-    if (held.has(operation.inspectionId)) {
+  for (const listed of queue) {
+    if (listed.status === 'CONFLICT') {
+      held.add(listed.inspectionId);
+      continue;
+    }
+    if (held.has(listed.inspectionId) || listed.dependencyIds.some((id) => open.has(id))) {
+      held.add(listed.inspectionId);
       continue;
     }
 
-    await markProcessing(operation.operationId, now());
+    const operation = await claimOperation(listed.operationId, now());
+    if (operation === null) {
+      continue;
+    }
     const result = await send(gateway, operation);
 
     if (result.ok) {
       await markCompleted(operation, now());
+      open.delete(operation.operationId);
       sent += 1;
       continue;
     }
@@ -114,16 +159,20 @@ export async function synchronize(
       return fail(failure);
     }
 
-    await markFailed(
-      operation,
-      failure.kind === 'conflict' ? 'CONFLICT' : 'FAILED',
-      describeApiFailure(failure),
-      now()
-    );
+    const reason = describeApiFailure(failure);
+    if (failure.kind === 'business' && isSubmit(operation)) {
+      await reopenAfterRefusedSubmit(operation, reason, now());
+    } else {
+      await markFailed(
+        operation,
+        failure.kind === 'conflict' ? 'CONFLICT' : 'FAILED',
+        reason,
+        now()
+      );
+    }
     held.add(operation.inspectionId);
     refused += 1;
   }
-
   const refresh = await refreshInspections(ownerUserId, gateway, now);
   if (!refresh.ok) {
     await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());

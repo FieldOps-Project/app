@@ -6,11 +6,11 @@ import { synchronize, type SyncOutcome } from '@/application/sync/synchronize';
 import { mobileInspectionsGateway, queryKeys, type ApiFailure } from '@/infrastructure/api';
 
 /** Local reads depend on what a run wrote; they reload, the device stays the source. */
-function invalidateLocalReads(queryClient: QueryClient): Promise<void> {
+function invalidateLocalReads(queryClient: QueryClient, ownerUserId: string): Promise<void> {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all() }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.pending() }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.lastRun() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.pending(ownerUserId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.lastRun(ownerUserId) }),
   ]).then(() => undefined);
 }
 
@@ -27,13 +27,13 @@ export function useInspectionsDownload() {
   const queryClient = useQueryClient();
 
   return useQuery<RefreshOutcome, ApiFailure>({
-    queryKey: [...queryKeys.synchronization.all(), 'download', ownerUserId],
+    queryKey: queryKeys.synchronization.download(ownerUserId),
     queryFn: async () => {
       const result = await refreshInspections(ownerUserId, mobileInspectionsGateway);
       if (!result.ok) {
         throw result.error;
       }
-      await invalidateLocalReads(queryClient);
+      await invalidateLocalReads(queryClient, ownerUserId);
       return result.value;
     },
     enabled: ownerUserId !== '',
@@ -54,6 +54,6 @@ export function useSynchronize() {
       }
       return result.value;
     },
-    onSettled: () => invalidateLocalReads(queryClient),
+    onSettled: () => invalidateLocalReads(queryClient, ownerUserId),
   });
 }

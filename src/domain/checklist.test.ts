@@ -82,13 +82,11 @@ describe('hasAnswer', () => {
 });
 
 describe('isFailure', () => {
-  it('is a non-conforming answer, or "Não" on a yes/no item', () => {
-    expect(isFailure(checklistItem(), response({ conformity: 'NON_CONFORMING' }))).toBe(true);
-    expect(isFailure(checklistItem(), response({ conformity: 'NOT_APPLICABLE' }))).toBe(false);
-    expect(
-      isFailure(checklistItem({ responseType: 'BOOLEAN' }), response({ valueBoolean: false }))
-    ).toBe(true);
-    expect(isFailure(checklistItem(), undefined)).toBe(false);
+  it('is a non-conforming answer, as the server checks it on submit', () => {
+    expect(isFailure(response({ conformity: 'NON_CONFORMING' }))).toBe(true);
+    expect(isFailure(response({ conformity: 'NOT_APPLICABLE' }))).toBe(false);
+    expect(isFailure(response({ valueBoolean: false }))).toBe(false);
+    expect(isFailure(undefined)).toBe(false);
   });
 });
 
