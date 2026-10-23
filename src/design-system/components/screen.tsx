@@ -11,6 +11,12 @@ export interface ScreenProps {
   scrollable?: boolean;
   /** Defaults to all four. Under a header, pass {@link BELOW_HEADER_EDGES}. */
   edges?: readonly Edge[];
+  /**
+   * Standard padding around the content. Turn off for a full-bleed
+   * `FlatList`, which applies it to its own content container instead — a
+   * padding override in `className` would lose to these classes.
+   */
+  padded?: boolean;
   className?: string;
 }
 
@@ -18,10 +24,13 @@ export function Screen({
   children,
   scrollable = false,
   edges = ['top', 'bottom', 'left', 'right'],
+  padded = true,
   className,
 }: ScreenProps) {
   const content = (
-    <View className={`flex-1 gap-4 px-screen py-4 ${className ?? ''}`}>{children}</View>
+    <View className={`flex-1 gap-4 ${padded ? 'px-screen py-4' : ''} ${className ?? ''}`}>
+      {children}
+    </View>
   );
 
   return (
