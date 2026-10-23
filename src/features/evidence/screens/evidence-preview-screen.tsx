@@ -7,7 +7,7 @@ import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
-import { useReturnToChecklist } from '@/features/evidence/hooks/use-return-to-checklist';
+import { useReturnToChecklist } from '@/features/checklist/hooks/use-return-to-checklist';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
 /** Every exit replaces this entry or unwinds, so no path leaves an extra one. */

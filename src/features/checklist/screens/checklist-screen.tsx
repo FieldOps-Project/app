@@ -1,9 +1,10 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { FlatList, Keyboard, KeyboardAvoidingView, Platform, View } from 'react-native';
 
 import { useInspectionDraft } from '@/application/inspection-draft/inspection-draft-context';
+import { describeLocalFailure } from '@/application/inspections/describe-local-failure';
 import { useSaveAnswer } from '@/application/inspections/use-checklist-actions';
 import {
   useInspectionDetail,
@@ -169,6 +170,19 @@ function Checklist({ work }: { work: InspectionWork }) {
     return () => clearTimeout(timer);
   });
 
+  /**
+   * Another screen — the summary's pending list — can send the technician to
+   * an item of this already mounted checklist through the `itemId` parameter.
+   */
+  const { itemId: requestedItemId } = useLocalSearchParams<{ itemId?: string }>();
+  useEffect(() => {
+    if (requestedItemId === undefined || requestedItemId === '') {
+      return;
+    }
+    goToItem(requestedItemId);
+    router.setParams({ itemId: undefined });
+  });
+
   const scrollRetried = useRef(false);
 
   const next = nextPending(progress, items, focusedItemId);
@@ -233,7 +247,7 @@ function Checklist({ work }: { work: InspectionWork }) {
                 message={
                   saveAnswer.error === null
                     ? undefined
-                    : `A resposta não foi salva: ${saveAnswer.error.message}`
+                    : `A resposta não foi salva: ${describeLocalFailure(saveAnswer.error)}`
                 }
               />
               {showPending ? <PendingList pending={progress.pending} onSelect={goToItem} /> : null}
