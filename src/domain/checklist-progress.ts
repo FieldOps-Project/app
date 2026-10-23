@@ -189,6 +189,13 @@ export function nextPending(
   );
 }
 
+/** Required items still without a usable answer — the "obrigatórios pendentes" total. */
+export function countRequiredPending(progress: ChecklistProgress): number {
+  return progress.pending.filter(
+    (entry) => entry.reason === 'REQUIRED_UNANSWERED' || entry.reason === 'UNSUPPORTED_TYPE'
+  ).length;
+}
+
 export function pendingReasonLabel(reason: PendingReason): string {
   const labels: Record<PendingReason, string> = {
     REQUIRED_UNANSWERED: 'Item obrigatório sem resposta',

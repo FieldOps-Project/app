@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState, type ComponentProps } from 'react';
 import { View } from 'react-native';
 
-import { useInspectionDraft } from '@/application/inspection-draft/inspection-draft-context';
+import { describeLocalFailure } from '@/application/inspections/describe-local-failure';
 import { useCompleteInspection } from '@/application/inspections/use-execution-actions';
 import {
   useInspectionDetail,
@@ -19,13 +19,17 @@ import { Loading } from '@/design-system/components/loading';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
-import { canEditAnswers } from '@/domain/inspection-actions';
+import { countRequiredPending } from '@/domain/checklist-progress';
+import { canEditAnswers, isAwaitingSend } from '@/domain/inspection-actions';
 import {
   PendingList,
   ProgressSummary,
 } from '@/features/checklist/components/checklist-progress-panel';
 import { FieldError } from '@/features/checklist/components/response-fields/field-error';
-import { useReturnToChecklist } from '@/features/evidence/hooks/use-return-to-checklist';
+import {
+  useReturnToChecklist,
+  useReturnToChecklistItem,
+} from '@/features/checklist/hooks/use-return-to-checklist';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 import { SyncNowButton } from '@/features/synchronization/components/sync-now-button';
 import { formatDateTime } from '@/utils/format-date';
@@ -74,21 +78,19 @@ export function InspectionSummaryScreen() {
 function Summary({ work }: { work: InspectionWork }) {
   const { detail, progress, evidenceCounts } = work;
   const router = useRouter();
-  const { focusItem } = useInspectionDraft();
   const returnToChecklist = useReturnToChecklist(detail.id);
+  const openItem = useReturnToChecklistItem(detail.id);
   const complete = useCompleteInspection(detail.id);
   const [confirming, setConfirming] = useState(false);
 
   const editable = canEditAnswers(detail.status);
-  const requiredPending = progress.pending.filter(
-    (entry) => entry.reason === 'REQUIRED_UNANSWERED' || entry.reason === 'UNSUPPORTED_TYPE'
-  ).length;
+  const requiredPending = countRequiredPending(progress);
   const evidences = [...evidenceCounts.values()].reduce((total, count) => total + count, 0);
-  const completedHere = detail.status === 'SUBMITTED' && detail.syncState !== 'enviado';
+  const completedHere = isAwaitingSend(detail.status, detail.syncState);
 
-  function openItem(itemId: string) {
-    focusItem(detail.id, itemId);
-    returnToChecklist(itemId);
+  function askConfirmation() {
+    complete.reset();
+    setConfirming(true);
   }
 
   return (
@@ -109,7 +111,7 @@ function Summary({ work }: { work: InspectionWork }) {
         <Total icon="list-outline" label="Itens no checklist" value={progress.total} />
         <Total
           icon="checkmark-circle-outline"
-          label="Itens respondidos"
+          label={`Respondidos de ${progress.applicable} aplicáveis`}
           value={progress.answered}
         />
         <Total
@@ -147,11 +149,7 @@ function Summary({ work }: { work: InspectionWork }) {
               <Text variant="body">
                 Resolva as pendências acima para concluir. Toque em uma delas para ir ao item.
               </Text>
-              <Button
-                label="Voltar ao checklist"
-                variant="secondary"
-                onPress={() => returnToChecklist()}
-              />
+              <Button label="Voltar ao checklist" variant="secondary" onPress={returnToChecklist} />
             </Card>
           ) : confirming ? (
             <Card title="Concluir a inspeção?" className="border-2 border-brand-600">
@@ -164,7 +162,7 @@ function Summary({ work }: { work: InspectionWork }) {
                 message={
                   complete.error === null
                     ? undefined
-                    : `A inspeção não foi concluída: ${complete.error.message}`
+                    : `A inspeção não foi concluída: ${describeLocalFailure(complete.error)}`
                 }
               />
               <Button
@@ -183,7 +181,7 @@ function Summary({ work }: { work: InspectionWork }) {
           ) : (
             <Card title="Tudo pronto">
               <SendingNotice />
-              <Button label="Concluir inspeção" onPress={() => setConfirming(true)} />
+              <Button label="Concluir inspeção" onPress={askConfirmation} />
             </Card>
           )}
         </>

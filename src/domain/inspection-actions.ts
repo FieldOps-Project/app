@@ -1,4 +1,4 @@
-import type { InspectionStatus } from '@/domain/inspection';
+import type { InspectionStatus, SyncState } from '@/domain/inspection';
 
 /** The single action the detail offers for a given state (card #11). */
 export type InspectionAction = 'START' | 'CONTINUE' | 'CORRECT' | 'VIEW';
@@ -52,7 +52,17 @@ export function startBlockedReason(status: InspectionStatus): string | null {
       return 'Esta inspeção já foi iniciada.';
     case 'DRAFT':
       return 'Esta inspeção ainda não foi atribuída.';
+    case 'REJECTED':
+      return 'Esta inspeção foi reprovada e aguarda reabertura para correção.';
     default:
       return 'Esta inspeção já foi concluída e não pode ser iniciada novamente.';
   }
+}
+
+/**
+ * Completed on the device but not yet confirmed by the server: the moment the
+ * screen must say plainly that completing is not sending (card #16).
+ */
+export function isAwaitingSend(status: InspectionStatus, syncState: SyncState): boolean {
+  return status === 'SUBMITTED' && syncState !== 'enviado' && syncState !== 'salvo-no-dispositivo';
 }

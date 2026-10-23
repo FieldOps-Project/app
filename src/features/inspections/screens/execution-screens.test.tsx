@@ -27,13 +27,19 @@ jest.mock('@/application/inspections/use-inspection-detail', () => ({
 }));
 jest.mock('@/application/inspections/use-execution-actions', () => ({
   useStartInspection: () => ({ mutate: mockStart, isPending: false, error: null }),
-  useCompleteInspection: () => ({ mutate: mockComplete, isPending: false, error: null }),
+  useCompleteInspection: () => ({
+    mutate: mockComplete,
+    reset: jest.fn(),
+    isPending: false,
+    error: null,
+  }),
 }));
 jest.mock('@/application/inspection-draft/inspection-draft-context', () => ({
   useInspectionDraft: () => ({ focusedItemFor: () => null, focusItem: jest.fn() }),
 }));
-jest.mock('@/features/evidence/hooks/use-return-to-checklist', () => ({
+jest.mock('@/features/checklist/hooks/use-return-to-checklist', () => ({
   useReturnToChecklist: () => jest.fn(),
+  useReturnToChecklistItem: () => jest.fn(),
 }));
 jest.mock('@/features/synchronization/components/sync-now-button', () => ({
   SyncNowButton: () => null,

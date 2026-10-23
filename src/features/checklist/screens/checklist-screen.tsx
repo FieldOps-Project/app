@@ -4,6 +4,7 @@ import { useHeaderHeight } from 'expo-router/react-navigation';
 import { FlatList, Keyboard, KeyboardAvoidingView, Platform, View } from 'react-native';
 
 import { useInspectionDraft } from '@/application/inspection-draft/inspection-draft-context';
+import { describeLocalFailure } from '@/application/inspections/describe-local-failure';
 import { useSaveAnswer } from '@/application/inspections/use-checklist-actions';
 import {
   useInspectionDetail,
@@ -246,7 +247,7 @@ function Checklist({ work }: { work: InspectionWork }) {
                 message={
                   saveAnswer.error === null
                     ? undefined
-                    : `A resposta não foi salva: ${saveAnswer.error.message}`
+                    : `A resposta não foi salva: ${describeLocalFailure(saveAnswer.error)}`
                 }
               />
               {showPending ? <PendingList pending={progress.pending} onSelect={goToItem} /> : null}

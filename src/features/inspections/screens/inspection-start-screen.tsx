@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { View } from 'react-native';
 
+import { describeLocalFailure } from '@/application/inspections/describe-local-failure';
 import { useStartInspection } from '@/application/inspections/use-execution-actions';
 import {
   useInspectionDetail,
@@ -66,7 +67,13 @@ function StartConfirmation({ work }: { work: InspectionWork }) {
   const { detail, progress } = work;
   const router = useRouter();
   const start = useStartInspection(detail.id);
-  const blocked = startBlockedReason(detail.status);
+  /**
+   * Once confirmed, the stored inspection becomes IN_PROGRESS before the
+   * screen is replaced; the confirmation stays up during that instant instead
+   * of flashing "já foi iniciada".
+   */
+  const starting = start.isPending || start.isSuccess;
+  const blocked = starting ? null : startBlockedReason(detail.status);
 
   function confirm() {
     start.mutate(undefined, {
@@ -132,7 +139,7 @@ function StartConfirmation({ work }: { work: InspectionWork }) {
             message={
               start.error === null
                 ? undefined
-                : `O início não foi registrado: ${start.error.message}`
+                : `O início não foi registrado: ${describeLocalFailure(start.error)}`
             }
           />
           <Button label="Confirmar início" loading={start.isPending} onPress={confirm} />
