@@ -2,39 +2,36 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 import type { ReactNode } from 'react';
 
 interface InspectionDraftContextValue {
-  focusedItemId: string | null;
-  focusItem: (itemId: string) => void;
-  registerEvidence: (itemId: string) => void;
-  evidenceCountFor: (itemId: string) => number;
+  /** The item the technician was last on, per inspection. */
+  focusedItemFor: (inspectionId: string) => string | null;
+  focusItem: (inspectionId: string, itemId: string) => void;
 }
 
 const InspectionDraftContext = createContext<InspectionDraftContextValue | null>(null);
 
 /**
- * Checklist state shared with the evidence screens, so neither depends on the
- * other being mounted (document 13.9). In memory only; persisting a draft
- * belongs to EP-08.
+ * Where the technician was in each checklist, shared with the screens that
+ * open on top of it, so leaving for the camera or the summary and coming back
+ * lands on the same item (document 13.9). Answers themselves are never kept
+ * here: they are saved on the device as soon as they are confirmed.
  */
 export function InspectionDraftProvider({ children }: { children: ReactNode }) {
-  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
-  const [evidenceByItem, setEvidenceByItem] = useState<Record<string, number>>({});
+  const [focused, setFocused] = useState<Record<string, string>>({});
 
-  const focusItem = useCallback((itemId: string) => {
-    setFocusedItemId(itemId);
+  const focusItem = useCallback((inspectionId: string, itemId: string) => {
+    setFocused((current) =>
+      current[inspectionId] === itemId ? current : { ...current, [inspectionId]: itemId }
+    );
   }, []);
 
-  const registerEvidence = useCallback((itemId: string) => {
-    setEvidenceByItem((current) => ({ ...current, [itemId]: (current[itemId] ?? 0) + 1 }));
-  }, []);
-
-  const evidenceCountFor = useCallback(
-    (itemId: string) => evidenceByItem[itemId] ?? 0,
-    [evidenceByItem]
+  const focusedItemFor = useCallback(
+    (inspectionId: string) => focused[inspectionId] ?? null,
+    [focused]
   );
 
   const value = useMemo<InspectionDraftContextValue>(
-    () => ({ focusedItemId, focusItem, registerEvidence, evidenceCountFor }),
-    [focusedItemId, focusItem, registerEvidence, evidenceCountFor]
+    () => ({ focusedItemFor, focusItem }),
+    [focusedItemFor, focusItem]
   );
 
   return (
