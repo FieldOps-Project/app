@@ -4,14 +4,15 @@ Aplicativo mobile de inspeções em campo do projeto FieldOps. Expo + React Nati
 TypeScript, com Expo Router e estrutura por features.
 
 Este repositório contém a fundação técnica do produto (EP-01 / PBI-002): rotas, camadas,
-design system, lint, verificação de tipos e configuração por ambiente. Autenticação real
-(EP-02) e persistência com SQLite e sincronização (EP-08) entram em cards próprios.
+design system, lint, verificação de tipos e configuração por ambiente, além da autenticação
+(EP-02) e da execução de campo (EP-06). As inspeções do técnico ficam em SQLite no aparelho;
+o motor completo de sincronização (EP-08) entra em cards próprios.
 
 ## Pré-requisitos
 
 | Ferramenta     | Versão              | Observação                                          |
 | -------------- | ------------------- | --------------------------------------------------- |
-| Node.js        | 20 LTS ou superior  | Verifique com `node -v`                             |
+| Node.js        | 22 LTS ou superior  | Verifique com `node -v`                             |
 | npm            | 10 ou superior      | Instalado junto com o Node                          |
 | Android Studio | Ladybug ou superior | Plataforma de validação obrigatória (documento 1.8) |
 | JDK            | 17                  | Exigido pelo build Android                          |
@@ -45,10 +46,11 @@ módulos nativos incluídos no Expo Go, então não é necessário gerar build n
 As variáveis ficam em um arquivo `.env` na raiz, criado a partir de `.env.example`. O
 arquivo `.env` **não é versionado**.
 
-| Variável              | Obrigatória | Descrição                                         |
-| --------------------- | ----------- | ------------------------------------------------- |
-| `EXPO_PUBLIC_API_URL` | Sim         | URL base da API REST, sem barra no final          |
-| `EXPO_PUBLIC_APP_ENV` | Não         | `development` (padrão), `staging` ou `production` |
+| Variável                       | Obrigatória | Descrição                                                                               |
+| ------------------------------ | ----------- | --------------------------------------------------------------------------------------- |
+| `EXPO_PUBLIC_API_URL`          | Sim         | URL base da API REST, sem barra no final                                                |
+| `EXPO_PUBLIC_APP_ENV`          | Não         | `development` (padrão), `staging` ou `production`                                       |
+| `EXPO_PUBLIC_DEMO_INSPECTIONS` | Não         | `true` serve as inspeções do técnico a partir de dados de demonstração (padrão `false`) |
 
 > **Tudo que começa com `EXPO_PUBLIC_` é embutido no bundle** e fica legível para qualquer
 > pessoa que tenha o aplicativo instalado. Nunca coloque senha, chave de API, token ou
@@ -63,6 +65,30 @@ que corrigir, em vez de quebrar depois com um erro de rede confuso.
 Variáveis `EXPO_PUBLIC_` são resolvidas no momento do bundle. Depois de editar o `.env`,
 reinicie com `npx expo start --clear` — alterar o arquivo com o Metro em execução não tem
 efeito.
+
+## Dados no aparelho (SQLite)
+
+O aplicativo é offline-first: as telas leem as inspeções do SQLite, não da rede
+(documento 13.6). A API alimenta o banco local e recebe o que foi feito em campo.
+
+```text
+API --(download)--> SQLite <--(leitura)-- telas
+                      |
+               sync_operations (outbox) --(Sincronizar)--> API
+```
+
+- Esquema versionado em [`src/infrastructure/database/migrations.ts`](src/infrastructure/database/migrations.ts).
+  Migrações só avançam; nunca edite uma entrada publicada, acrescente outra.
+- Iniciar, responder e concluir gravam o registro e a operação de envio na mesma
+  transação. Nada espera a rede para considerar o dado salvo.
+- Um download nunca sobrescreve trabalho local ainda não enviado.
+
+### Inspeções de demonstração
+
+Os endpoints mobile da API (backend#19, #20 e #21) ainda não existem. Para exercitar as
+telas de ponta a ponta, defina `EXPO_PUBLIC_DEMO_INSPECTIONS=true` no `.env`: as inspeções
+passam a vir de dados em memória no próprio aplicativo, com os mesmos payloads do
+contrato. O login continua indo para a API real. Nunca habilite em staging ou produção.
 
 ## Apontar para a API na rede local
 
