@@ -2,11 +2,16 @@ import { Badge, type BadgeIcon, type BadgeTone } from '@/design-system/component
 import type { InspectionStatus } from '@/domain/inspection';
 import { inspectionStatusLabel } from '@/domain/inspection';
 
-/** Maps each delivery state to a colour and an icon; the label comes from the domain. */
+/** Maps each business state to a colour and an icon; the label comes from the domain. */
 const presentation: Record<InspectionStatus, { tone: BadgeTone; icon: BadgeIcon }> = {
-  pendente: { tone: 'neutral', icon: 'time-outline' },
-  'em-andamento': { tone: 'info', icon: 'construct-outline' },
-  concluida: { tone: 'success', icon: 'checkmark-circle-outline' },
+  DRAFT: { tone: 'neutral', icon: 'document-outline' },
+  ASSIGNED: { tone: 'neutral', icon: 'time-outline' },
+  IN_PROGRESS: { tone: 'info', icon: 'construct-outline' },
+  SUBMITTED: { tone: 'success', icon: 'checkmark-circle-outline' },
+  UNDER_REVIEW: { tone: 'info', icon: 'eye-outline' },
+  APPROVED: { tone: 'success', icon: 'ribbon-outline' },
+  REJECTED: { tone: 'danger', icon: 'arrow-undo-outline' },
+  CANCELED: { tone: 'neutral', icon: 'close-circle-outline' },
 };
 
 export interface InspectionStatusBadgeProps {

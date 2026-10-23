@@ -77,8 +77,8 @@ function filterInspections(
   }
   return inspections.filter(
     (inspection) =>
-      inspection.client.toLowerCase().includes(term) ||
-      inspection.address.toLowerCase().includes(term)
+      inspection.clientName.toLowerCase().includes(term) ||
+      inspection.siteName.toLowerCase().includes(term)
   );
 }
 
@@ -86,9 +86,9 @@ function filterInspections(
 function InspectionCard({ inspection }: { inspection: InspectionSummary }) {
   return (
     <Card>
-      <Text variant="subtitle">{inspection.client}</Text>
+      <Text variant="subtitle">{inspection.clientName}</Text>
       <Text variant="body" tone="muted">
-        {inspection.address}
+        {inspection.siteName}
       </Text>
       <Text variant="caption" tone="muted">
         {inspection.scheduledFor}

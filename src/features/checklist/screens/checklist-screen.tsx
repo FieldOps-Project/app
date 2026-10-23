@@ -7,8 +7,10 @@ import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
-import type { ChecklistItem } from '@/domain/inspection';
-import { sampleChecklist } from '@/features/checklist/data/sample-checklist';
+import {
+  sampleChecklist,
+  type SampleChecklistItem as ChecklistItem,
+} from '@/features/checklist/data/sample-checklist';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
 /**
