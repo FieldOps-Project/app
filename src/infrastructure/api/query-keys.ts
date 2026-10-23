@@ -7,9 +7,9 @@
  * hierarchically (`['inspections'] → ['inspections','detail', id]`) precisely so
  * this prefix-invalidation works.
  *
- * From sprint 6 SQLite becomes the operational source (document 13.6) and Query
- * is left with only what is genuinely remote; keeping the keys in one file makes
- * that remote surface easy to see and to prune.
+ * Inspections are read from SQLite, the operational source (document 13.6),
+ * through these same keys: Query caches the local read and the writes
+ * invalidate it, so every screen sees a change the moment it is saved.
  */
 export const queryKeys = {
   /** Liveness probe: tells "server unreachable" apart from "server erroring". */
@@ -21,5 +21,12 @@ export const queryKeys = {
       [...queryKeys.inspections.all(), 'list', filters ?? {}] as const,
     detail: (inspectionId: string) =>
       [...queryKeys.inspections.all(), 'detail', inspectionId] as const,
+  },
+
+  synchronization: {
+    all: () => ['synchronization'] as const,
+    /** Operations still owed to the server (RN-071). */
+    pending: () => [...queryKeys.synchronization.all(), 'pending'] as const,
+    lastRun: () => [...queryKeys.synchronization.all(), 'last-run'] as const,
   },
 } as const;
