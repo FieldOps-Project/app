@@ -12,6 +12,7 @@ import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import type { InspectionSummary } from '@/domain/inspection';
 import { sampleInspections } from '@/features/inspections/data/sample-inspections';
+import { formatDateTime } from '@/utils/format-date';
 
 export function InspectionsListScreen() {
   const router = useRouter();
@@ -77,8 +78,8 @@ function filterInspections(
   }
   return inspections.filter(
     (inspection) =>
-      inspection.client.toLowerCase().includes(term) ||
-      inspection.address.toLowerCase().includes(term)
+      inspection.clientName.toLowerCase().includes(term) ||
+      inspection.siteName.toLowerCase().includes(term)
   );
 }
 
@@ -86,12 +87,12 @@ function filterInspections(
 function InspectionCard({ inspection }: { inspection: InspectionSummary }) {
   return (
     <Card>
-      <Text variant="subtitle">{inspection.client}</Text>
+      <Text variant="subtitle">{inspection.clientName}</Text>
       <Text variant="body" tone="muted">
-        {inspection.address}
+        {inspection.siteName}
       </Text>
       <Text variant="caption" tone="muted">
-        {inspection.scheduledFor}
+        {formatDateTime(inspection.scheduledFor)}
       </Text>
       <View className="flex-row flex-wrap items-center gap-2">
         <InspectionStatusBadge status={inspection.status} />

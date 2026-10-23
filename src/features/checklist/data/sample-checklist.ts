@@ -1,7 +1,13 @@
-import type { ChecklistItem } from '@/domain/inspection';
+/** Placeholder shape until the checklist is rendered from the snapshot (card #12). */
+export interface SampleChecklistItem {
+  readonly id: string;
+  readonly order: number;
+  readonly question: string;
+  readonly requiresEvidence: boolean;
+}
 
 /** Long enough to scroll, so returning to the same item can be observed. */
-export const sampleChecklist: readonly ChecklistItem[] = [
+export const sampleChecklist: readonly SampleChecklistItem[] = [
   { id: 'chk-01', order: 1, question: 'Extintores dentro da validade', requiresEvidence: true },
   {
     id: 'chk-02',

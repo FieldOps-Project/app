@@ -9,6 +9,7 @@ import { EmptyState } from '@/design-system/components/empty-state';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { findInspection } from '@/features/inspections/data/sample-inspections';
+import { formatDateTime } from '@/utils/format-date';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
 /** Entry point to the sub-routes, all carrying the same route parameter. */
@@ -34,16 +35,16 @@ export function InspectionDetailsScreen() {
   return (
     <Screen scrollable edges={BELOW_HEADER_EDGES}>
       <View className="gap-1">
-        <Text variant="title">{inspection.client}</Text>
+        <Text variant="title">{inspection.clientName}</Text>
         <Text variant="code" tone="muted">
           {inspection.id}
         </Text>
       </View>
 
       <Card title="Dados">
-        <Text variant="body">{inspection.address}</Text>
+        <Text variant="body">{inspection.siteName}</Text>
         <Text variant="body" tone="muted">
-          {inspection.scheduledFor}
+          {formatDateTime(inspection.scheduledFor)}
         </Text>
         <View className="flex-row flex-wrap items-center gap-2">
           <InspectionStatusBadge status={inspection.status} />

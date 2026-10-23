@@ -32,7 +32,7 @@ export function SyncScreen() {
           renderItem={(inspection) => (
             <View className="flex-row items-center justify-between gap-3">
               <Text variant="body" className="flex-1">
-                {inspection.client}
+                {inspection.clientName}
               </Text>
               <SyncStateBadge state={inspection.syncState} />
             </View>
