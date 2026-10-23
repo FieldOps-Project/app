@@ -33,6 +33,7 @@ const ROW: InspectionRow = {
   local_sync_status: 'PENDING',
   is_dirty: 1,
   local_updated_at: '2026-08-12T13:05:00Z',
+  sync_error: null,
 };
 
 describe('toSyncState', () => {

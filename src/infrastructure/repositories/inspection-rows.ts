@@ -42,6 +42,7 @@ export interface InspectionRow {
   local_sync_status: LocalSyncStatus;
   is_dirty: number;
   local_updated_at: string | null;
+  sync_error: string | null;
 }
 
 export interface ItemRow {
@@ -145,6 +146,7 @@ export function toDetail(row: InspectionRow): InspectionDetail {
     startedAtDevice: row.started_at_device,
     completedAtDevice: row.completed_at_device,
     review: parseJson<InspectionReview | null>(row.review_json, null),
+    syncError: row.sync_error,
   };
 }
 

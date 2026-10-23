@@ -48,6 +48,7 @@ import { Button, Input, Badge, EmptyState } from '@/design-system/components';
 | `EmptyState`    | Estado vazio com ícone, texto de negócio e ação opcional.                                                                           |
 | `ErrorState`    | Estado de erro com ícone, mensagem de negócio e tentar novamente.                                                                   |
 | `OfflineNotice` | Aviso de ausência de conexão, reutilizável em qualquer tela.                                                                        |
+| `ProgressBar`   | Barra de progresso sempre acompanhada do valor em texto.                                                                            |
 
 Os selos de **estado de negócio** e de **sincronização** ficam em
 [`src/components`](../components) (`InspectionStatusBadge`, `SyncStateBadge`),
