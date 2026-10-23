@@ -127,3 +127,8 @@ export function isInspectionStatus(value: string): value is InspectionStatus {
 export function isInspectionPriority(value: string): value is InspectionPriority {
   return (INSPECTION_PRIORITIES as readonly string[]).includes(value);
 }
+
+/** High and critical work is flagged on the card so it stands out in a long list. */
+export function isUrgentPriority(priority: InspectionPriority): boolean {
+  return priority === 'HIGH' || priority === 'CRITICAL';
+}

@@ -15,6 +15,7 @@ import { colors } from '@/design-system/tokens/design-tokens';
 import type { InspectionView } from '@/domain/inspection-schedule';
 import { DownloadStatus } from '@/features/synchronization/components/download-status';
 import { SyncNowButton } from '@/features/synchronization/components/sync-now-button';
+import { plural } from '@/utils/plural';
 
 /**
  * First screen after sign-in (document 13.4): what is due today, what is late,
@@ -127,7 +128,7 @@ function PendingSyncCard({
         <View className="flex-1 gap-0.5">
           <Text variant="subtitle" tone={hasPending ? 'warning' : 'success'}>
             {hasPending
-              ? `${pendingOperations} ${pendingOperations === 1 ? 'registro aguardando envio' : 'registros aguardando envio'}`
+              ? plural(pendingOperations, 'registro aguardando envio', 'registros aguardando envio')
               : 'Tudo enviado'}
           </Text>
           <Text variant="caption" tone="muted">
@@ -138,7 +139,7 @@ function PendingSyncCard({
         </View>
       </View>
       <SyncNowButton variant={hasPending ? 'primary' : 'secondary'} />
-      {inspectionsWithUnsentWork > 0 ? (
+      {hasPending || inspectionsWithUnsentWork > 0 ? (
         <Button label="Ver inspeções não enviadas" variant="secondary" onPress={onOpen} />
       ) : null}
     </Card>
@@ -165,9 +166,10 @@ function DayBlock({ icon, title, count, emptyText, tone = 'default', onPress }: 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${title}: ${count} ${count === 1 ? 'inspeção' : 'inspeções'}`}
+      accessibilityLabel={`${title}: ${plural(count, 'inspeção', 'inspeções')}`}
       accessibilityHint="Abre a lista com este filtro"
       onPress={onPress}
+      className="active:opacity-70"
     >
       <Card>
         <View className="flex-row items-center gap-3">
@@ -192,7 +194,7 @@ function DayBlock({ icon, title, count, emptyText, tone = 'default', onPress }: 
               </Text>
             ) : (
               <Text variant="subtitle" tone={isAlert ? 'danger' : 'default'}>
-                {count} {count === 1 ? 'inspeção' : 'inspeções'}
+                {plural(count, 'inspeção', 'inspeções')}
               </Text>
             )}
           </View>

@@ -1,9 +1,11 @@
 import type { InspectionSummary } from '@/domain/inspection';
 import {
+  countActiveFilters,
   filterInspections,
   filtersForView,
   hasActiveFilters,
   NO_FILTERS,
+  summarizeDay,
 } from '@/domain/inspection-filters';
 
 const NOW = new Date(2026, 7, 12, 15, 0);
@@ -87,5 +89,53 @@ describe('hasActiveFilters', () => {
   it('ignores a blank search', () => {
     expect(hasActiveFilters({ ...NO_FILTERS, query: '   ' })).toBe(false);
     expect(hasActiveFilters(filtersForView('today'))).toBe(true);
+  });
+});
+
+describe('countActiveFilters', () => {
+  it('counts selected options, not the search', () => {
+    expect(
+      countActiveFilters({ ...NO_FILTERS, query: 'x', statuses: ['ASSIGNED'], unsentOnly: true })
+    ).toBe(2);
+  });
+});
+
+describe('summarizeDay', () => {
+  it('counts each block with the filter it opens', () => {
+    const list = [...LIST, inspection({ id: 'canceled-today', status: 'CANCELED' })];
+    const overview = summarizeDay(list, NOW);
+
+    expect(overview).toEqual({
+      today: filterInspections(list, filtersForView('today'), NOW).length,
+      overdue: 1,
+      inProgress: 1,
+      withUnsentWork: 1,
+    });
+    expect(overview.today).toBe(3);
+  });
+
+  it('keeps business status and sync state independent', () => {
+    const both = [inspection({ status: 'IN_PROGRESS', syncState: 'aguardando-envio' })];
+
+    expect(summarizeDay(both, NOW)).toMatchObject({ inProgress: 1, withUnsentWork: 1 });
+  });
+
+  it('counts failed and conflicting records as not sent', () => {
+    const records = [
+      inspection({ id: 'a', syncState: 'falha' }),
+      inspection({ id: 'b', syncState: 'conflito' }),
+      inspection({ id: 'c', syncState: 'enviado' }),
+    ];
+
+    expect(summarizeDay(records, NOW).withUnsentWork).toBe(2);
+  });
+
+  it('is all zeros for an empty device', () => {
+    expect(summarizeDay([], NOW)).toEqual({
+      today: 0,
+      overdue: 0,
+      inProgress: 0,
+      withUnsentWork: 0,
+    });
   });
 });

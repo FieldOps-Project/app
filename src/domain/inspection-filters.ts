@@ -3,6 +3,8 @@ import {
   hasUnsentWork,
   isOverdue,
   isScheduledToday,
+  startOfDay,
+  type DayOverview,
   type InspectionView,
 } from '@/domain/inspection-schedule';
 
@@ -44,14 +46,19 @@ export function filtersForView(view: InspectionView | null): InspectionFilters {
   }
 }
 
-export function hasActiveFilters(filters: InspectionFilters): boolean {
+/** Selected options, the search left out: the number shown on the "Filtros" button. */
+export function countActiveFilters(filters: InspectionFilters): number {
   return (
-    filters.query.trim() !== '' ||
-    filters.statuses.length > 0 ||
-    filters.priorities.length > 0 ||
-    filters.dateRange !== 'all' ||
-    filters.unsentOnly
+    filters.statuses.length +
+    filters.priorities.length +
+    (filters.dateRange === 'all' ? 0 : 1) +
+    (filters.unsentOnly ? 1 : 0)
   );
+}
+
+/** Whether the list shows less than everything, which changes its empty state. */
+export function hasActiveFilters(filters: InspectionFilters): boolean {
+  return filters.query.trim() !== '' || countActiveFilters(filters) > 0;
 }
 
 /** Case- and accent-insensitive, so "sao jorge" finds "São Jorge". */
@@ -70,10 +77,9 @@ function inDateRange(inspection: InspectionSummary, range: DateRange, now: Date)
     case 'overdue':
       return isOverdue(inspection, now);
     case 'next-7-days': {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
+      const start = startOfDay(now).getTime();
       const scheduled = new Date(inspection.scheduledFor).getTime();
-      return scheduled >= start.getTime() && scheduled < start.getTime() + 7 * DAY_MS;
+      return scheduled >= start && scheduled < start + 7 * DAY_MS;
     }
   }
 }
@@ -111,4 +117,20 @@ export function dateRangeLabel(range: DateRange): string {
     'next-7-days': 'Próximos 7 dias',
   };
   return labels[range];
+}
+
+/**
+ * The home blocks, each counted with the very filter it opens (card #9), so a
+ * block can never promise a number the list does not show.
+ */
+export function summarizeDay(inspections: readonly InspectionSummary[], now: Date): DayOverview {
+  const count = (view: InspectionView) =>
+    filterInspections(inspections, filtersForView(view), now).length;
+
+  return {
+    today: count('today'),
+    overdue: count('overdue'),
+    inProgress: count('in-progress'),
+    withUnsentWork: count('pending-sync'),
+  };
 }

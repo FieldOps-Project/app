@@ -7,7 +7,8 @@ export function isOpen(status: InspectionStatus): boolean {
   return OPEN_STATUSES.includes(status);
 }
 
-function startOfDay(instant: Date): Date {
+/** Midnight of the instant's calendar day, in the device's time zone. */
+export function startOfDay(instant: Date): Date {
   const day = new Date(instant);
   day.setHours(0, 0, 0, 0);
   return day;
@@ -58,49 +59,10 @@ export function hasUnsentWork(inspection: Pick<InspectionSummary, 'syncState'>):
   );
 }
 
-export function matchesView(
-  inspection: InspectionSummary,
-  view: InspectionView,
-  now: Date
-): boolean {
-  switch (view) {
-    case 'today':
-      return inspection.status !== 'CANCELED' && isScheduledToday(inspection, now);
-    case 'overdue':
-      return isOverdue(inspection, now);
-    case 'in-progress':
-      return inspection.status === 'IN_PROGRESS';
-    case 'pending-sync':
-      return hasUnsentWork(inspection);
-  }
-}
-
-export function inspectionViewLabel(view: InspectionView): string {
-  const labels: Record<InspectionView, string> = {
-    today: 'Hoje',
-    overdue: 'Atrasadas',
-    'in-progress': 'Em andamento',
-    'pending-sync': 'Não enviadas',
-  };
-  return labels[view];
-}
-
 export interface DayOverview {
   readonly today: number;
   readonly overdue: number;
   readonly inProgress: number;
   /** Inspections with work not yet confirmed by the server. */
   readonly withUnsentWork: number;
-}
-
-export function summarizeDay(inspections: readonly InspectionSummary[], now: Date): DayOverview {
-  const count = (view: InspectionView) =>
-    inspections.filter((inspection) => matchesView(inspection, view, now)).length;
-
-  return {
-    today: count('today'),
-    overdue: count('overdue'),
-    inProgress: count('in-progress'),
-    withUnsentWork: count('pending-sync'),
-  };
 }

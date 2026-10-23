@@ -119,8 +119,8 @@ Checklist quando o aplicativo não alcança a API:
 5. Em Android, tráfego HTTP em texto puro só é aceito em build de desenvolvimento. Em
    produção a API precisa ser HTTPS.
 
-A primeira tela do aplicativo mostra a URL configurada e o resultado de uma consulta ao
-endpoint de saúde da API, o que serve como diagnóstico rápido dessa configuração.
+Se o login falhar com aviso de falta de conexão mesmo com internet, o endereço configurado
+em `EXPO_PUBLIC_API_URL` não é alcançável a partir do aparelho.
 
 ## Comunicação com a API
 

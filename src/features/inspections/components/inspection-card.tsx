@@ -7,7 +7,7 @@ import { Badge } from '@/design-system/components/badge';
 import { Card } from '@/design-system/components/card';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
-import { priorityLabel, type InspectionSummary } from '@/domain/inspection';
+import { isUrgentPriority, priorityLabel, type InspectionSummary } from '@/domain/inspection';
 import { formatDateTime } from '@/utils/format-date';
 
 export interface InspectionCardProps {
@@ -23,8 +23,6 @@ export interface InspectionCardProps {
  * true at once, and each must still be readable on its own.
  */
 export function InspectionCard({ inspection, overdue }: InspectionCardProps) {
-  const isUrgent = inspection.priority === 'HIGH' || inspection.priority === 'CRITICAL';
-
   return (
     <Card>
       <View className="gap-0.5">
@@ -50,7 +48,7 @@ export function InspectionCard({ inspection, overdue }: InspectionCardProps) {
         <InspectionStatusBadge status={inspection.status} />
         <SyncStateBadge state={inspection.syncState} />
         {overdue ? <Badge tone="danger" icon="alarm-outline" label="Atrasada" /> : null}
-        {isUrgent ? (
+        {isUrgentPriority(inspection.priority) ? (
           <Badge
             tone="warning"
             icon="flag-outline"

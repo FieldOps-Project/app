@@ -4,7 +4,8 @@ import {
   useInspectionSummaries,
   usePendingOperationsCount,
 } from '@/application/inspections/use-inspections';
-import { summarizeDay, type DayOverview } from '@/domain/inspection-schedule';
+import { summarizeDay } from '@/domain/inspection-filters';
+import { startOfDay, type DayOverview } from '@/domain/inspection-schedule';
 
 export type HomeOverview =
   | { readonly state: 'loading' }
@@ -25,7 +26,7 @@ export type HomeOverview =
 export function useHomeOverview(now: Date = new Date()): HomeOverview {
   const summaries = useInspectionSummaries();
   const pending = usePendingOperationsCount();
-  const day = now.toDateString();
+  const day = startOfDay(now).getTime();
 
   const overview = useMemo(
     () => (summaries.data === undefined ? null : summarizeDay(summaries.data, new Date(day))),

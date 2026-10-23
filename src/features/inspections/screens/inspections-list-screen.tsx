@@ -15,6 +15,7 @@ import { Loading } from '@/design-system/components/loading';
 import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import {
+  countActiveFilters,
   filtersForView,
   hasActiveFilters,
   NO_FILTERS,
@@ -24,6 +25,7 @@ import { isInspectionView } from '@/domain/inspection-schedule';
 import { InspectionCard } from '@/features/inspections/components/inspection-card';
 import { InspectionFiltersPanel } from '@/features/inspections/components/inspection-filters-panel';
 import { DownloadStatus } from '@/features/synchronization/components/download-status';
+import { plural } from '@/utils/plural';
 
 /**
  * The most used screen of the app (card #10).
@@ -76,11 +78,7 @@ export function InspectionsListScreen() {
   }
 
   const filtering = hasActiveFilters(filters);
-  const activeCount =
-    filters.statuses.length +
-    filters.priorities.length +
-    (filters.dateRange === 'all' ? 0 : 1) +
-    (filters.unsentOnly ? 1 : 0);
+  const activeCount = countActiveFilters(filters);
 
   return (
     <Screen padded={false}>
@@ -145,7 +143,7 @@ export function InspectionsListScreen() {
             <Text variant="caption" tone="muted" accessibilityLiveRegion="polite">
               {filtering
                 ? `${list.visible.length} de ${list.total} inspeções`
-                : `${list.total} ${list.total === 1 ? 'inspeção' : 'inspeções'}`}
+                : plural(list.total, 'inspeção', 'inspeções')}
             </Text>
           </View>
         }
@@ -170,6 +168,7 @@ export function InspectionsListScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityHint="Abre o detalhe da inspeção"
+            className="active:opacity-70"
             onPress={() =>
               router.push({
                 pathname: '/inspections/[inspectionId]',
