@@ -23,7 +23,7 @@ export function EvidencePreviewScreen() {
       returnToChecklist();
       return;
     }
-    registerEvidence.mutate({ inspectionItemId: itemId }, { onSettled: returnToChecklist });
+    registerEvidence.mutate({ inspectionItemId: itemId }, { onSettled: () => returnToChecklist() });
   }
 
   return (
@@ -53,7 +53,7 @@ export function EvidencePreviewScreen() {
             })
           }
         />
-        <Button label="Descartar" variant="danger" onPress={returnToChecklist} />
+        <Button label="Descartar" variant="danger" onPress={() => returnToChecklist()} />
       </Card>
     </Screen>
   );

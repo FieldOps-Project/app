@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { FlatList, Keyboard, KeyboardAvoidingView, Platform, View } from 'react-native';
@@ -167,6 +167,19 @@ function Checklist({ work }: { work: InspectionWork }) {
       scrollToRow(index);
     }, 0);
     return () => clearTimeout(timer);
+  });
+
+  /**
+   * Another screen — the summary's pending list — can send the technician to
+   * an item of this already mounted checklist through the `itemId` parameter.
+   */
+  const { itemId: requestedItemId } = useLocalSearchParams<{ itemId?: string }>();
+  useEffect(() => {
+    if (requestedItemId === undefined || requestedItemId === '') {
+      return;
+    }
+    goToItem(requestedItemId);
+    router.setParams({ itemId: undefined });
   });
 
   const scrollRetried = useRef(false);
