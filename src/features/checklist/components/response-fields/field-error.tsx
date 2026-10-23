@@ -10,7 +10,11 @@ export function FieldError({ message }: { message: string | undefined }) {
     return null;
   }
   return (
-    <View accessibilityRole="alert" className="flex-row items-center gap-1.5">
+    <View
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
+      className="flex-row items-center gap-1.5"
+    >
       <Ionicons name="alert-circle" size={16} color={colors.danger.DEFAULT} />
       <Text variant="caption" tone="danger" className="flex-1">
         {message}

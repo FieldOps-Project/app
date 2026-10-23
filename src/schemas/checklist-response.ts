@@ -64,6 +64,19 @@ const CONFORMITIES: readonly string[] = ['CONFORMING', 'NON_CONFORMING', 'NOT_AP
 
 type Issue = (message: string) => void;
 
+/**
+ * A yes/no answer also carries its conformity, as in the API's own example
+ * payload (backend#21): "Não" is the failure the item's rules react to, so
+ * the observation and evidence required on failure (RN-038, RN-039) apply to
+ * BOOLEAN items exactly as the server checks them on submit (backend#20).
+ */
+function booleanConformity(answer: boolean | null): Conformity | null {
+  if (answer === null) {
+    return null;
+  }
+  return answer ? 'CONFORMING' : 'NON_CONFORMING';
+}
+
 function optionalText(value: unknown, max: number, issue: Issue): string | null {
   const text = typeof value === 'string' ? value.trim() : '';
   if (text.length > max) {
@@ -102,8 +115,10 @@ function toColumns(item: ChecklistItem, value: unknown, issue: Issue): ResponseC
       return { ...EMPTY_COLUMNS, valueText: optionalText(value, TEXT_LONG_MAX, issue) };
     case 'NUMBER':
       return { ...EMPTY_COLUMNS, valueNumber: numberValue(item, value, issue) };
-    case 'BOOLEAN':
-      return { ...EMPTY_COLUMNS, valueBoolean: typeof value === 'boolean' ? value : null };
+    case 'BOOLEAN': {
+      const answer = typeof value === 'boolean' ? value : null;
+      return { ...EMPTY_COLUMNS, valueBoolean: answer, conformity: booleanConformity(answer) };
+    }
     case 'CONFORMITY':
       return {
         ...EMPTY_COLUMNS,
@@ -180,7 +195,22 @@ export function toFormInput(
   }
 }
 
-/** True when the parsed columns carry nothing: the item stays unanswered. */
-export function isEmptyAnswer(columns: ResponseColumns): boolean {
-  return Object.values(columns).every((value) => value === null);
+/** Nothing to save: no value and no observation. */
+export function isEmptyAnswer({ columns, observation }: ResponseFormOutput): boolean {
+  return observation === null && Object.values(columns).every((value) => value === null);
+}
+
+/** The answer is what is already stored, so saving it again would only queue a no-op. */
+export function isSameAnswer(
+  { columns, observation }: ResponseFormOutput,
+  stored: ChecklistResponse | undefined
+): boolean {
+  return (
+    (stored?.valueText ?? null) === columns.valueText &&
+    (stored?.valueNumber ?? null) === columns.valueNumber &&
+    (stored?.valueBoolean ?? null) === columns.valueBoolean &&
+    (stored?.valueDate ?? null) === columns.valueDate &&
+    (stored?.conformity ?? null) === columns.conformity &&
+    (stored?.observation ?? null) === observation
+  );
 }

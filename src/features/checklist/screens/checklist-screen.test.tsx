@@ -22,6 +22,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ inspectionId: 'insp-1' }),
   useNavigation: () => ({ getState: () => ({ routes: [] }), addListener: () => () => undefined }),
 }));
+jest.mock('expo-router/react-navigation', () => ({ useHeaderHeight: () => 56 }));
 jest.mock('@/config/env', () => ({ env: { appEnv: 'production' }, isDevelopment: false }));
 jest.mock('@/application/inspections/use-inspection-detail', () => ({
   useInspectionDetail: () => mockState.current,

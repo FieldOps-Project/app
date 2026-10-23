@@ -60,7 +60,13 @@ export function useSaveAnswer(inspectionId: string) {
       queryClient.setQueryData(detailKey, context?.previous);
       void queryClient.invalidateQueries({ queryKey: detailKey });
     },
+    /**
+     * Re-reads the inspection once the write is on the device, so a read that
+     * raced with it cannot leave the screen on the older answer. Structural
+     * sharing keeps every unchanged response object, so the rows stay put.
+     */
     onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: detailKey });
       void queryClient.invalidateQueries({ queryKey: queryKeys.inspections.list({ ownerUserId }) });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.synchronization.pending(ownerUserId),

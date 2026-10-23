@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { View } from 'react-native';
 
@@ -14,6 +14,8 @@ import { hasAnswer, type ChecklistItem, type ChecklistResponse } from '@/domain/
 import { responseFieldFor } from '@/features/checklist/components/response-fields';
 import { FieldError } from '@/features/checklist/components/response-fields/field-error';
 import {
+  isEmptyAnswer,
+  isSameAnswer,
   OBSERVATION_MAX,
   responseFormSchema,
   toFormInput,
@@ -38,27 +40,17 @@ export interface ChecklistItemRowProps {
   onCaptureEvidence: (itemId: string) => void;
 }
 
-function sameAnswer(answer: ResponseFormOutput, stored: ChecklistResponse | undefined): boolean {
-  const { columns, observation } = answer;
-  return (
-    (stored?.valueText ?? null) === columns.valueText &&
-    (stored?.valueNumber ?? null) === columns.valueNumber &&
-    (stored?.valueBoolean ?? null) === columns.valueBoolean &&
-    (stored?.valueDate ?? null) === columns.valueDate &&
-    (stored?.conformity ?? null) === columns.conformity &&
-    (stored?.observation ?? null) === observation
-  );
-}
-
 /**
  * One item of the checklist, with its own form.
  *
  * Each row owns its state, so typing in one never re-renders the others
  * (document 13.10); the screen only hears about a confirmed answer. The
  * value is validated by the item's Zod schema as it is typed and saved when
- * editing ends, never on every key.
+ * editing ends, never on every key. Memoized explicitly: the list calls
+ * `renderItem` again after each save, and only the row whose props changed
+ * may re-render.
  */
-export function ChecklistItemRow({
+export const ChecklistItemRow = memo(function ChecklistItemRow({
   item,
   response,
   evidenceCount,
@@ -84,12 +76,19 @@ export function ChecklistItemRow({
     }
   }, [form, item, response]);
 
-  const commit = form.handleSubmit((answer) => {
-    form.reset(form.getValues());
-    if (!sameAnswer(answer, response) && !(response === undefined && isBlank(answer))) {
-      onSave(item.id, answer);
-    }
-  });
+  /**
+   * Marks exactly the submitted values as clean — anything typed while the
+   * schema was checking stays dirty — and saves only a real change.
+   */
+  function commit() {
+    const submitted = form.getValues();
+    void form.handleSubmit((answer) => {
+      form.reset(submitted);
+      if (!isSameAnswer(answer, response) && !(response === undefined && isEmptyAnswer(answer))) {
+        onSave(item.id, answer);
+      }
+    })();
+  }
 
   const observation = useWatch({ control: form.control, name: 'observation' });
   const Field = responseFieldFor(item.responseType);
@@ -123,14 +122,14 @@ export function ChecklistItemRow({
             item={item}
             value={field.value}
             onChange={field.onChange}
-            onCommit={() => void commit()}
+            onCommit={commit}
             error={fieldState.error?.message}
             disabled={!editable}
           />
         )}
       />
 
-      {answered || (editable && observation !== '') ? (
+      {editable || observation !== '' ? (
         <Controller
           control={form.control}
           name="observation"
@@ -139,7 +138,7 @@ export function ChecklistItemRow({
               label={needsObservation ? 'Observação (obrigatória)' : 'Observação'}
               value={field.value}
               onChangeText={field.onChange}
-              onEndEditing={() => void commit()}
+              onEndEditing={commit}
               multiline
               textAlignVertical="top"
               minHeight={72}
@@ -187,8 +186,4 @@ export function ChecklistItemRow({
       ) : null}
     </Card>
   );
-}
-
-function isBlank({ columns, observation }: ResponseFormOutput): boolean {
-  return Object.values(columns).every((value) => value === null) && observation === null;
-}
+});

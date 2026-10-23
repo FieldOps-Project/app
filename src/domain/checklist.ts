@@ -140,7 +140,8 @@ export function isNotApplicable(response: ChecklistResponse | undefined): boolea
 /**
  * A failed answer is what the failure rules (RN-038, RN-039) react to: a
  * non-conforming answer, exactly as the server checks it on submit
- * (backend#20). Kept identical to the server on purpose — a stricter app would
+ * (backend#20). A yes/no item answered "Não" is saved as NON_CONFORMING, so
+ * it is covered too. Kept identical to the server on purpose — a stricter app would
  * block completions the server accepts, a looser one would let through
  * completions it refuses.
  */

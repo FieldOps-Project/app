@@ -108,6 +108,17 @@ describe('responseFormSchema', () => {
     });
   });
 
+  it('saves "Não" on a yes/no item as a non-conformity, so the failure rules apply', () => {
+    const answer = parse(item({ responseType: 'BOOLEAN' }), false);
+    expect(answer.success && answer.data.columns).toMatchObject({
+      valueBoolean: false,
+      conformity: 'NON_CONFORMING',
+    });
+
+    const yes = parse(item({ responseType: 'BOOLEAN' }), true);
+    expect(yes.success && yes.data.columns.conformity).toBe('CONFORMING');
+  });
+
   it('refuses a date typed by hand', () => {
     expect(messages(parse(item({ responseType: 'DATE' }), '12/08/2026'))).toEqual([
       'Escolha a data no calendário.',

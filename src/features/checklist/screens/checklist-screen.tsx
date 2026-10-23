@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { useHeaderHeight } from 'expo-router/react-navigation';
+import { FlatList, Keyboard, KeyboardAvoidingView, Platform, View } from 'react-native';
 
 import { useInspectionDraft } from '@/application/inspection-draft/inspection-draft-context';
 import { useSaveAnswer } from '@/application/inspections/use-checklist-actions';
@@ -27,6 +28,7 @@ import {
   SectionTabs,
 } from '@/features/checklist/components/checklist-progress-panel';
 import { FieldError } from '@/features/checklist/components/response-fields/field-error';
+import type { ResponseFormOutput } from '@/schemas/checklist-response';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 import { plural } from '@/utils/plural';
 
@@ -89,6 +91,7 @@ function Checklist({ work }: { work: InspectionWork }) {
   const { focusedItemFor, focusItem } = useInspectionDraft();
   const saveAnswer = useSaveAnswer(detail.id);
   const [showPending, setShowPending] = useState(false);
+  const headerHeight = useHeaderHeight();
 
   const editable = canEditAnswers(detail.status);
   const focusedItemId = focusedItemFor(detail.id);
@@ -111,10 +114,23 @@ function Checklist({ work }: { work: InspectionWork }) {
     }
   }
 
+  /**
+   * The pending panel stays open: collapsing it in the same tick would shift
+   * the content by its height after the scroll was measured.
+   */
   function goToItem(itemId: string) {
     focusItem(detail.id, itemId);
-    setShowPending(false);
     scrollToRow(rows.findIndex((row) => row.key === itemId));
+  }
+
+  /**
+   * Text answers save when editing ends. Dismissing the keyboard before
+   * leaving the screen ends the edit, so nothing typed is left unsaved behind
+   * the next screen.
+   */
+  function leaveTo(navigate: () => void) {
+    Keyboard.dismiss();
+    navigate();
   }
 
   function goToSection(sectionOrder: number) {
@@ -123,29 +139,37 @@ function Checklist({ work }: { work: InspectionWork }) {
 
   function captureEvidence(itemId: string) {
     focusItem(detail.id, itemId);
-    router.push({ pathname: '/evidence/capture', params: { inspectionId: detail.id, itemId } });
+    leaveTo(() =>
+      router.push({ pathname: '/evidence/capture', params: { inspectionId: detail.id, itemId } })
+    );
   }
 
-  function save(itemId: string, answer: Parameters<typeof saveAnswer.save>[1]) {
+  function save(itemId: string, answer: ResponseFormOutput) {
     focusItem(detail.id, itemId);
     saveAnswer.save(itemId, answer);
   }
 
   /**
    * Coming back to the checklist lands on the item the technician was on
-   * (document 13.9). Runs once per mount; while the screen stays mounted
-   * under the camera, the list keeps its own position.
+   * (document 13.9). Done once per mount, and only marked done when the
+   * scroll actually ran — a re-render that cancels the timer retries it.
+   * While the screen stays mounted under the camera, the list keeps its own
+   * position.
    */
   const restored = useRef(false);
   useEffect(() => {
     if (restored.current || focusedItemId === null) {
       return;
     }
-    restored.current = true;
     const index = rows.findIndex((row) => row.key === focusedItemId);
-    const timer = setTimeout(() => scrollToRow(index), 0);
+    const timer = setTimeout(() => {
+      restored.current = true;
+      scrollToRow(index);
+    }, 0);
     return () => clearTimeout(timer);
   });
+
+  const scrollRetried = useRef(false);
 
   const next = nextPending(progress, items, focusedItemId);
 
@@ -153,8 +177,8 @@ function Checklist({ work }: { work: InspectionWork }) {
     <Screen edges={BELOW_HEADER_EDGES} padded={false}>
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={96}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={headerHeight}
       >
         <View className="gap-3 border-b border-neutral-200 bg-neutral-50 px-screen py-3 dark:border-neutral-800 dark:bg-neutral-950">
           <ProgressSummary progress={progress} />
@@ -187,12 +211,19 @@ function Checklist({ work }: { work: InspectionWork }) {
           keyExtractor={(row) => row.key}
           contentContainerClassName="gap-3 px-screen py-4"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           initialNumToRender={6}
           maxToRenderPerBatch={6}
           windowSize={9}
           onScrollToIndexFailed={({ index, averageItemLength }) => {
             listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
-            setTimeout(() => scrollToRow(index), 100);
+            if (!scrollRetried.current) {
+              scrollRetried.current = true;
+              setTimeout(() => {
+                scrollRetried.current = false;
+                scrollToRow(index);
+              }, 100);
+            }
           }}
           ListHeaderComponent={
             <View className="gap-3">
@@ -214,10 +245,12 @@ function Checklist({ work }: { work: InspectionWork }) {
               label="Ver resumo"
               variant={editable && progress.pending.length === 0 ? 'primary' : 'secondary'}
               onPress={() =>
-                router.push({
-                  pathname: '/inspections/[inspectionId]/summary',
-                  params: { inspectionId: detail.id },
-                })
+                leaveTo(() =>
+                  router.push({
+                    pathname: '/inspections/[inspectionId]/summary',
+                    params: { inspectionId: detail.id },
+                  })
+                )
               }
             />
           }
