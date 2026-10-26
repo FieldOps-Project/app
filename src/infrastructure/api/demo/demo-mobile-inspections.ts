@@ -116,6 +116,8 @@ function seed(): MobileInspection[] {
     updatedAt: null,
     startedAtDevice: null,
     completedAtDevice: null,
+    startLocation: null,
+    completionLocation: null,
     responses: [],
     review: null,
   };
@@ -282,6 +284,7 @@ export const demoMobileInspectionsGateway: MobileInspectionsGateway = {
       ...inspection,
       status: 'IN_PROGRESS',
       startedAtDevice: payload.startedAtDevice,
+      startLocation: payload.location,
       version: inspection.version + 1,
       updatedAt: new Date().toISOString(),
     }));
@@ -301,6 +304,7 @@ export const demoMobileInspectionsGateway: MobileInspectionsGateway = {
       ...inspection,
       status: 'SUBMITTED',
       completedAtDevice: payload.completedAtDevice,
+      completionLocation: payload.location,
       version: inspection.version + 1,
       updatedAt: new Date().toISOString(),
     }));

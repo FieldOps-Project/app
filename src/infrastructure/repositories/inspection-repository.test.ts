@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ChecklistResponse } from '@/domain/checklist';
+import type { LocationCapture } from '@/domain/field-location';
 import { getDatabase } from '@/infrastructure/database/database';
 import { openTestDatabase } from '@/infrastructure/database/testing/node-sqlite';
 import {
@@ -30,6 +31,11 @@ jest.mock('@/infrastructure/database/database', () => ({
 
 const OWNER = 'tech-1';
 const NOW = '2026-08-12T13:00:00.000Z';
+const DENIED: LocationCapture = { status: 'missing', reason: 'PERMISSION_DENIED' };
+const AT_GATE: LocationCapture = {
+  status: 'captured',
+  position: { latitude: -23.5012, longitude: -47.4531, accuracy: 18, capturedAt: NOW },
+};
 
 function remote(overrides: Partial<MobileInspection> = {}): MobileInspection {
   return {
@@ -43,6 +49,8 @@ function remote(overrides: Partial<MobileInspection> = {}): MobileInspection {
     updatedAt: 'v3',
     startedAtDevice: null,
     completedAtDevice: null,
+    startLocation: null,
+    completionLocation: null,
     client: { id: 'c-1', name: 'Indústria ABC' },
     site: { id: 's-1', name: 'Fábrica', addressLine: null, latitude: -23.5, longitude: -47.4 },
     equipment: null,
@@ -95,14 +103,14 @@ beforeEach(async () => {
   jest.mocked(getDatabase).mockResolvedValue(database);
 });
 
-async function started() {
+async function started(location: LocationCapture = DENIED) {
   await saveDownloadedInspection(OWNER, remote(), NOW);
   await startInspection({
     ownerUserId: OWNER,
     inspectionId: 'insp-1',
     operationId: 'op-start',
     startedAtDevice: NOW,
-    location: null,
+    location,
   });
 }
 
@@ -193,7 +201,7 @@ describe('start', () => {
         inspectionId: 'insp-1',
         operationId: 'op-start',
         startedAtDevice: NOW,
-        location: null,
+        location: DENIED,
       })
     ).rejects.toBeInstanceOf(InspectionStateError);
     expect(await countOpenOperations(OWNER)).toBe(0);
@@ -285,7 +293,7 @@ describe('completion', () => {
       inspectionId: 'insp-1',
       operationId: 'op-submit',
       completedAtDevice: NOW,
-      location: null,
+      location: DENIED,
     });
 
     const stored = await findInspection(OWNER, 'insp-1');
@@ -383,7 +391,7 @@ describe('refused completion', () => {
       inspectionId: 'insp-1',
       operationId: 'op-submit',
       completedAtDevice: NOW,
-      location: null,
+      location: DENIED,
     });
     const submit = (await listOpenOperations(OWNER)).find((op) => op.operationId === 'op-submit');
 
@@ -392,8 +400,94 @@ describe('refused completion', () => {
     const stored = await findInspection(OWNER, 'insp-1');
     expect(stored?.detail.status).toBe('IN_PROGRESS');
     expect(stored?.detail.completedAtDevice).toBeNull();
+    expect(stored?.detail.completionLocation).toEqual({ status: 'not-recorded' });
     expect(stored?.detail.syncState).toBe('falha');
     expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toEqual(['op-start']);
+  });
+});
+
+describe('location (card #19)', () => {
+  it('saves the position read at the start and sends it with the transition', async () => {
+    await started(AT_GATE);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.startLocation).toEqual(AT_GATE);
+    const [start] = await listOpenOperations(OWNER);
+    expect(start?.payload).toEqual({
+      action: 'START',
+      startedAtDevice: NOW,
+      location: { latitude: -23.5012, longitude: -47.4531, accuracy: 18, capturedAt: NOW },
+    });
+  });
+
+  it('keeps the reason for a missing position on the device and sends no coordinate', async () => {
+    await started(DENIED);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.startLocation).toEqual(DENIED);
+    expect(stored?.detail.status).toBe('IN_PROGRESS');
+    const [start] = await listOpenOperations(OWNER);
+    expect(start?.payload).toEqual(expect.objectContaining({ location: null }));
+  });
+
+  it('records the completion position apart from the start one', async () => {
+    await started(AT_GATE);
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: answer(),
+    });
+    await completeInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-submit',
+      completedAtDevice: NOW,
+      location: { status: 'missing', reason: 'TIMEOUT' },
+    });
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.startLocation).toEqual(AT_GATE);
+    expect(stored?.detail.completionLocation).toEqual({ status: 'missing', reason: 'TIMEOUT' });
+  });
+
+  it('keeps a captured position when the download does not report one', async () => {
+    await started(AT_GATE);
+    const [start] = await listOpenOperations(OWNER);
+    await markCompleted((await claimOperation(start!.operationId, NOW))!, NOW);
+
+    await saveDownloadedInspection(
+      OWNER,
+      remote({ status: 'IN_PROGRESS', startedAtDevice: NOW, startLocation: null }),
+      NOW
+    );
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.startLocation).toEqual(AT_GATE);
+  });
+
+  it('takes the position the server reports as a whole', async () => {
+    await saveDownloadedInspection(
+      OWNER,
+      remote({
+        status: 'IN_PROGRESS',
+        startedAtDevice: NOW,
+        startLocation: { latitude: -23.4, longitude: -47.3, accuracy: null, capturedAt: NOW },
+      }),
+      NOW
+    );
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.startLocation).toEqual({
+      status: 'captured',
+      position: { latitude: -23.4, longitude: -47.3, accuracy: null, capturedAt: NOW },
+    });
+  });
+
+  it('reads an inspection never started as having no position yet', async () => {
+    await saveDownloadedInspection(OWNER, remote(), NOW);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.startLocation).toEqual({ status: 'not-recorded' });
+    expect(stored?.detail.completionLocation).toEqual({ status: 'not-recorded' });
   });
 });
 
@@ -412,7 +506,7 @@ describe('integrity', () => {
 describe('migrations', () => {
   it('records the schema version', async () => {
     expect(await database.getFirstAsync('PRAGMA user_version')).toEqual(
-      expect.objectContaining({ user_version: 1 })
+      expect.objectContaining({ user_version: 2 })
     );
   });
 });

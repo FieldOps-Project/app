@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ChecklistItem, ChecklistResponse } from '@/domain/checklist';
+import type { LocationCapture } from '@/domain/field-location';
 import type { InspectionDetail, InspectionStatus, InspectionSummary } from '@/domain/inspection';
 import { getDatabase } from '@/infrastructure/database/database';
 import { writeTransaction } from '@/infrastructure/database/write-transaction';
@@ -147,8 +148,11 @@ async function upsertInspectionRow(
        client_id, client_name, site_id, site_name, site_address, site_latitude, site_longitude,
        equipment_id, equipment_name, equipment_qr_code, equipment_asset_number,
        equipment_serial_number, started_at_device, completed_at_device, review_json,
+       start_latitude, start_longitude, start_accuracy, start_location_at,
+       completion_latitude, completion_longitude, completion_accuracy, completion_location_at,
        server_updated_at, base_version, local_sync_status, is_dirty, last_synced_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', 0, ?)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?, 'SYNCED', 0, ?)
      ON CONFLICT (id) DO UPDATE SET
        owner_user_id = excluded.owner_user_id, title = excluded.title,
        status = excluded.status, priority = excluded.priority,
@@ -162,6 +166,8 @@ async function upsertInspectionRow(
        equipment_serial_number = excluded.equipment_serial_number,
        started_at_device = excluded.started_at_device,
        completed_at_device = excluded.completed_at_device, review_json = excluded.review_json,
+       ${keepLocalPositionUnlessReported('start')},
+       ${keepLocalPositionUnlessReported('completion')},
        server_updated_at = excluded.server_updated_at, base_version = excluded.base_version,
        local_sync_status = 'SYNCED', sync_error = NULL, last_synced_at = excluded.last_synced_at`,
     remote.id,
@@ -186,10 +192,38 @@ async function upsertInspectionRow(
     remote.startedAtDevice,
     remote.completedAtDevice,
     remote.review === null ? null : JSON.stringify(remote.review),
+    ...positionValues(remote.startLocation),
+    ...positionValues(remote.completionLocation),
     remote.updatedAt,
     remote.version,
     now
   );
+}
+
+function positionValues(position: MobileInspection['startLocation']) {
+  return position === null
+    ? ([null, null, null, null] as const)
+    : ([position.latitude, position.longitude, position.accuracy, position.capturedAt] as const);
+}
+
+/**
+ * A position the server reports replaces the local one as a whole, and clears
+ * any recorded reason for a gap. One it does not report — a contract still
+ * settling (backend#19), or a transition sent without a position — never
+ * erases what the device captured or why it could not.
+ */
+function keepLocalPositionUnlessReported(prefix: 'start' | 'completion'): string {
+  const reported = `excluded.${prefix}_latitude IS NOT NULL`;
+  const columns = ['latitude', 'longitude', 'accuracy', 'location_at'].map(
+    (column) =>
+      `${prefix}_${column} = CASE WHEN ${reported} THEN excluded.${prefix}_${column}
+         ELSE inspections.${prefix}_${column} END`
+  );
+  columns.push(
+    `${prefix}_location_missing = CASE WHEN ${reported} THEN NULL
+       ELSE inspections.${prefix}_location_missing END`
+  );
+  return columns.join(',\n       ');
 }
 
 async function insertSnapshot(transaction: SQLiteDatabase, remote: MobileInspection) {
@@ -321,8 +355,26 @@ export interface StartCommand {
   readonly operationId: string;
   /** Device clock at the moment of the confirmation (RN-034). */
   readonly startedAtDevice: string;
-  /** Position at the start, or `null` when it was not captured (card #19). */
-  readonly location: LocationPayload | null;
+  /** The single reading taken at the start (card #19). */
+  readonly location: LocationCapture;
+}
+
+/** The server takes the position or `null`; the reason for a gap stays on the device. */
+function toLocationPayload(capture: LocationCapture): LocationPayload | null {
+  return capture.status === 'captured' ? capture.position : null;
+}
+
+/** Column values in the order latitude, longitude, accuracy, captured at, missing reason. */
+function locationColumns(capture: LocationCapture) {
+  return capture.status === 'captured'
+    ? ([
+        capture.position.latitude,
+        capture.position.longitude,
+        capture.position.accuracy,
+        capture.position.capturedAt,
+        null,
+      ] as const)
+    : ([null, null, null, null, capture.reason] as const);
 }
 
 /** UC-09: the local state and its queued operation are written together. */
@@ -338,8 +390,12 @@ export async function startInspection(command: StartCommand): Promise<void> {
     );
 
     await transaction.runAsync(
-      `UPDATE inspections SET status = 'IN_PROGRESS', started_at_device = ? WHERE id = ?`,
+      `UPDATE inspections SET status = 'IN_PROGRESS', started_at_device = ?,
+              start_latitude = ?, start_longitude = ?, start_accuracy = ?,
+              start_location_at = ?, start_location_missing = ?
+        WHERE id = ?`,
       command.startedAtDevice,
+      ...locationColumns(command.location),
       command.inspectionId
     );
     await markInspectionDirty(transaction, command.inspectionId, now);
@@ -356,7 +412,7 @@ export async function startInspection(command: StartCommand): Promise<void> {
         payload: {
           action: 'START',
           startedAtDevice: command.startedAtDevice,
-          location: command.location,
+          location: toLocationPayload(command.location),
         },
       },
       now
@@ -478,8 +534,8 @@ export interface CompleteCommand {
   readonly operationId: string;
   /** Device clock at the moment of the confirmation (RN-042). */
   readonly completedAtDevice: string;
-  /** Position at the completion, or `null` when it was not captured (card #19). */
-  readonly location: LocationPayload | null;
+  /** The single reading taken at the completion (card #19). */
+  readonly location: LocationCapture;
 }
 
 /**
@@ -500,8 +556,12 @@ export async function completeInspection(command: CompleteCommand): Promise<void
     const dependencyIds = await openOperationIds(transaction, command.inspectionId);
 
     await transaction.runAsync(
-      `UPDATE inspections SET status = 'SUBMITTED', completed_at_device = ? WHERE id = ?`,
+      `UPDATE inspections SET status = 'SUBMITTED', completed_at_device = ?,
+              completion_latitude = ?, completion_longitude = ?, completion_accuracy = ?,
+              completion_location_at = ?, completion_location_missing = ?
+        WHERE id = ?`,
       command.completedAtDevice,
+      ...locationColumns(command.location),
       command.inspectionId
     );
     await markInspectionDirty(transaction, command.inspectionId, now);
@@ -518,7 +578,7 @@ export async function completeInspection(command: CompleteCommand): Promise<void
         payload: {
           action: 'SUBMIT',
           completedAtDevice: command.completedAtDevice,
-          location: command.location,
+          location: toLocationPayload(command.location),
         },
         dependencyIds,
       },

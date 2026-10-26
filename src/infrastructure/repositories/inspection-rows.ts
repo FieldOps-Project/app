@@ -1,4 +1,5 @@
 import type { ChecklistItem, ChecklistResponse, Conformity, ItemRules } from '@/domain/checklist';
+import { isLocationAbsence, type RecordedLocation } from '@/domain/field-location';
 import {
   isInspectionPriority,
   isInspectionStatus,
@@ -38,6 +39,16 @@ export interface InspectionRow {
   started_at_device: string | null;
   completed_at_device: string | null;
   review_json: string | null;
+  start_latitude: number | null;
+  start_longitude: number | null;
+  start_accuracy: number | null;
+  start_location_at: string | null;
+  start_location_missing: string | null;
+  completion_latitude: number | null;
+  completion_longitude: number | null;
+  completion_accuracy: number | null;
+  completion_location_at: string | null;
+  completion_location_missing: string | null;
   base_version: number;
   local_sync_status: LocalSyncStatus;
   is_dirty: number;
@@ -145,9 +156,40 @@ export function toDetail(row: InspectionRow): InspectionDetail {
           },
     startedAtDevice: row.started_at_device,
     completedAtDevice: row.completed_at_device,
+    startLocation: toRecordedLocation(
+      row.start_latitude,
+      row.start_longitude,
+      row.start_accuracy,
+      row.start_location_at,
+      row.start_location_missing
+    ),
+    completionLocation: toRecordedLocation(
+      row.completion_latitude,
+      row.completion_longitude,
+      row.completion_accuracy,
+      row.completion_location_at,
+      row.completion_location_missing
+    ),
     review: parseJson<InspectionReview | null>(row.review_json, null),
     syncError: row.sync_error,
   };
+}
+
+/** A coordinate pair is all or nothing; a stored reason is the only other answer. */
+export function toRecordedLocation(
+  latitude: number | null,
+  longitude: number | null,
+  accuracy: number | null,
+  capturedAt: string | null,
+  missing: string | null
+): RecordedLocation {
+  if (latitude !== null && longitude !== null && capturedAt !== null) {
+    return { status: 'captured', position: { latitude, longitude, accuracy, capturedAt } };
+  }
+  if (missing !== null) {
+    return { status: 'missing', reason: isLocationAbsence(missing) ? missing : 'UNAVAILABLE' };
+  }
+  return { status: 'not-recorded' };
 }
 
 const DEFAULT_RULES: ItemRules = {

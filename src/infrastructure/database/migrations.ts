@@ -127,4 +127,19 @@ export const MIGRATIONS: readonly string[] = [
     last_sync_result     TEXT CHECK (last_sync_result IS NULL OR last_sync_result IN ('SUCCESS', 'PARTIAL', 'FAILED'))
   );
   `,
+  // Card #19: the position read at the start and at the completion (RN-062).
+  // Without a position the coordinates stay empty and `*_location_missing`
+  // keeps the reason; nothing is ever approximated.
+  `
+  ALTER TABLE inspections ADD COLUMN start_latitude REAL;
+  ALTER TABLE inspections ADD COLUMN start_longitude REAL;
+  ALTER TABLE inspections ADD COLUMN start_accuracy REAL;
+  ALTER TABLE inspections ADD COLUMN start_location_at TEXT;
+  ALTER TABLE inspections ADD COLUMN start_location_missing TEXT;
+  ALTER TABLE inspections ADD COLUMN completion_latitude REAL;
+  ALTER TABLE inspections ADD COLUMN completion_longitude REAL;
+  ALTER TABLE inspections ADD COLUMN completion_accuracy REAL;
+  ALTER TABLE inspections ADD COLUMN completion_location_at TEXT;
+  ALTER TABLE inspections ADD COLUMN completion_location_missing TEXT;
+  `,
 ];
