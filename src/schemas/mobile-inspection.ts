@@ -84,6 +84,22 @@ const checklistResponseSchema = z.object({
   answeredAtDevice: z.string(),
 });
 
+/**
+ * A position recorded at the start or at the completion (backend#20, card
+ * #19). Absent until the server reports it; a pair outside the valid range is
+ * read as no position at all rather than drawn in the wrong place.
+ */
+const fieldPositionSchema = z
+  .object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    accuracy: nullableNumber,
+    capturedAt: z.string(),
+  })
+  .nullish()
+  .catch(null)
+  .transform((position) => position ?? null);
+
 const reviewSchema = z
   .object({
     decision: z.enum(['APPROVED', 'REJECTED']),
@@ -107,6 +123,8 @@ export const mobileInspectionSchema = z.object({
   updatedAt: nullableText,
   startedAtDevice: nullableText,
   completedAtDevice: nullableText,
+  startLocation: fieldPositionSchema,
+  completionLocation: fieldPositionSchema,
   client: z.object({ id: z.string(), name: z.string() }),
   site: z.object({
     id: z.string(),

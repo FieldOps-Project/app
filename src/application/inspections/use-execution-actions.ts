@@ -1,8 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import { useOwnerUserId } from '@/application/inspections/use-inspections';
+import type { LocationCapture } from '@/domain/field-location';
 import { queryKeys } from '@/infrastructure/api';
 import { newId } from '@/infrastructure/ids';
+import { captureLocation } from '@/infrastructure/location/capture-location';
 import {
   completeInspection,
   startInspection,
@@ -14,17 +17,31 @@ import {
  * (RN-034, RN-042), the change and its outbox operation are saved together,
  * and the server learns about it on the next synchronization.
  *
- * Location is `null` until point capture arrives with card #19; the start and
- * the completion never wait for it.
+ * Each transition reads the position once (card #19, RN-060). The clock is
+ * taken at the confirmation, before the reading, so a slow fix does not move
+ * the moment of the action; a missing position never stops the transition —
+ * it is saved with the reason, and the outcome tells the screen.
  */
 function useTransition(
-  run: (ownerUserId: string, operationId: string, deviceTime: string) => Promise<void>
+  run: (
+    ownerUserId: string,
+    operationId: string,
+    deviceTime: string,
+    location: LocationCapture
+  ) => Promise<void>
 ) {
   const ownerUserId = useOwnerUserId();
   const queryClient = useQueryClient();
+  const [locating, setLocating] = useState(false);
 
-  return useMutation<void, Error>({
-    mutationFn: () => run(ownerUserId, newId(), new Date().toISOString()),
+  const mutation = useMutation<LocationCapture, Error>({
+    mutationFn: async () => {
+      const deviceTime = new Date().toISOString();
+      setLocating(true);
+      const location = await captureLocation().finally(() => setLocating(false));
+      await run(ownerUserId, newId(), deviceTime, location);
+      return location;
+    },
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all() }),
@@ -33,12 +50,15 @@ function useTransition(
         }),
       ]),
   });
+
+  /** `locating` is the part of `isPending` spent waiting for the position. */
+  return { ...mutation, locating };
 }
 
 /** UC-09: ASSIGNED → IN_PROGRESS on the device. */
 export function useStartInspection(inspectionId: string) {
-  return useTransition((ownerUserId, operationId, startedAtDevice) =>
-    startInspection({ ownerUserId, inspectionId, operationId, startedAtDevice, location: null })
+  return useTransition((ownerUserId, operationId, startedAtDevice, location) =>
+    startInspection({ ownerUserId, inspectionId, operationId, startedAtDevice, location })
   );
 }
 
@@ -48,13 +68,7 @@ export function useStartInspection(inspectionId: string) {
  * and the server validates everything again on submit.
  */
 export function useCompleteInspection(inspectionId: string) {
-  return useTransition((ownerUserId, operationId, completedAtDevice) =>
-    completeInspection({
-      ownerUserId,
-      inspectionId,
-      operationId,
-      completedAtDevice,
-      location: null,
-    })
+  return useTransition((ownerUserId, operationId, completedAtDevice, location) =>
+    completeInspection({ ownerUserId, inspectionId, operationId, completedAtDevice, location })
   );
 }

@@ -27,6 +27,7 @@ import {
 } from '@/domain/inspection-actions';
 import { isOverdue } from '@/domain/inspection-schedule';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
+import { InspectionLocationCard } from '@/features/location/components/inspection-location-card';
 import { formatDateTime } from '@/utils/format-date';
 import { plural } from '@/utils/plural';
 
@@ -174,6 +175,8 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
         )}
         <SiteCoordinates latitude={detail.site.latitude} longitude={detail.site.longitude} />
       </Card>
+
+      <InspectionLocationCard detail={detail} />
 
       <Card title="Equipamento">
         {detail.equipment === null ? (

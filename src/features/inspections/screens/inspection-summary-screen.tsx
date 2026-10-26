@@ -31,6 +31,8 @@ import {
   useReturnToChecklistItem,
 } from '@/features/checklist/hooks/use-return-to-checklist';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
+import { LocatingNotice, LocationConsent } from '@/features/location/components/location-consent';
+import { describeRecordedLocation } from '@/features/location/describe-location';
 import { SyncNowButton } from '@/features/synchronization/components/sync-now-button';
 import { formatDateTime } from '@/utils/format-date';
 
@@ -127,12 +129,12 @@ function Summary({ work }: { work: InspectionWork }) {
           tone={progress.nonConformities > 0 ? 'warning' : 'default'}
         />
         <Total icon="images-outline" label="Evidências" value={evidences} />
-        <View className="flex-row items-start gap-2">
-          <Ionicons name="navigate-outline" size={18} color={colors.neutral[500]} />
-          <Text variant="body" tone="muted" className="flex-1">
-            Localização não registrada: a captura de posição ainda não está disponível nesta versão.
-          </Text>
-        </View>
+        {detail.startedAtDevice === null ? null : (
+          <LocationLine text={describeRecordedLocation('start', detail.startLocation)} />
+        )}
+        {detail.completedAtDevice === null ? null : (
+          <LocationLine text={describeRecordedLocation('completion', detail.completionLocation)} />
+        )}
         {detail.completedAtDevice === null ? null : (
           <Text variant="caption" tone="muted">
             Concluída neste aparelho em {formatDateTime(detail.completedAtDevice)}.
@@ -157,6 +159,7 @@ function Summary({ work }: { work: InspectionWork }) {
                 Depois de concluir, as respostas ficam bloqueadas para edição. O horário deste
                 aparelho fica registrado como o momento da conclusão.
               </Text>
+              <LocationConsent moment="completion" />
               <SendingNotice />
               <FieldError
                 message={
@@ -165,6 +168,7 @@ function Summary({ work }: { work: InspectionWork }) {
                     : `A inspeção não foi concluída: ${describeLocalFailure(complete.error)}`
                 }
               />
+              {complete.locating ? <LocatingNotice /> : null}
               <Button
                 label="Confirmar conclusão"
                 loading={complete.isPending}
@@ -223,6 +227,17 @@ function SendingNotice() {
       <Text variant="body" tone="info" className="flex-1">
         Concluir não é enviar. Sem internet, a inspeção fica salva no aparelho como aguardando
         sincronização e é enviada ao supervisor quando houver conexão.
+      </Text>
+    </View>
+  );
+}
+
+function LocationLine({ text }: { text: string }) {
+  return (
+    <View className="flex-row items-start gap-2">
+      <Ionicons name="navigate-outline" size={18} color={colors.neutral[500]} />
+      <Text variant="body" tone="muted" className="flex-1">
+        {text}
       </Text>
     </View>
   );
