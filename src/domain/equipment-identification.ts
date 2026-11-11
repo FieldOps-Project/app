@@ -17,7 +17,7 @@ export type EquipmentIdentification =
   | {
       readonly kind: 'divergent';
       readonly expected: InspectionEquipment;
-      readonly read: EquipmentMatch;
+      readonly scanned: EquipmentMatch;
     }
   | { readonly kind: 'found'; readonly match: EquipmentMatch }
   | { readonly kind: 'not-found'; readonly server: ServerLookup };
@@ -26,7 +26,7 @@ export type ServerLookup = 'answered' | 'offline' | 'failed';
 
 export type CodeSource = 'camera' | 'manual';
 
-export const EQUIPMENT_CODE_MAX = 120;
+export const EQUIPMENT_CODE_MAX = 255;
 
 export function normalizeEquipmentCode(raw: string): string | null {
   const code = raw.trim();
@@ -46,5 +46,5 @@ export function identifyEquipment(
   }
   return match.equipment.id === expected.id
     ? { kind: 'confirmed', equipment: expected }
-    : { kind: 'divergent', expected, read: match };
+    : { kind: 'divergent', expected, scanned: match };
 }

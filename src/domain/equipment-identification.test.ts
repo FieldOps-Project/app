@@ -40,7 +40,7 @@ describe('identifyEquipment', () => {
     expect(identifyEquipment(COMPRESSOR, match(GENERATOR))).toEqual({
       kind: 'divergent',
       expected: COMPRESSOR,
-      read: match(GENERATOR),
+      scanned: match(GENERATOR),
     });
   });
 

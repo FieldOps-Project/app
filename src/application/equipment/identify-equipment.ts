@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useOwnerUserId } from '@/application/inspections/use-inspections';
 import {
   identifyEquipment,
+  normalizeEquipmentCode,
   type CodeSource,
   type EquipmentIdentification,
 } from '@/domain/equipment-identification';
@@ -21,10 +22,14 @@ export interface EquipmentCode {
 
 export async function identifyByCode(
   ownerUserId: string,
-  { code, source }: EquipmentCode,
+  { code: raw, source }: EquipmentCode,
   expected: InspectionEquipment | null,
   gateway: EquipmentGateway
 ): Promise<EquipmentIdentification> {
+  const code = normalizeEquipmentCode(raw);
+  if (code === null) {
+    return identifyEquipment(expected, null);
+  }
   const local =
     (await findEquipmentByQrCode(ownerUserId, code)) ??
     (source === 'manual' ? await findEquipmentByAssetNumber(ownerUserId, code) : null);

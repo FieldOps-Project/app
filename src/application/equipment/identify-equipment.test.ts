@@ -1,4 +1,5 @@
 import { identifyByCode } from '@/application/equipment/identify-equipment';
+import { EQUIPMENT_CODE_MAX } from '@/domain/equipment-identification';
 import { fail, ok } from '@/domain/result';
 import type { EquipmentGateway } from '@/infrastructure/api';
 import { getDatabase } from '@/infrastructure/database/database';
@@ -116,7 +117,7 @@ describe('identifyByCode', () => {
     ).toMatchObject({
       kind: 'divergent',
       expected: COMPRESSOR,
-      read: { equipment: { id: 'eq-2' } },
+      scanned: { equipment: { id: 'eq-2' } },
     });
   });
 
@@ -160,6 +161,25 @@ describe('identifyByCode', () => {
         gateway(fail({ kind: 'server' as const }))
       )
     ).toEqual({ kind: 'not-found', server: 'failed' });
+  });
+
+  it('trims what the camera or the keyboard reports before looking it up', async () => {
+    const result = await identifyByCode(OWNER, camera('  EQP-001\n'), null, gateway(ok(null)));
+
+    expect(result).toMatchObject({ kind: 'found', match: { equipment: { id: 'eq-1' } } });
+  });
+
+  it('answers an unusable code as not found, without asking the server', async () => {
+    const api = gateway(ok('eq-1'));
+
+    expect(await identifyByCode(OWNER, camera('   '), null, api)).toEqual({
+      kind: 'not-found',
+      server: 'answered',
+    });
+    expect(
+      await identifyByCode(OWNER, camera('x'.repeat(EQUIPMENT_CODE_MAX + 1)), null, api)
+    ).toEqual({ kind: 'not-found', server: 'answered' });
+    expect(api.findIdByQrCode).not.toHaveBeenCalled();
   });
 
   it('reports a code nobody knows', async () => {
