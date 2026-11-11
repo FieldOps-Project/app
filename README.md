@@ -129,6 +129,9 @@ API --(download)--> SQLite <--(leitura)-- telas
   inspeções dele, e o detalhe da inspeção, que compara o equipamento lido com o previsto.
 - Cada código é processado uma única vez por ciclo de leitura. Para ler de novo, o técnico toca em
   "Ler novamente". A câmera só fica ligada enquanto a tela está em foco.
+- Todo código lido recebe uma resposta. Um QR vazio ou com mais de 255 caracteres (o limite do
+  campo no backend) aparece como equipamento não localizado, sem consultar o servidor. O código é
+  comparado exatamente como foi lido ou digitado, com maiúsculas e minúsculas.
 - A busca acontece primeiro nas inspeções baixadas no aparelho, pelo código do QR. Na digitação
   manual também vale o número de patrimônio. Se não achar, o app consulta
   `GET /api/v1/equipment/by-qr/{código}`. Sem conexão ou com erro do servidor, a mensagem diz isso,
@@ -136,8 +139,10 @@ API --(download)--> SQLite <--(leitura)-- telas
 - **Escopo (RN-063)**: o endpoint devolve qualquer equipamento a qualquer usuário autenticado. Por
   isso o app só mostra o resultado se o equipamento pertence a uma inspeção do técnico. Fora disso,
   aparece a mesma mensagem de equipamento não localizado.
-- **Divergência (RN-064)**: o app mostra o equipamento previsto e o lido lado a lado. Seguir com o
-  previsto exige uma confirmação explícita.
+- **Divergência (RN-064)**: o app mostra o equipamento previsto e o lido lado a lado. Sair da tela
+  com o previsto, pelo botão, pela seta de voltar ou pelo voltar do Android, exige uma confirmação
+  explícita. Abrir uma inspeção do equipamento lido não pede essa confirmação. A leitura é opcional
+  no fluxo da inspeção, e a confirmação não é gravada, porque o backend ainda não tem onde guardá-la.
 - Com a permissão da câmera negada, o técnico pode digitar o código ou o número de patrimônio.
 
 ### Inspeções de demonstração
@@ -383,9 +388,9 @@ previstas que precisam virar mensagem na tela. Devolver
 [`Result`](src/domain/result.ts) obriga quem chama a tratar o erro para conseguir compilar;
 `throw` fica para o que é realmente inesperado.
 
-**Comentários apenas em JSDoc, escritos em inglês.** Código sem comentário solto em linha; o
-que precisa de explicação ganha um bloco JSDoc objetivo. Texto de interface e mensagem de
-erro exibida à pessoa usuária continuam em português.
+**Sem comentários no código.** Nomes de funções, tipos e testes explicam o comportamento; o
+porquê de cada decisão fica na descrição do PR, neste README ou numa ADR. Identificadores ficam
+em inglês; texto de interface e mensagem de erro exibida à pessoa usuária continuam em português.
 
 **TanStack Query com padrões para uso em campo.** Dado já carregado continua válido por
 alguns minutos e a repetição automática é limitada — insistir em uma requisição sem rede só
