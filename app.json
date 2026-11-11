@@ -50,9 +50,10 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "O FieldOps usa a câmera para fotografar as evidências dos itens da inspeção. As fotos ficam no aparelho até serem enviadas.",
+          "cameraPermission": "O FieldOps usa a câmera para fotografar as evidências da inspeção e ler o QR Code dos equipamentos. As fotos ficam no aparelho até serem enviadas.",
           "microphonePermission": false,
-          "recordAudioAndroid": false
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
         }
       ],
       "@react-native-community/datetimepicker"

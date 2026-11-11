@@ -123,6 +123,23 @@ API --(download)--> SQLite <--(leitura)-- telas
 - Bibliotecas: `expo-camera`, `expo-image-manipulator` e `expo-file-system`. O plugin da
   câmera no `app.json` não pede microfone.
 
+### Leitura de QR Code
+
+- Dá para ler o QR de dois lugares: a ação rápida da tela inicial, que mostra o equipamento e as
+  inspeções dele, e o detalhe da inspeção, que compara o equipamento lido com o previsto.
+- Cada código é processado uma única vez por ciclo de leitura. Para ler de novo, o técnico toca em
+  "Ler novamente". A câmera só fica ligada enquanto a tela está em foco.
+- A busca acontece primeiro nas inspeções baixadas no aparelho, pelo código do QR. Na digitação
+  manual também vale o número de patrimônio. Se não achar, o app consulta
+  `GET /api/v1/equipment/by-qr/{código}`. Sem conexão ou com erro do servidor, a mensagem diz isso,
+  em vez de dar o código como desconhecido.
+- **Escopo (RN-063)**: o endpoint devolve qualquer equipamento a qualquer usuário autenticado. Por
+  isso o app só mostra o resultado se o equipamento pertence a uma inspeção do técnico. Fora disso,
+  aparece a mesma mensagem de equipamento não localizado.
+- **Divergência (RN-064)**: o app mostra o equipamento previsto e o lido lado a lado. Seguir com o
+  previsto exige uma confirmação explícita.
+- Com a permissão da câmera negada, o técnico pode digitar o código ou o número de patrimônio.
+
 ### Inspeções de demonstração
 
 Os endpoints mobile da API (backend#19, #20 e #21) ainda não existem. Para exercitar as
