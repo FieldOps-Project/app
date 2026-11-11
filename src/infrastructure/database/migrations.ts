@@ -142,4 +142,89 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE inspections ADD COLUMN completion_location_at TEXT;
   ALTER TABLE inspections ADD COLUMN completion_location_missing TEXT;
   `,
+  // Cards #21 and #23: the rest of document 10.13.
+  //
+  // - Non-conformities get their own table (document 10.10), ready for card #20.
+  // - Evidences take the fields of document 10.9 and the local sync metadata
+  //   of 10.13.2. An evidence may belong to the inspection alone, so the item
+  //   becomes optional; SQLite cannot relax NOT NULL in place, so the table is
+  //   rebuilt and every row already on the device is copied over. Those rows
+  //   predate the camera: they have no file and no queued operation, so they
+  //   owe nothing (`is_dirty = 0`), and they are linked to the item's answer.
+  // - `deleted_locally` marks a removal the server has not confirmed yet.
+  // - Indexes follow the queries the app runs: the list ordered by schedule,
+  //   the QR lookup (card #18), the operations owed per inspection, and the
+  //   evidence links of document 10.15.2.
+  `
+  CREATE TABLE non_conformities (
+    id                 TEXT PRIMARY KEY NOT NULL,
+    inspection_id      TEXT NOT NULL REFERENCES inspections (id) ON DELETE CASCADE,
+    inspection_item_id TEXT REFERENCES inspection_items (id) ON DELETE CASCADE,
+    response_id        TEXT REFERENCES inspection_responses (id) ON DELETE SET NULL,
+    title              TEXT NOT NULL,
+    description        TEXT NOT NULL,
+    severity           TEXT NOT NULL CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
+    status             TEXT NOT NULL DEFAULT 'OPEN',
+    created_at_device  TEXT NOT NULL,
+    base_version       INTEGER NOT NULL DEFAULT 0,
+    local_sync_status  TEXT NOT NULL DEFAULT 'PENDING'
+      CHECK (local_sync_status IN ('SYNCED', 'PENDING', 'SYNCING', 'ERROR', 'CONFLICT')),
+    is_dirty           INTEGER NOT NULL DEFAULT 1,
+    last_synced_at     TEXT,
+    local_updated_at   TEXT,
+    sync_error         TEXT,
+    deleted_locally    INTEGER NOT NULL DEFAULT 0 CHECK (deleted_locally IN (0, 1))
+  );
+  CREATE INDEX ix_non_conformities_inspection ON non_conformities (inspection_id, inspection_item_id);
+
+  CREATE TABLE evidences_v3 (
+    id                 TEXT PRIMARY KEY NOT NULL,
+    inspection_id      TEXT NOT NULL REFERENCES inspections (id) ON DELETE CASCADE,
+    inspection_item_id TEXT REFERENCES inspection_items (id) ON DELETE CASCADE,
+    response_id        TEXT REFERENCES inspection_responses (id) ON DELETE SET NULL,
+    non_conformity_id  TEXT REFERENCES non_conformities (id) ON DELETE SET NULL,
+    type               TEXT NOT NULL DEFAULT 'PHOTO' CHECK (type IN ('PHOTO')),
+    local_uri          TEXT,
+    storage_key        TEXT,
+    original_file_name TEXT,
+    mime_type          TEXT,
+    size_bytes         INTEGER CHECK (size_bytes IS NULL OR size_bytes >= 0),
+    checksum           TEXT,
+    description        TEXT,
+    latitude           REAL,
+    longitude          REAL,
+    created_at_device  TEXT NOT NULL,
+    uploaded_at        TEXT,
+    base_version       INTEGER NOT NULL DEFAULT 0,
+    local_sync_status  TEXT NOT NULL DEFAULT 'PENDING'
+      CHECK (local_sync_status IN ('SYNCED', 'PENDING', 'SYNCING', 'ERROR', 'CONFLICT')),
+    is_dirty           INTEGER NOT NULL DEFAULT 1,
+    last_synced_at     TEXT,
+    local_updated_at   TEXT,
+    sync_error         TEXT,
+    deleted_locally    INTEGER NOT NULL DEFAULT 0 CHECK (deleted_locally IN (0, 1))
+  );
+  INSERT INTO evidences_v3 (
+    id, inspection_id, inspection_item_id, response_id, local_uri, created_at_device,
+    local_sync_status, is_dirty, local_updated_at
+  )
+  SELECT evidences.id, evidences.inspection_id, evidences.inspection_item_id,
+         (SELECT responses.id FROM inspection_responses AS responses
+           WHERE responses.inspection_item_id = evidences.inspection_item_id),
+         evidences.local_uri, evidences.created_at_device, evidences.local_sync_status, 0,
+         evidences.created_at_device
+    FROM evidences;
+  DROP TABLE evidences;
+  ALTER TABLE evidences_v3 RENAME TO evidences;
+  CREATE INDEX ix_evidences_item ON evidences (inspection_id, inspection_item_id);
+  CREATE INDEX ix_evidences_response ON evidences (response_id);
+  CREATE INDEX ix_evidences_non_conformity ON evidences (non_conformity_id);
+
+  ALTER TABLE inspection_responses ADD COLUMN deleted_locally INTEGER NOT NULL DEFAULT 0
+    CHECK (deleted_locally IN (0, 1));
+
+  CREATE INDEX ix_inspections_owner_schedule ON inspections (owner_user_id, scheduled_for, id);
+  CREATE INDEX ix_inspections_owner_qr ON inspections (owner_user_id, equipment_qr_code);
+  CREATE INDEX ix_sync_operations_inspection ON sync_operations (inspection_id, status);
+  `,
 ];

@@ -12,12 +12,17 @@ let opening: Promise<SQLiteDatabase> | null = null;
  * halfway leaves the previous version and the previous schema — never a new
  * number over an old schema. Runs on the connection being opened, before any
  * other caller can reach it.
+ *
+ * `target` exists for the tests that rebuild an older device schema and then
+ * upgrade it; the app always migrates to the latest version.
  */
-export async function migrate(database: SQLiteDatabase): Promise<void> {
-  const row = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  const current = row?.user_version ?? 0;
+export async function migrate(
+  database: SQLiteDatabase,
+  target: number = MIGRATIONS.length
+): Promise<void> {
+  const current = await readSchemaVersion(database);
 
-  for (let version = current; version < MIGRATIONS.length; version += 1) {
+  for (let version = current; version < target; version += 1) {
     await database.execAsync('BEGIN IMMEDIATE');
     try {
       await database.execAsync(MIGRATIONS[version] ?? '');
@@ -28,6 +33,12 @@ export async function migrate(database: SQLiteDatabase): Promise<void> {
       throw error;
     }
   }
+}
+
+/** The `schema_version` of document 10.13.4, kept in `PRAGMA user_version`. */
+export async function readSchemaVersion(database: SQLiteDatabase): Promise<number> {
+  const row = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  return row?.user_version ?? 0;
 }
 
 async function open(): Promise<SQLiteDatabase> {

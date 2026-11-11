@@ -81,6 +81,16 @@ function send(
       });
 }
 
+/**
+ * Uploads and removals of evidences wait in the queue until the file
+ * synchronization exists (card #25, backend#27). They are skipped without
+ * holding their inspection back, so its answers keep flowing; they stay in
+ * the run's open set, so the submit, which depends on them, still waits.
+ */
+function canSendYet(operation: QueuedOperation): boolean {
+  return operation.entityType === 'INSPECTION' || operation.entityType === 'RESPONSE';
+}
+
 function isSubmit(operation: QueuedOperation): boolean {
   return (
     operation.entityType === 'INSPECTION' &&
@@ -130,6 +140,9 @@ async function run(
   let refused = 0;
 
   for (const listed of queue) {
+    if (!canSendYet(listed)) {
+      continue;
+    }
     if (listed.status === 'CONFLICT') {
       held.add(listed.inspectionId);
       continue;

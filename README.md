@@ -78,10 +78,33 @@ API --(download)--> SQLite <--(leitura)-- telas
 ```
 
 - Esquema versionado em [`src/infrastructure/database/migrations.ts`](src/infrastructure/database/migrations.ts).
-  Migrações só avançam; nunca edite uma entrada publicada, acrescente outra.
-- Iniciar, responder e concluir gravam o registro e a operação de envio na mesma
-  transação. Nada espera a rede para considerar o dado salvo.
+  Migrações só avançam; nunca edite uma entrada publicada, acrescente outra. A versão
+  (`schema_version` do documento 10.13.4) fica em `PRAGMA user_version` e é gravada na
+  mesma transação da migração.
+- Tabelas: `inspections` (com cliente, local e equipamento da inspeção), `inspection_items`
+  (snapshot), `inspection_responses`, `evidences`, `non_conformities`, `sync_operations`
+  (outbox) e `sync_metadata`. As entidades sincronizáveis têm os metadados locais do
+  documento 10.13.2, e o estado de negócio fica separado do estado de sincronização.
+- Iniciar, responder, anexar evidência e concluir gravam o registro e a operação de envio
+  na mesma transação. Nada espera a rede para considerar o dado salvo. As telas nunca
+  executam SQL; tudo passa pelos repositórios em `src/infrastructure/repositories`.
 - Um download nunca sobrescreve trabalho local ainda não enviado.
+
+### Outbox
+
+- Editar o mesmo registro várias vezes gera uma operação só, que mantém o `operation_id`
+  original em todas as tentativas. Uma operação em `PROCESSING` não é consolidada: a próxima
+  edição abre outra.
+- O upload de uma evidência espera as operações da resposta que ela comprova. Se a foto vier
+  antes da resposta, o upload passa a esperar a resposta quando ela for criada. A conclusão
+  espera tudo o que ainda é devido para a inspeção.
+- Remover uma evidência cancela o upload que nunca foi tentado ou que o servidor recusou. Se
+  o upload pode ter chegado ao servidor (em envio, ou cortado pela rede), a remoção entra na
+  fila depois dele e o arquivo fica no aparelho.
+- Uma falha marca só a própria operação. O `last_error` passa por `sanitizeSyncError`, que
+  remove tokens e senhas e limita o tamanho.
+- Uploads e remoções de evidência ficam na fila até existir o envio de arquivos (card #25,
+  backend#27). As respostas da inspeção continuam sendo enviadas; só a conclusão espera.
 
 ### Inspeções de demonstração
 
