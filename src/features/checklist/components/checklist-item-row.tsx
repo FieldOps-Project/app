@@ -11,7 +11,7 @@ import { Input } from '@/design-system/components/input';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
 import { hasAnswer, type ChecklistItem, type ChecklistResponse } from '@/domain/checklist';
-import type { EvidenceSummary } from '@/domain/evidence';
+import { evidenceUploadState, type EvidenceSummary } from '@/domain/evidence';
 import { responseFieldFor } from '@/features/checklist/components/response-fields';
 import { FieldError } from '@/features/checklist/components/response-fields/field-error';
 import { EvidenceThumbnails } from '@/features/evidence/components/evidence-thumbnails';
@@ -68,7 +68,12 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
   onOpenEvidence,
 }: ChecklistItemRowProps) {
   const evidenceCount = evidences.length;
-  const pending = evidences.filter((evidence) => evidence.syncState !== 'enviado').length;
+  const waiting = evidences.filter(
+    (evidence) => evidenceUploadState(evidence.syncState) === 'waiting'
+  ).length;
+  const failed = evidences.filter(
+    (evidence) => evidenceUploadState(evidence.syncState) === 'failed'
+  ).length;
   const schema = useMemo(() => responseFormSchema(item), [item]);
   const form = useForm<ResponseFormInput, unknown, ResponseFormOutput>({
     resolver: zodResolver(schema),
@@ -175,7 +180,8 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
               {evidenceCount > 0
                 ? plural(evidenceCount, 'evidência registrada', 'evidências registradas')
                 : 'Nenhuma evidência'}
-              {pending > 0 ? ` · ${pending} aguardando envio` : ''}
+              {waiting > 0 ? ` · ${waiting} aguardando envio` : ''}
+              {failed > 0 ? ` · ${failed} com falha no envio` : ''}
             </Text>
           </View>
           <EvidenceThumbnails evidences={evidences} onOpen={onOpenEvidence} />

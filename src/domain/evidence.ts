@@ -26,12 +26,34 @@ export const EVIDENCE_DESCRIPTION_MAX = 500;
 export interface EvidenceSummary {
   readonly id: string;
   readonly inspectionItemId: string | null;
-  /** Full resolution, opened only when the technician enlarges the photo. */
-  readonly photoUri: string | null;
-  readonly thumbnailUri: string | null;
+  /**
+   * Full resolution, opened only when the technician enlarges the photo.
+   * Paths are relative to the app's document directory (see photo storage).
+   */
+  readonly photoPath: string | null;
+  readonly thumbnailPath: string | null;
   readonly description: string | null;
   readonly createdAtDevice: string;
   readonly syncState: SyncState;
+}
+
+/**
+ * How an evidence's upload stands, for the marks on the checklist: a refused
+ * or conflicting upload must not read as merely waiting (card #17).
+ */
+export type EvidenceUploadState = 'sent' | 'waiting' | 'failed';
+
+export function evidenceUploadState(syncState: SyncState): EvidenceUploadState {
+  switch (syncState) {
+    case 'enviado':
+      return 'sent';
+    case 'falha':
+    case 'conflito':
+      return 'failed';
+    case 'aguardando-envio':
+    case 'salvo-no-dispositivo':
+      return 'waiting';
+  }
 }
 
 export type PhotoRejection = 'UNSUPPORTED_TYPE' | 'TOO_LARGE' | 'EMPTY';

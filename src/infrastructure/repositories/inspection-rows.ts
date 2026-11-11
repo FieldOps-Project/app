@@ -103,8 +103,8 @@ export function toEvidenceSummary(row: EvidenceRow): EvidenceSummary {
   return {
     id: row.id,
     inspectionItemId: row.inspection_item_id,
-    photoUri: row.local_uri,
-    thumbnailUri: row.thumbnail_uri,
+    photoPath: row.local_uri,
+    thumbnailPath: row.thumbnail_uri,
     description: row.description,
     createdAtDevice: row.created_at_device,
     syncState: toSyncState(row.local_sync_status, row.local_updated_at ?? row.created_at_device),

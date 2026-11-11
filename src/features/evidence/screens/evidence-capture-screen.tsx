@@ -27,6 +27,8 @@ export function EvidenceCaptureScreen() {
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  /** Read synchronously: two taps before the next render must still take one photo. */
+  const busy = useRef(false);
   const [failure, setFailure] = useState<string | null>(null);
 
   if (permission === null) {
@@ -48,9 +50,10 @@ export function EvidenceCaptureScreen() {
 
   /** One photo per press: a second tap while the first is being taken is ignored. */
   async function capture() {
-    if (camera.current === null || capturing) {
+    if (camera.current === null || busy.current) {
       return;
     }
+    busy.current = true;
     setCapturing(true);
     setFailure(null);
     try {
@@ -67,6 +70,7 @@ export function EvidenceCaptureScreen() {
       });
     } catch {
       setFailure('Não foi possível tirar a foto. Tente de novo.');
+      busy.current = false;
       setCapturing(false);
     }
   }

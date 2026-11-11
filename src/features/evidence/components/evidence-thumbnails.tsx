@@ -3,9 +3,20 @@ import { memo } from 'react';
 import { Image, Pressable, ScrollView, View } from 'react-native';
 
 import { colors } from '@/design-system/tokens/design-tokens';
-import type { EvidenceSummary } from '@/domain/evidence';
+import { evidenceImageUri } from '@/application/evidence/evidence-files';
+import {
+  evidenceUploadState,
+  type EvidenceSummary,
+  type EvidenceUploadState,
+} from '@/domain/evidence';
 
 const THUMBNAIL_SIZE = 64;
+
+const UPLOAD_LABEL: Record<EvidenceUploadState, string> = {
+  sent: '',
+  waiting: ', aguardando envio',
+  failed: ', falha no envio',
+};
 
 export interface EvidenceThumbnailsProps {
   readonly evidences: readonly EvidenceSummary[];
@@ -15,7 +26,8 @@ export interface EvidenceThumbnailsProps {
 /**
  * The item's photos as small copies (document 13.10): the full file is only
  * decoded when one is opened. A photo not sent yet carries an upload mark,
- * so pending work is visible without a connection.
+ * so pending work is visible without a connection; a refused one is marked
+ * as a failure, never as merely waiting.
  */
 export const EvidenceThumbnails = memo(function EvidenceThumbnails({
   evidences,
@@ -28,30 +40,34 @@ export const EvidenceThumbnails = memo(function EvidenceThumbnails({
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
       {evidences.map((evidence, index) => {
-        const sent = evidence.syncState === 'enviado';
+        const upload = evidenceUploadState(evidence.syncState);
         return (
           <Pressable
             key={evidence.id}
             accessibilityRole="imagebutton"
-            accessibilityLabel={`Abrir evidência ${index + 1}${sent ? '' : ', aguardando envio'}`}
+            accessibilityLabel={`Abrir evidência ${index + 1}${UPLOAD_LABEL[upload]}`}
             onPress={() => onOpen(evidence)}
             className="overflow-hidden rounded-field bg-neutral-200 dark:bg-neutral-800"
             style={{ width: THUMBNAIL_SIZE, height: THUMBNAIL_SIZE }}
           >
-            {evidence.thumbnailUri === null ? (
+            {evidence.thumbnailPath === null ? (
               <View className="flex-1 items-center justify-center">
                 <Ionicons name="image-outline" size={22} color={colors.neutral[500]} />
               </View>
             ) : (
               <Image
-                source={{ uri: evidence.thumbnailUri }}
+                source={{ uri: evidenceImageUri(evidence.thumbnailPath) }}
                 resizeMode="cover"
                 style={{ width: THUMBNAIL_SIZE, height: THUMBNAIL_SIZE }}
               />
             )}
-            {sent ? null : (
+            {upload === 'sent' ? null : (
               <View className="absolute bottom-1 right-1 rounded-full bg-neutral-0 p-0.5">
-                <Ionicons name="cloud-upload-outline" size={14} color={colors.warning.DEFAULT} />
+                <Ionicons
+                  name={upload === 'failed' ? 'alert-circle' : 'cloud-upload-outline'}
+                  size={14}
+                  color={upload === 'failed' ? colors.danger.DEFAULT : colors.warning.DEFAULT}
+                />
               </View>
             )}
           </Pressable>

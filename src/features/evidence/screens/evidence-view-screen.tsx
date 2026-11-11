@@ -1,6 +1,8 @@
 import { useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Alert, Image, View } from 'react-native';
 
+import { evidenceImageUri } from '@/application/evidence/evidence-files';
 import { useDiscardEvidence } from '@/application/inspections/use-checklist-actions';
 import { useInspectionDetail } from '@/application/inspections/use-inspection-detail';
 import { SyncStateBadge } from '@/components/sync-state-badge';
@@ -65,20 +67,14 @@ export function EvidenceViewScreen() {
   return (
     <Screen scrollable edges={BELOW_HEADER_EDGES}>
       <EvidenceItemLink inspectionId={inspectionId} itemId={itemId} />
-      {evidence.photoUri === null ? (
+      {evidence.photoPath === null ? (
         <View className="h-56 items-center justify-center rounded-card bg-neutral-200 dark:bg-neutral-800">
           <Text variant="body" tone="muted">
             Registro sem foto
           </Text>
         </View>
       ) : (
-        <Image
-          source={{ uri: evidence.photoUri }}
-          accessibilityLabel="Foto da evidência"
-          resizeMode="contain"
-          className="w-full rounded-card bg-neutral-950"
-          style={{ aspectRatio: 3 / 4 }}
-        />
+        <FullPhoto path={evidence.photoPath} />
       )}
       <View className="flex-row flex-wrap items-center gap-2">
         <SyncStateBadge state={evidence.syncState} />
@@ -101,5 +97,26 @@ export function EvidenceViewScreen() {
         />
       ) : null}
     </Screen>
+  );
+}
+
+/** The photo at its own proportions, measured once it loads; portrait until then. */
+function FullPhoto({ path }: { path: string }) {
+  const [aspectRatio, setAspectRatio] = useState(3 / 4);
+
+  return (
+    <Image
+      source={{ uri: evidenceImageUri(path) }}
+      accessibilityLabel="Foto da evidência"
+      resizeMode="contain"
+      className="w-full rounded-card bg-neutral-950"
+      style={{ aspectRatio }}
+      onLoad={({ nativeEvent }) => {
+        const { width, height } = nativeEvent.source;
+        if (width > 0 && height > 0) {
+          setAspectRatio(width / height);
+        }
+      }}
+    />
   );
 }

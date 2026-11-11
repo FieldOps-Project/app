@@ -45,8 +45,9 @@ jest.mock('@/application/inspections/use-inspection-detail', () => ({
 jest.mock('@/application/inspections/use-checklist-actions', () => ({
   useAttachPhoto: () => ({ mutate: mockAttach, ...mockAttachState.current }),
 }));
-jest.mock('@/infrastructure/evidence/photo-storage', () => ({
-  deleteFile: (uri: string | null) => mockDelete(uri),
+jest.mock('@/application/evidence/evidence-files', () => ({
+  evidenceImageUri: (path: string) => `file:///documents/${path}`,
+  discardCapturedPhoto: (uri: string) => mockDelete(uri),
 }));
 
 const ITEM: ChecklistItem = {
@@ -214,8 +215,8 @@ describe('checklist row', () => {
   const evidence = (id: string, syncState: EvidenceSummary['syncState']): EvidenceSummary => ({
     id,
     inspectionItemId: 'item-1',
-    photoUri: `file:///documents/evidences/insp-1/${id}.jpg`,
-    thumbnailUri: `file:///documents/evidences/insp-1/${id}-thumb.jpg`,
+    photoPath: `evidences/insp-1/${id}.jpg`,
+    thumbnailPath: `evidences/insp-1/${id}-thumb.jpg`,
     description: null,
     createdAtDevice: '2026-08-12T13:00:00.000Z',
     syncState,
@@ -239,15 +240,21 @@ describe('checklist row', () => {
     );
   }
 
-  it('shows thumbnails only, and which photos still wait to be sent', () => {
-    const screen = row([evidence('ev-1', 'enviado'), evidence('ev-2', 'aguardando-envio')]);
+  it('shows thumbnails only, and which photos wait or failed to be sent', () => {
+    const screen = row([
+      evidence('ev-1', 'enviado'),
+      evidence('ev-2', 'aguardando-envio'),
+      evidence('ev-3', 'falha'),
+    ]);
 
     const sources = screen.root.findAllByType(Image).map((image) => image.props.source.uri);
     expect(sources).toEqual([
       'file:///documents/evidences/insp-1/ev-1-thumb.jpg',
       'file:///documents/evidences/insp-1/ev-2-thumb.jpg',
+      'file:///documents/evidences/insp-1/ev-3-thumb.jpg',
     ]);
     expect(texts(screen)).toContain('1 aguardando envio');
+    expect(texts(screen)).toContain('1 com falha no envio');
   });
 
   it('opens the photo it was pressed on', () => {

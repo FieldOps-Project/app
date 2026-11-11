@@ -286,8 +286,8 @@ describe('answers', () => {
         createdAtDevice: NOW,
         file: {
           operationId: `op-${id}`,
-          localUri: `file:///data/evidences/${id}.jpg`,
-          thumbnailUri: `file:///data/evidences/${id}-thumb.jpg`,
+          photoPath: `evidences/insp-1/${id}.jpg`,
+          thumbnailPath: `evidences/insp-1/${id}-thumb.jpg`,
           mimeType: 'image/jpeg',
           sizeBytes: 150_000,
           description: id === 'ev-1' ? 'Trinca na base' : null,
@@ -301,8 +301,8 @@ describe('answers', () => {
       {
         id: 'ev-1',
         inspectionItemId: 'item-1',
-        photoUri: 'file:///data/evidences/ev-1.jpg',
-        thumbnailUri: 'file:///data/evidences/ev-1-thumb.jpg',
+        photoPath: 'evidences/insp-1/ev-1.jpg',
+        thumbnailPath: 'evidences/insp-1/ev-1-thumb.jpg',
         description: 'Trinca na base',
         createdAtDevice: NOW,
         syncState: 'aguardando-envio',
@@ -781,8 +781,8 @@ describe('outbox (card #23)', () => {
 
 describe('evidence operations (card #23)', () => {
   const PHOTO = {
-    localUri: 'file:///data/evidences/ev-1.jpg',
-    thumbnailUri: 'file:///data/evidences/ev-1-thumb.jpg',
+    photoPath: 'evidences/insp-1/ev-1.jpg',
+    thumbnailPath: 'evidences/insp-1/ev-1-thumb.jpg',
     mimeType: 'image/jpeg',
     sizeBytes: 182_000,
   };
@@ -860,7 +860,7 @@ describe('evidence operations (card #23)', () => {
 
     const outcome = await discard();
 
-    expect(outcome).toEqual({ outcome: 'removed', files: [PHOTO.localUri, PHOTO.thumbnailUri] });
+    expect(outcome).toEqual({ outcome: 'removed', files: [PHOTO.photoPath, PHOTO.thumbnailPath] });
     expect(await upload()).toBeUndefined();
     expect((await findInspection(OWNER, 'insp-1'))?.evidenceCounts.size).toBe(0);
   });
@@ -885,7 +885,7 @@ describe('evidence operations (card #23)', () => {
 
     expect(await discard()).toEqual({
       outcome: 'removed',
-      files: [PHOTO.localUri, PHOTO.thumbnailUri],
+      files: [PHOTO.photoPath, PHOTO.thumbnailPath],
     });
   });
 

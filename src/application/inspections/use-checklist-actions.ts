@@ -176,23 +176,25 @@ export function useAttachPhoto(inspectionId: string) {
           createdAtDevice: new Date().toISOString(),
           file: {
             operationId: newId(),
-            localUri: stored.value.photoUri,
-            thumbnailUri: stored.value.thumbnailUri,
+            photoPath: stored.value.photoPath,
+            thumbnailPath: stored.value.thumbnailPath,
             mimeType: stored.value.mimeType,
             sizeBytes: stored.value.sizeBytes,
             description: normalizeDescription(description),
           },
         });
       } catch (error) {
-        deleteFile(stored.value.photoUri);
-        deleteFile(stored.value.thumbnailUri);
+        deleteFile(stored.value.photoPath);
+        deleteFile(stored.value.thumbnailPath);
         throw error instanceof InspectionStateError
           ? error
           : new Error('Não foi possível salvar a evidência no aparelho. Tente de novo.');
       }
       deleteFile(photo.uri);
     },
-    onSettled: invalidate,
+    // Not awaited: the screen leaves as soon as the write is done, and the
+    // lists refresh behind it.
+    onSettled: () => void invalidate(),
   });
 }
 
@@ -217,6 +219,6 @@ export function useDiscardEvidence(inspectionId: string) {
         outcome.files.forEach(deleteFile);
       }
     },
-    onSettled: invalidate,
+    onSettled: () => void invalidate(),
   });
 }

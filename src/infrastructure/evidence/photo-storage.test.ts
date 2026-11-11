@@ -49,6 +49,7 @@ jest.mock('expo-file-system', () => {
 
 const mockResize = jest.fn();
 let mockRenderedSizes: number[] = [];
+let mockRenderedDimensions: [number, number][] = [];
 let mockRendered = 0;
 
 jest.mock('expo-image-manipulator', () => ({
@@ -62,8 +63,9 @@ jest.mock('expo-image-manipulator', () => ({
         saveAsync: jest.fn(async () => {
           const uri = `file:///cache/manipulated-${mockRendered}.jpg`;
           mockFiles.set(uri, mockRenderedSizes[mockRendered] ?? 1000);
+          const [width, height] = mockRenderedDimensions[mockRendered] ?? [0, 0];
           mockRendered += 1;
-          return { uri, width: 0, height: 0 };
+          return { uri, width, height };
         }),
       })),
     })),
@@ -79,6 +81,10 @@ beforeEach(() => {
   mockFiles.clear();
   mockFiles.set(CAMERA_FILE, 6_000_000);
   mockRenderedSizes = [380_000, 18_000];
+  mockRenderedDimensions = [
+    [1600, 1200],
+    [320, 240],
+  ];
   mockRendered = 0;
 });
 
@@ -89,19 +95,28 @@ describe('storePhoto', () => {
     expect(result).toEqual({
       ok: true,
       value: {
-        photoUri: 'file:///documents/evidences/insp-1/ev-1.jpg',
-        thumbnailUri: 'file:///documents/evidences/insp-1/ev-1-thumb.jpg',
+        photoPath: 'evidences/insp-1/ev-1.jpg',
+        thumbnailPath: 'evidences/insp-1/ev-1-thumb.jpg',
         mimeType: 'image/jpeg',
         sizeBytes: 380_000,
       },
     });
     expect(mockResize).toHaveBeenNthCalledWith(1, { width: 1600 });
     expect(mockResize).toHaveBeenNthCalledWith(2, { width: 320 });
-    expect(ImageManipulator.manipulate).toHaveBeenCalledTimes(2);
-    expect(ImageManipulator.manipulate).toHaveBeenCalledWith(CAMERA_FILE);
+    expect(mockFiles.has('file:///documents/evidences/insp-1/ev-1.jpg')).toBe(true);
+    expect(mockFiles.has('file:///documents/evidences/insp-1/ev-1-thumb.jpg')).toBe(true);
     expect([...mockFiles.keys()].some((uri) => uri.startsWith('file:///cache/manipulated'))).toBe(
       false
     );
+  });
+
+  it('decodes the large original once, making the thumbnail from the resized copy', async () => {
+    await storePhoto(PHOTO, TARGET);
+
+    expect(jest.mocked(ImageManipulator.manipulate).mock.calls).toEqual([
+      [CAMERA_FILE],
+      ['file:///cache/manipulated-0.jpg'],
+    ]);
   });
 
   it('leaves the camera file for another try', async () => {
@@ -111,6 +126,10 @@ describe('storePhoto', () => {
   });
 
   it('never enlarges a small photo', async () => {
+    mockRenderedDimensions = [
+      [1024, 768],
+      [320, 240],
+    ];
     await storePhoto({ uri: CAMERA_FILE, width: 1024, height: 768 }, TARGET);
 
     expect(mockResize).toHaveBeenCalledTimes(1);

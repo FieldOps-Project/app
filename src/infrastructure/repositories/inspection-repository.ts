@@ -575,10 +575,10 @@ async function linkEvidencesToNewAnswer(
 /** The file kept on the device for an evidence, and the operation that will upload it. */
 export interface EvidenceFile {
   readonly operationId: string;
-  /** In the app's persistent directory, never the cache (RN-047). */
-  readonly localUri: string;
+  /** Relative to the app's persistent directory, never the cache (RN-047). */
+  readonly photoPath: string;
   /** The small copy lists show; stays on the device. */
-  readonly thumbnailUri: string;
+  readonly thumbnailPath: string;
   readonly mimeType: string;
   readonly sizeBytes: number;
   readonly originalFileName?: string | null;
@@ -630,8 +630,8 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
       command.inspectionId,
       command.inspectionItemId,
       responseId,
-      file.localUri,
-      file.thumbnailUri,
+      file.photoPath,
+      file.thumbnailPath,
       file.originalFileName ?? null,
       file.mimeType,
       file.sizeBytes,

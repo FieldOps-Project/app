@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Image, View } from 'react-native';
 
+import { discardCapturedPhoto } from '@/application/evidence/evidence-files';
 import { useAttachPhoto } from '@/application/inspections/use-checklist-actions';
 import { Button } from '@/design-system/components/button';
 import { ErrorState } from '@/design-system/components/error-state';
@@ -12,7 +13,6 @@ import { EVIDENCE_DESCRIPTION_MAX } from '@/domain/evidence';
 import { useReturnToChecklist } from '@/features/checklist/hooks/use-return-to-checklist';
 import { EvidenceItemLink } from '@/features/evidence/components/evidence-item-link';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
-import { deleteFile } from '@/infrastructure/evidence/photo-storage';
 
 type PreviewParams = {
   itemId?: string;
@@ -73,12 +73,16 @@ export function EvidencePreviewScreen() {
   }
 
   function retake() {
-    deleteFile(photoUri ?? null);
+    if (photoUri !== undefined) {
+      discardCapturedPhoto(photoUri);
+    }
     router.replace({ pathname: '/evidence/capture', params: { inspectionId, itemId } });
   }
 
   function discard() {
-    deleteFile(photoUri ?? null);
+    if (photoUri !== undefined) {
+      discardCapturedPhoto(photoUri);
+    }
     returnToChecklist();
   }
 

@@ -13,16 +13,21 @@ import {
 } from '@/domain/evidence';
 import { fail, ok, type Result } from '@/domain/result';
 
-/** What the camera returns: a file in the cache, which the system may clear at any time. */
+/** A picture on disk and its size in pixels: what the camera returns, in the cache. */
 export interface CapturedPhoto {
   readonly uri: string;
   readonly width: number;
   readonly height: number;
 }
 
+/**
+ * Where the evidence files were kept. The paths are relative to the app's
+ * document directory, not absolute URIs: iOS moves the app container on every
+ * update, so an absolute path saved today would point nowhere tomorrow.
+ */
 export interface StoredPhoto {
-  readonly photoUri: string;
-  readonly thumbnailUri: string;
+  readonly photoPath: string;
+  readonly thumbnailPath: string;
   readonly mimeType: string;
   readonly sizeBytes: number;
 }
@@ -30,15 +35,18 @@ export interface StoredPhoto {
 export type StorePhotoFailure =
   { readonly kind: 'rejected'; readonly reason: PhotoRejection } | { readonly kind: 'storage' };
 
+/** Evidence files live under the document directory, which the system never clears (RN-047). */
+const EVIDENCE_ROOT = 'evidences';
+
 /**
- * Evidence files live in the app's document directory, which the system never
- * clears on its own (RN-047), one folder per inspection.
+ * The URI to read or delete a stored file. Accepts the relative paths this
+ * module saves and, for anything older, an absolute URI as it is.
  */
-function inspectionDirectory(inspectionId: string): Directory {
-  return new Directory(Paths.document, 'evidences', inspectionId);
+export function evidenceFileUri(path: string): string {
+  return path.includes('://') ? path : new File(Paths.document, path).uri;
 }
 
-async function render(photo: CapturedPhoto, maxEdge: number, quality: number): Promise<File> {
+async function render(photo: CapturedPhoto, maxEdge: number, quality: number) {
   const context = ImageManipulator.manipulate(photo.uri);
   try {
     const size = fitWithin(photo.width, photo.height, maxEdge);
@@ -48,7 +56,7 @@ async function render(photo: CapturedPhoto, maxEdge: number, quality: number): P
     const image = await context.renderAsync();
     try {
       const saved = await image.saveAsync({ compress: quality, format: SaveFormat.JPEG });
-      return new File(saved.uri);
+      return { file: new File(saved.uri), width: saved.width, height: saved.height };
     } finally {
       image.release();
     }
@@ -58,12 +66,12 @@ async function render(photo: CapturedPhoto, maxEdge: number, quality: number): P
 }
 
 /** Removes a file if it is there; a file already gone is not an error. */
-export function deleteFile(uri: string | null): void {
-  if (uri === null) {
+export function deleteFile(path: string | null): void {
+  if (path === null) {
     return;
   }
   try {
-    const file = new File(uri);
+    const file = new File(evidenceFileUri(path));
     if (file.exists) {
       file.delete();
     }
@@ -75,9 +83,11 @@ export function deleteFile(uri: string | null): void {
 /**
  * Turns a captured photo into an evidence file (document 13.10): resized to a
  * useful size, compressed as JPEG, checked against RN-046 and moved out of the
- * cache into the persistent directory, with its thumbnail beside it. Nothing
- * is left behind on failure. The camera's own file is left alone, so a failed
- * attempt can be retried; the caller removes it once the evidence is saved.
+ * cache into the persistent directory, with its thumbnail beside it. The
+ * thumbnail is made from the resized copy, so the large original is decoded
+ * once. Nothing is left behind on failure. The camera's own file is left
+ * alone, so a failed attempt can be retried; the caller removes it once the
+ * evidence is saved.
  */
 export async function storePhoto(
   photo: CapturedPhoto,
@@ -86,30 +96,29 @@ export async function storePhoto(
   const rendered: File[] = [];
   try {
     const full = await render(photo, PHOTO_MAX_EDGE, PHOTO_QUALITY);
-    rendered.push(full);
-    const thumbnail = await render(photo, THUMBNAIL_MAX_EDGE, THUMBNAIL_QUALITY);
-    rendered.push(thumbnail);
+    rendered.push(full.file);
+    const thumbnail = await render(
+      { uri: full.file.uri, width: full.width, height: full.height },
+      THUMBNAIL_MAX_EDGE,
+      THUMBNAIL_QUALITY
+    );
+    rendered.push(thumbnail.file);
 
-    const sizeBytes = full.size;
+    const sizeBytes = full.file.size;
     const rejection = checkPhoto(PHOTO_MIME_TYPE, sizeBytes);
     if (rejection !== null || sizeBytes === null) {
       rendered.forEach((file) => deleteFile(file.uri));
       return fail({ kind: 'rejected', reason: rejection ?? 'EMPTY' });
     }
 
-    const directory = inspectionDirectory(target.inspectionId);
-    directory.create({ intermediates: true, idempotent: true });
-    const photoFile = new File(directory, `${target.evidenceId}.jpg`);
-    const thumbnailFile = new File(directory, `${target.evidenceId}-thumb.jpg`);
-    full.move(photoFile);
-    thumbnail.move(thumbnailFile);
+    const folder = `${EVIDENCE_ROOT}/${target.inspectionId}`;
+    const photoPath = `${folder}/${target.evidenceId}.jpg`;
+    const thumbnailPath = `${folder}/${target.evidenceId}-thumb.jpg`;
+    new Directory(Paths.document, folder).create({ intermediates: true, idempotent: true });
+    full.file.move(new File(Paths.document, photoPath));
+    thumbnail.file.move(new File(Paths.document, thumbnailPath));
 
-    return ok({
-      photoUri: full.uri,
-      thumbnailUri: thumbnail.uri,
-      mimeType: PHOTO_MIME_TYPE,
-      sizeBytes,
-    });
+    return ok({ photoPath, thumbnailPath, mimeType: PHOTO_MIME_TYPE, sizeBytes });
   } catch {
     rendered.forEach((file) => deleteFile(file.uri));
     return fail({ kind: 'storage' });

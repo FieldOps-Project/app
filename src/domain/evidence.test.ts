@@ -1,6 +1,7 @@
 import {
   checkPhoto,
   EVIDENCE_DESCRIPTION_MAX,
+  evidenceUploadState,
   fitWithin,
   normalizeDescription,
   PHOTO_MAX_BYTES,
@@ -49,5 +50,14 @@ describe('normalizeDescription', () => {
     expect(normalizeDescription('x'.repeat(EVIDENCE_DESCRIPTION_MAX + 50))).toHaveLength(
       EVIDENCE_DESCRIPTION_MAX
     );
+  });
+});
+
+describe('evidenceUploadState', () => {
+  it('tells a refused upload apart from one still waiting', () => {
+    expect(evidenceUploadState('aguardando-envio')).toBe('waiting');
+    expect(evidenceUploadState('falha')).toBe('failed');
+    expect(evidenceUploadState('conflito')).toBe('failed');
+    expect(evidenceUploadState('enviado')).toBe('sent');
   });
 });
