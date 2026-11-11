@@ -5,7 +5,10 @@ import { create, type ReactTestRenderer } from 'react-test-renderer';
 import type { InspectionDetailState } from '@/application/inspections/use-inspection-detail';
 import { Button } from '@/design-system/components/button';
 import { Input } from '@/design-system/components/input';
-import type { EquipmentIdentification } from '@/domain/equipment-identification';
+import {
+  EQUIPMENT_CODE_MAX,
+  type EquipmentIdentification,
+} from '@/domain/equipment-identification';
 import type { InspectionDetail, InspectionEquipment } from '@/domain/inspection';
 import { ScannerScreen } from '@/features/scanner/screens/scanner-screen';
 
@@ -27,11 +30,24 @@ const IDLE = {
 };
 const mockIdentify: { current: typeof IDLE } = { current: IDLE };
 const mockDetail: { current: InspectionDetailState } = { current: { state: 'not-found' } };
+const mockDispatch = jest.fn();
+type LeaveCallback = (options: { data: { action: { type: string } } }) => void;
+const mockLeaveGuard: { active: boolean; onLeave: LeaveCallback | null } = {
+  active: false,
+  onLeave: null,
+};
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack, replace: mockReplace, push: jest.fn() }),
   useLocalSearchParams: () => mockParams.current,
   useIsFocused: () => mockFocused.current,
+  useNavigation: () => ({ dispatch: mockDispatch }),
+}));
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: (active: boolean, onLeave: LeaveCallback) => {
+    mockLeaveGuard.active = active;
+    mockLeaveGuard.onLeave = onLeave;
+  },
 }));
 jest.mock('expo-camera', () => ({
   CameraView: () => null,
@@ -92,7 +108,41 @@ beforeEach(() => {
   mockPermission.current = GRANTED;
   mockIdentify.current = IDLE;
   mockDetail.current = { state: 'not-found' };
+  mockLeaveGuard.active = false;
+  mockLeaveGuard.onLeave = null;
 });
+
+const DIVERGENT: EquipmentIdentification = {
+  kind: 'divergent',
+  expected: COMPRESSOR,
+  scanned: {
+    equipment: GENERATOR,
+    inspections: [
+      {
+        id: 'insp-9',
+        title: 'Corretiva',
+        status: 'ASSIGNED',
+        scheduledFor: '2026-08-12T13:00:00Z',
+      },
+    ],
+  },
+};
+
+function showDivergence() {
+  mockParams.current = { inspectionId: 'insp-1' };
+  mockDetail.current = {
+    state: 'ready',
+    detail: { id: 'insp-1', equipment: COMPRESSOR } as unknown as InspectionDetail,
+  } as InspectionDetailState;
+  mockIdentify.current = { ...IDLE, data: DIVERGENT };
+  return render();
+}
+
+function leave() {
+  const action = { type: 'GO_BACK' };
+  act(() => mockLeaveGuard.onLeave?.({ data: { action } }));
+  return action;
+}
 
 describe('scanner', () => {
   it('handles a code once per reading cycle, however often the camera reports it', () => {
@@ -107,6 +157,19 @@ describe('scanner', () => {
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
     expect(mockMutate).toHaveBeenCalledWith({ code: 'EQP-001', source: 'camera' });
+  });
+
+  it('answers every code the camera reads, even one that cannot be an equipment code', () => {
+    const screen = render();
+    const huge = 'x'.repeat(EQUIPMENT_CODE_MAX + 1);
+
+    act(() => {
+      camera(screen)?.props.onBarcodeScanned({ data: huge });
+      camera(screen)?.props.onBarcodeScanned({ data: huge });
+    });
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockMutate).toHaveBeenCalledWith({ code: huge, source: 'camera' });
   });
 
   it('starts a new cycle only when the technician reads again', () => {
@@ -166,7 +229,14 @@ describe('scanner', () => {
 
     expect(texts(screen)).toContain('Permitir nas configurações');
     expect(camera(screen)).toBeUndefined();
-    expect(mockMutate).toHaveBeenCalledWith({ code: 'PAT-1', source: 'manual' });
+    expect(mockMutate).toHaveBeenCalledWith({ code: '  PAT-1 ', source: 'manual' });
+  });
+
+  it('keeps what the technician types exactly as typed', () => {
+    mockPermission.current = { granted: false, status: 'denied', canAskAgain: false };
+    const screen = render();
+
+    expect(screen.root.findByType(Input).props.autoCapitalize).toBe('none');
   });
 
   it('waits for the inspection before comparing what is read with what it expects', () => {
@@ -190,31 +260,59 @@ describe('result', () => {
     expect(texts(screen)).toContain('sem conexão');
   });
 
-  it('shows both equipments on a divergence and goes on only after an explicit confirmation', () => {
-    mockParams.current = { inspectionId: 'insp-1' };
-    mockDetail.current = {
-      state: 'ready',
-      detail: { id: 'insp-1', equipment: COMPRESSOR } as unknown as InspectionDetail,
-    } as InspectionDetailState;
-    mockIdentify.current = {
-      ...IDLE,
-      data: {
-        kind: 'divergent',
-        expected: COMPRESSOR,
-        read: { equipment: GENERATOR, inspections: [] },
-      },
-    };
+  it('shows both equipments on a divergence and leaves only after an explicit confirmation', () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const screen = showDivergence();
 
-    const screen = render();
     press(screen, 'Seguir com o equipamento previsto');
+    const action = leave();
 
     expect(texts(screen)).toContain('Compressor 01');
     expect(texts(screen)).toContain('Gerador 02');
-    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockLeaveGuard.active).toBe(true);
+    expect(mockBack).toHaveBeenCalled();
+    expect(mockDispatch).not.toHaveBeenCalled();
     const buttons = alert.mock.calls[0]?.[2] ?? [];
     act(() => buttons.find((entry) => entry.text === 'Estou no equipamento previsto')?.onPress?.());
-    expect(mockBack).toHaveBeenCalled();
+    expect(mockDispatch).toHaveBeenCalledWith(action);
+  });
+
+  it('asks the same confirmation when the technician leaves by the back button', () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    showDivergence();
+
+    leave();
+    const buttons = alert.mock.calls[0]?.[2] ?? [];
+    act(() => buttons.find((entry) => entry.text === 'Cancelar')?.onPress?.());
+
+    expect(alert).toHaveBeenCalledWith(
+      'Seguir mesmo assim?',
+      expect.any(String),
+      expect.any(Array)
+    );
+    expect(mockDispatch).not.toHaveBeenCalled();
+  });
+
+  it('opens an inspection of the scanned equipment without asking about the expected one', () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const screen = showDivergence();
+
+    const link = screen.root.findAll(
+      (node) => node.props.accessibilityLabel === 'Abrir Corretiva' && node.props.onPress
+    )[0];
+    act(() => link?.props.onPress());
+    const action = leave();
+
+    expect(mockReplace).toHaveBeenCalled();
+    expect(alert).not.toHaveBeenCalled();
+    expect(mockDispatch).toHaveBeenCalledWith(action);
+  });
+
+  it('lets the technician leave freely when there is no divergence', () => {
+    mockIdentify.current = { ...IDLE, data: { kind: 'not-found', server: 'answered' } };
+    render();
+
+    expect(mockLeaveGuard.active).toBe(false);
   });
 
   it('opens one of the equipment inspections', () => {

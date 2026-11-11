@@ -1,17 +1,16 @@
 import type { EquipmentMatch } from '@/domain/equipment-identification';
-import { isInspectionStatus } from '@/domain/inspection';
 import { getDatabase } from '@/infrastructure/database/database';
+import {
+  toEquipment,
+  toInspectionStatus,
+  type EquipmentColumns,
+} from '@/infrastructure/repositories/inspection-rows';
 
-interface InspectionEquipmentRow {
+interface InspectionEquipmentRow extends EquipmentColumns {
   id: string;
   title: string;
   status: string;
   scheduled_for: string;
-  equipment_id: string;
-  equipment_name: string | null;
-  equipment_qr_code: string | null;
-  equipment_asset_number: string | null;
-  equipment_serial_number: string | null;
 }
 
 const COLUMNS = `id, title, status, scheduled_for, equipment_id, equipment_name, equipment_qr_code,
@@ -24,17 +23,11 @@ function toMatch(rows: readonly InspectionEquipmentRow[]): EquipmentMatch | null
   }
   const sameEquipment = rows.filter((row) => row.equipment_id === first.equipment_id);
   return {
-    equipment: {
-      id: first.equipment_id,
-      name: first.equipment_name ?? '',
-      qrCode: first.equipment_qr_code,
-      assetNumber: first.equipment_asset_number,
-      serialNumber: first.equipment_serial_number,
-    },
+    equipment: toEquipment(first),
     inspections: sameEquipment.map((row) => ({
       id: row.id,
       title: row.title,
-      status: isInspectionStatus(row.status) ? row.status : 'CANCELED',
+      status: toInspectionStatus(row.status),
       scheduledFor: row.scheduled_for,
     })),
   };
