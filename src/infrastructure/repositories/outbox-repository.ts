@@ -8,14 +8,44 @@ import { writeTransaction } from '@/infrastructure/database/write-transaction';
  * becomes, or updates, one operation here; the synchronization reads them in
  * order and sends them with their idempotent id.
  *
- * Sprint 4 brings the table forward so starting and completing survive a
- * restart offline. Batching, dependency ordering and retry policy are card
- * #24's scope.
+ * The queue lives in SQLite, so it outlives closing the app and restarting
+ * the phone (RN-066). An operation id is generated once and kept through
+ * every retry (RN-067); a failure marks only its own operation (RN-070); an
+ * operation declares the ones it must wait for (RN-069). Batching and the
+ * retry policy are card #24's scope.
  */
 
-export type OperationEntity = 'INSPECTION' | 'RESPONSE';
+export type OperationEntity = 'INSPECTION' | 'RESPONSE' | 'EVIDENCE' | 'NON_CONFORMITY';
 
-export type OperationType = 'CREATE' | 'UPDATE' | 'TRANSITION';
+export type OperationType = 'CREATE' | 'UPDATE' | 'DELETE_LOGICAL' | 'TRANSITION' | 'UPLOAD';
+
+/** Local tables of the records an operation can change, by entity. */
+const ENTITY_TABLES: Partial<Record<OperationEntity, string>> = {
+  RESPONSE: 'inspection_responses',
+  EVIDENCE: 'evidences',
+  NON_CONFORMITY: 'non_conformities',
+};
+
+const MAX_ERROR_LENGTH = 300;
+
+/**
+ * The last line before an error reaches `last_error` and the screens: drops
+ * anything shaped like a credential (a bearer token, a JWT, a `token=` or
+ * `password=` pair), flattens whitespace and caps the length. Callers already
+ * pass business wording; this keeps a careless message from storing a secret.
+ */
+export function sanitizeSyncError(error: string): string {
+  const cleaned = error
+    .replace(/bearer\s+[\w.~+/-]+=*/gi, 'Bearer [removido]')
+    .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]*/g, '[removido]')
+    .replace(
+      /\b(access_?token|refresh_?token|token|password|senha|secret)\b\s*[:=]\s*("[^"]*"|\S+)/gi,
+      '$1=[removido]'
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned.length > MAX_ERROR_LENGTH ? `${cleaned.slice(0, MAX_ERROR_LENGTH - 1)}…` : cleaned;
+}
 
 export type OperationStatus = 'PENDING' | 'PROCESSING' | 'FAILED' | 'CONFLICT' | 'COMPLETED';
 
@@ -81,7 +111,9 @@ function toQueuedOperation(row: OperationRow): QueuedOperation {
  * editing an answer five times offline sends it once. Only operations at rest
  * are folded: PENDING, or FAILED, whose new payload is the technician's fix
  * and goes back to PENDING. A PROCESSING one may already have reached the
- * server. State transitions are never folded; each one is its own step.
+ * server. Only data edits (CREATE, UPDATE) fold, and the folded operation
+ * keeps its id and its type; state transitions, uploads and removals are
+ * each their own step.
  *
  * Runs on the caller's transaction, so the record and its operation are saved
  * together or not at all.
@@ -91,11 +123,12 @@ export async function enqueueOperation(
   operation: NewOperation,
   now: string
 ): Promise<void> {
-  if (operation.operationType !== 'TRANSITION') {
+  if (operation.operationType === 'CREATE' || operation.operationType === 'UPDATE') {
     const folded = await transaction.runAsync(
       `UPDATE sync_operations
           SET payload_json = ?, status = 'PENDING', last_error = NULL, updated_at = ?
-        WHERE entity_type = ? AND entity_id = ? AND status IN ('PENDING', 'FAILED')`,
+        WHERE entity_type = ? AND entity_id = ? AND status IN ('PENDING', 'FAILED')
+          AND operation_type IN ('CREATE', 'UPDATE')`,
       JSON.stringify(operation.payload),
       now,
       operation.entityType,
@@ -137,6 +170,55 @@ export async function openOperationIds(
     inspectionId
   );
   return rows.map((row) => row.operation_id);
+}
+
+/**
+ * Ids of the operations still owed for one record — what an upload must wait
+ * for when its evidence belongs to an answer not yet created on the server
+ * (document 10.13.3).
+ */
+export async function openOperationIdsFor(
+  transaction: SQLiteDatabase,
+  entityType: OperationEntity,
+  entityId: string
+): Promise<string[]> {
+  const rows = await transaction.getAllAsync<{ operation_id: string }>(
+    `SELECT operation_id FROM sync_operations
+      WHERE entity_type = ? AND entity_id = ? AND status <> 'COMPLETED'
+      ORDER BY created_at, rowid`,
+    entityType,
+    entityId
+  );
+  return rows.map((row) => row.operation_id);
+}
+
+/**
+ * A record removed on the device before its operations were sent: those at
+ * rest (PENDING, FAILED) leave the queue, so nothing is sent for a record
+ * that no longer exists. Reports whether any operation had already been taken
+ * for sending or confirmed, in which case the server may hold the record and
+ * the caller must queue its removal instead of forgetting it.
+ *
+ * A dependency on a cancelled operation no longer holds anything back: the
+ * synchronization only waits for ids still in the queue.
+ */
+export async function cancelPendingOperations(
+  transaction: SQLiteDatabase,
+  entityType: OperationEntity,
+  entityId: string
+): Promise<{ reachedServer: boolean }> {
+  await transaction.runAsync(
+    `DELETE FROM sync_operations
+      WHERE entity_type = ? AND entity_id = ? AND status IN ('PENDING', 'FAILED')`,
+    entityType,
+    entityId
+  );
+  const remaining = await transaction.getFirstAsync<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM sync_operations WHERE entity_type = ? AND entity_id = ?`,
+    entityType,
+    entityId
+  );
+  return { reachedServer: (remaining?.total ?? 0) > 0 };
 }
 
 const OPERATION_COLUMNS = `operation_id, entity_type, entity_id, inspection_id, operation_type,
@@ -220,7 +302,7 @@ export async function releaseInterruptedOperations(
 
 /**
  * Closes the operation and, when it was the last one owed for its records,
- * marks the response and the inspection as confirmed by the server.
+ * marks the record and the inspection as confirmed by the server.
  */
 export async function markCompleted(operation: QueuedOperation, now: string): Promise<void> {
   await writeTransaction(async (transaction) => {
@@ -233,15 +315,17 @@ export async function markCompleted(operation: QueuedOperation, now: string): Pr
       operation.operationId
     );
 
-    if (operation.entityType === 'RESPONSE') {
+    const table = ENTITY_TABLES[operation.entityType];
+    if (table !== undefined) {
       await transaction.runAsync(
-        `UPDATE inspection_responses
+        `UPDATE ${table}
             SET is_dirty = 0, local_sync_status = 'SYNCED', last_synced_at = ?, sync_error = NULL
           WHERE id = ? AND NOT EXISTS (
             SELECT 1 FROM sync_operations
-             WHERE entity_type = 'RESPONSE' AND entity_id = ? AND status <> 'COMPLETED')`,
+             WHERE entity_type = ? AND entity_id = ? AND status <> 'COMPLETED')`,
         now,
         operation.entityId,
+        operation.entityType,
         operation.entityId
       );
     }
@@ -261,16 +345,17 @@ export async function markCompleted(operation: QueuedOperation, now: string): Pr
 /**
  * Records a refusal. The operation stays in the queue — nothing the
  * technician did is dropped — and its records show the failure (RN-070).
- * `error` must already be sanitized: business wording or a failure kind,
- * never a token or a payload.
+ * No other operation is touched. `error` should be business wording or a
+ * failure kind; it is sanitized again before it is stored.
  */
 export async function markFailed(
   operation: QueuedOperation,
   status: 'FAILED' | 'CONFLICT',
-  error: string,
+  reason: string,
   now: string
 ): Promise<void> {
   const localStatus = status === 'CONFLICT' ? 'CONFLICT' : 'ERROR';
+  const error = sanitizeSyncError(reason);
 
   await writeTransaction(async (transaction) => {
     await transaction.runAsync(
@@ -280,9 +365,10 @@ export async function markFailed(
       now,
       operation.operationId
     );
-    if (operation.entityType === 'RESPONSE') {
+    const table = ENTITY_TABLES[operation.entityType];
+    if (table !== undefined) {
       await transaction.runAsync(
-        `UPDATE inspection_responses SET local_sync_status = ?, sync_error = ? WHERE id = ?`,
+        `UPDATE ${table} SET local_sync_status = ?, sync_error = ? WHERE id = ?`,
         localStatus,
         error,
         operation.entityId
@@ -306,9 +392,11 @@ export async function markFailed(
  */
 export async function reopenAfterRefusedSubmit(
   operation: QueuedOperation,
-  error: string,
+  reason: string,
   now: string
 ): Promise<void> {
+  const error = sanitizeSyncError(reason);
+
   await writeTransaction(async (transaction) => {
     await transaction.runAsync(
       'DELETE FROM sync_operations WHERE operation_id = ?',

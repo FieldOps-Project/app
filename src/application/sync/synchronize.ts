@@ -81,6 +81,16 @@ function send(
       });
 }
 
+/**
+ * Uploads and removals of evidences wait in the queue until the file
+ * synchronization exists (card #25, backend#27). Until then they hold their
+ * inspection back like any open operation, so the submit never overtakes a
+ * file it depends on.
+ */
+function canSendYet(operation: QueuedOperation): boolean {
+  return operation.entityType === 'INSPECTION' || operation.entityType === 'RESPONSE';
+}
+
 function isSubmit(operation: QueuedOperation): boolean {
   return (
     operation.entityType === 'INSPECTION' &&
@@ -130,7 +140,7 @@ async function run(
   let refused = 0;
 
   for (const listed of queue) {
-    if (listed.status === 'CONFLICT') {
+    if (listed.status === 'CONFLICT' || !canSendYet(listed)) {
       held.add(listed.inspectionId);
       continue;
     }

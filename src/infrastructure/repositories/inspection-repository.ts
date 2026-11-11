@@ -6,8 +6,10 @@ import type { InspectionDetail, InspectionStatus, InspectionSummary } from '@/do
 import { getDatabase } from '@/infrastructure/database/database';
 import { writeTransaction } from '@/infrastructure/database/write-transaction';
 import {
+  cancelPendingOperations,
   enqueueOperation,
   openOperationIds,
+  openOperationIdsFor,
 } from '@/infrastructure/repositories/outbox-repository';
 import {
   toChecklistItem,
@@ -71,7 +73,8 @@ export async function findInspection(
     ),
     database.getAllAsync<{ inspection_item_id: string; total: number }>(
       `SELECT inspection_item_id, COUNT(*) AS total FROM evidences
-        WHERE inspection_id = ? GROUP BY inspection_item_id`,
+        WHERE inspection_id = ? AND deleted_locally = 0 AND inspection_item_id IS NOT NULL
+        GROUP BY inspection_item_id`,
       inspectionId
     ),
   ]);
@@ -502,29 +505,185 @@ export async function saveResponse({
   });
 }
 
+/** The file kept on the device for an evidence, and the operation that will upload it. */
+export interface EvidenceFile {
+  readonly operationId: string;
+  /** In the app's persistent directory, never the cache (RN-047). */
+  readonly localUri: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly originalFileName?: string | null;
+  readonly description?: string | null;
+}
+
 export interface RegisterEvidenceCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;
   readonly inspectionItemId: string;
   readonly evidenceId: string;
   readonly createdAtDevice: string;
+  /** Absent while the camera (card #17) is not in place: the record alone satisfies RN-039. */
+  readonly file?: EvidenceFile;
 }
 
 /**
- * Records that an evidence exists for an item, so RN-039 can be checked. The
- * file and its upload operation arrive with the camera (card #17).
+ * Document 10.14.3: the evidence is stored on the device and, when it has a
+ * file, its upload joins the outbox. The evidence is linked to the item's
+ * answer when there is one, and the upload waits for every operation still
+ * owed for that answer — the server must have the answer before the file
+ * that proves it (document 10.13.3). Nothing about the file's contents goes
+ * into the queue, only its metadata.
  */
 export async function registerEvidence(command: RegisterEvidenceCommand): Promise<void> {
+  const now = command.createdAtDevice;
+
   await writeTransaction(async (transaction) => {
-    await lockInspection(transaction, command.ownerUserId, command.inspectionId, ['IN_PROGRESS']);
+    const { base_version } = await lockInspection(
+      transaction,
+      command.ownerUserId,
+      command.inspectionId,
+      ['IN_PROGRESS']
+    );
+    const response = await transaction.getFirstAsync<{ id: string }>(
+      'SELECT id FROM inspection_responses WHERE inspection_item_id = ? AND inspection_id = ?',
+      command.inspectionItemId,
+      command.inspectionId
+    );
+    const responseId = response?.id ?? null;
+    const file = command.file;
+
     await transaction.runAsync(
-      `INSERT INTO evidences (id, inspection_id, inspection_item_id, created_at_device)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO evidences (
+         id, inspection_id, inspection_item_id, response_id, local_uri, original_file_name,
+         mime_type, size_bytes, description, created_at_device, base_version, local_updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       command.evidenceId,
       command.inspectionId,
       command.inspectionItemId,
-      command.createdAtDevice
+      responseId,
+      file?.localUri ?? null,
+      file?.originalFileName ?? null,
+      file?.mimeType ?? null,
+      file?.sizeBytes ?? null,
+      file?.description ?? null,
+      command.createdAtDevice,
+      base_version,
+      now
     );
+
+    if (file === undefined) {
+      return;
+    }
+    const dependencyIds =
+      responseId === null ? [] : await openOperationIdsFor(transaction, 'RESPONSE', responseId);
+    await markInspectionDirty(transaction, command.inspectionId, now);
+    await enqueueOperation(
+      transaction,
+      {
+        operationId: file.operationId,
+        ownerUserId: command.ownerUserId,
+        entityType: 'EVIDENCE',
+        entityId: command.evidenceId,
+        inspectionId: command.inspectionId,
+        operationType: 'UPLOAD',
+        baseVersion: base_version,
+        payload: {
+          id: command.evidenceId,
+          inspectionItemId: command.inspectionItemId,
+          responseId,
+          type: 'PHOTO',
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+          originalFileName: file.originalFileName ?? null,
+          description: file.description ?? null,
+          capturedAtDevice: command.createdAtDevice,
+        },
+        dependencyIds,
+      },
+      now
+    );
+  });
+}
+
+export interface DiscardEvidenceCommand {
+  readonly ownerUserId: string;
+  readonly inspectionId: string;
+  readonly evidenceId: string;
+  /** Used only when the server may already hold the evidence. */
+  readonly operationId: string;
+  readonly discardedAtDevice: string;
+}
+
+export type DiscardedEvidence =
+  /** Never sent: the record and its upload are gone; the caller may delete the file. */
+  | { readonly outcome: 'removed'; readonly localUri: string | null }
+  /** Already taken for sending: hidden on the device, removal queued, file kept. */
+  | { readonly outcome: 'removal-queued' }
+  | { readonly outcome: 'not-found' };
+
+/**
+ * The technician removes an evidence before completing. If its upload never
+ * left the device, the pending operation is cancelled with it and nothing is
+ * sent. If the upload was already taken for sending or confirmed, the server
+ * may hold the file: the evidence is hidden and marked `deleted_locally`, and
+ * a removal is queued after the upload, so the server's audit trail records
+ * it (backend#22).
+ */
+export async function discardEvidence(command: DiscardEvidenceCommand): Promise<DiscardedEvidence> {
+  const now = command.discardedAtDevice;
+
+  return writeTransaction(async (transaction) => {
+    const { base_version } = await lockInspection(
+      transaction,
+      command.ownerUserId,
+      command.inspectionId,
+      ['IN_PROGRESS']
+    );
+    const evidence = await transaction.getFirstAsync<{ local_uri: string | null }>(
+      `SELECT local_uri FROM evidences
+        WHERE id = ? AND inspection_id = ? AND deleted_locally = 0`,
+      command.evidenceId,
+      command.inspectionId
+    );
+    if (evidence === null) {
+      return { outcome: 'not-found' } as const;
+    }
+
+    const { reachedServer } = await cancelPendingOperations(
+      transaction,
+      'EVIDENCE',
+      command.evidenceId
+    );
+    if (!reachedServer) {
+      await transaction.runAsync('DELETE FROM evidences WHERE id = ?', command.evidenceId);
+      return { outcome: 'removed', localUri: evidence.local_uri } as const;
+    }
+
+    const dependencyIds = await openOperationIdsFor(transaction, 'EVIDENCE', command.evidenceId);
+    await transaction.runAsync(
+      `UPDATE evidences SET deleted_locally = 1, is_dirty = 1, local_sync_status = 'PENDING',
+              local_updated_at = ?
+        WHERE id = ?`,
+      now,
+      command.evidenceId
+    );
+    await markInspectionDirty(transaction, command.inspectionId, now);
+    await enqueueOperation(
+      transaction,
+      {
+        operationId: command.operationId,
+        ownerUserId: command.ownerUserId,
+        entityType: 'EVIDENCE',
+        entityId: command.evidenceId,
+        inspectionId: command.inspectionId,
+        operationType: 'DELETE_LOGICAL',
+        baseVersion: base_version,
+        payload: { id: command.evidenceId },
+        dependencyIds,
+      },
+      now
+    );
+    return { outcome: 'removal-queued' } as const;
   });
 }
 
