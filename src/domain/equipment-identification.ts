@@ -20,7 +20,11 @@ export type EquipmentIdentification =
       readonly read: EquipmentMatch;
     }
   | { readonly kind: 'found'; readonly match: EquipmentMatch }
-  | { readonly kind: 'not-found'; readonly offline: boolean };
+  | { readonly kind: 'not-found'; readonly server: ServerLookup };
+
+export type ServerLookup = 'answered' | 'offline' | 'failed';
+
+export type CodeSource = 'camera' | 'manual';
 
 export const EQUIPMENT_CODE_MAX = 120;
 
@@ -32,10 +36,10 @@ export function normalizeEquipmentCode(raw: string): string | null {
 export function identifyEquipment(
   expected: InspectionEquipment | null,
   match: EquipmentMatch | null,
-  offline: boolean
+  server: ServerLookup = 'answered'
 ): EquipmentIdentification {
   if (match === null) {
-    return { kind: 'not-found', offline };
+    return { kind: 'not-found', server };
   }
   if (expected === null) {
     return { kind: 'found', match };

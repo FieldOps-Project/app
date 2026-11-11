@@ -47,6 +47,10 @@ function inspection(overrides: Partial<MobileInspection>): MobileInspection {
   };
 }
 
+function camera(code: string) {
+  return { code, source: 'camera' as const };
+}
+
 function gateway(result: Awaited<ReturnType<EquipmentGateway['findIdByQrCode']>>) {
   return { findIdByQrCode: jest.fn(async () => result) };
 }
@@ -69,7 +73,7 @@ describe('identifyByCode', () => {
   it('finds the equipment on the device first, without asking the server', async () => {
     const api = gateway(ok('eq-1'));
 
-    const result = await identifyByCode(OWNER, 'EQP-001', null, api);
+    const result = await identifyByCode(OWNER, camera('EQP-001'), null, api);
 
     expect(result).toEqual({
       kind: 'found',
@@ -89,7 +93,12 @@ describe('identifyByCode', () => {
   });
 
   it('accepts the asset number typed by hand', async () => {
-    const result = await identifyByCode(OWNER, 'PAT-1', null, gateway(ok(null)));
+    const result = await identifyByCode(
+      OWNER,
+      { code: 'PAT-1', source: 'manual' },
+      null,
+      gateway(ok(null))
+    );
 
     expect(result).toMatchObject({ kind: 'found', match: { equipment: { id: 'eq-1' } } });
   });
@@ -98,11 +107,13 @@ describe('identifyByCode', () => {
     const generator = { ...COMPRESSOR, id: 'eq-2', name: 'Gerador 02', qrCode: 'EQP-002' };
     await saveDownloadedInspection(OWNER, inspection({ id: 'insp-2', equipment: generator }), NOW);
 
-    expect(await identifyByCode(OWNER, 'EQP-001', COMPRESSOR, gateway(ok(null)))).toEqual({
+    expect(await identifyByCode(OWNER, camera('EQP-001'), COMPRESSOR, gateway(ok(null)))).toEqual({
       kind: 'confirmed',
       equipment: COMPRESSOR,
     });
-    expect(await identifyByCode(OWNER, 'EQP-002', COMPRESSOR, gateway(ok(null)))).toMatchObject({
+    expect(
+      await identifyByCode(OWNER, camera('EQP-002'), COMPRESSOR, gateway(ok(null)))
+    ).toMatchObject({
       kind: 'divergent',
       expected: COMPRESSOR,
       read: { equipment: { id: 'eq-2' } },
@@ -110,28 +121,51 @@ describe('identifyByCode', () => {
   });
 
   it('asks the server for a code the device does not know, and shows it only when in scope', async () => {
-    const result = await identifyByCode(OWNER, 'EQP-NEW-LABEL', null, gateway(ok('eq-1')));
+    const result = await identifyByCode(OWNER, camera('EQP-NEW-LABEL'), null, gateway(ok('eq-1')));
 
     expect(result).toMatchObject({ kind: 'found', match: { equipment: { id: 'eq-1' } } });
   });
 
   it('never shows an equipment outside the technician scope, even with a valid code (RN-063)', async () => {
-    expect(await identifyByCode(OWNER, 'EQP-009', null, gateway(ok('eq-9')))).toEqual({
+    expect(await identifyByCode(OWNER, camera('EQP-009'), null, gateway(ok('eq-9')))).toEqual({
       kind: 'not-found',
-      offline: false,
+      server: 'answered',
     });
   });
 
   it('says the server could not be asked when offline', async () => {
     expect(
-      await identifyByCode(OWNER, 'EQP-404', null, gateway(fail({ kind: 'network' as const })))
-    ).toEqual({ kind: 'not-found', offline: true });
+      await identifyByCode(
+        OWNER,
+        camera('EQP-404'),
+        null,
+        gateway(fail({ kind: 'network' as const }))
+      )
+    ).toEqual({ kind: 'not-found', server: 'offline' });
+  });
+
+  it('reads only QR codes from the camera, never an asset number', async () => {
+    expect(await identifyByCode(OWNER, camera('PAT-1'), null, gateway(ok(null)))).toEqual({
+      kind: 'not-found',
+      server: 'answered',
+    });
+  });
+
+  it('tells a server failure apart from an unknown code', async () => {
+    expect(
+      await identifyByCode(
+        OWNER,
+        camera('EQP-404'),
+        null,
+        gateway(fail({ kind: 'server' as const }))
+      )
+    ).toEqual({ kind: 'not-found', server: 'failed' });
   });
 
   it('reports a code nobody knows', async () => {
-    expect(await identifyByCode(OWNER, 'EQP-404', null, gateway(ok(null)))).toEqual({
+    expect(await identifyByCode(OWNER, camera('EQP-404'), null, gateway(ok(null)))).toEqual({
       kind: 'not-found',
-      offline: false,
+      server: 'answered',
     });
   });
 });

@@ -9,9 +9,18 @@ import { colors } from '@/design-system/tokens/design-tokens';
 import type {
   EquipmentIdentification,
   EquipmentInspection,
+  ServerLookup,
 } from '@/domain/equipment-identification';
 import type { InspectionEquipment } from '@/domain/inspection';
 import { formatDateTime } from '@/utils/format-date';
+
+const NOT_FOUND_MESSAGE: Record<ServerLookup, string> = {
+  answered: 'Nenhum equipamento das suas inspeções tem este código.',
+  offline:
+    'Nenhuma das suas inspeções neste aparelho tem este código, e sem conexão não dá para consultar o servidor.',
+  failed:
+    'Nenhuma das suas inspeções neste aparelho tem este código, e o servidor não conseguiu responder agora. Tente de novo em instantes.',
+};
 
 export interface IdentificationResultProps {
   readonly result: EquipmentIdentification;
@@ -82,9 +91,7 @@ export function IdentificationResult({
       return (
         <Card title="Equipamento não localizado">
           <Notice icon="help-circle" tone="warning">
-            {result.offline
-              ? 'Nenhuma das suas inspeções neste aparelho tem este código, e sem conexão não dá para consultar o servidor.'
-              : 'Nenhum equipamento das suas inspeções tem este código.'}
+            {NOT_FOUND_MESSAGE[result.server]}
           </Notice>
           <Button label="Ler novamente" onPress={onScanAgain} />
         </Card>

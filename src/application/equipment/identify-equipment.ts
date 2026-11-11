@@ -1,40 +1,51 @@
 import { useMutation } from '@tanstack/react-query';
 
 import { useOwnerUserId } from '@/application/inspections/use-inspections';
-import { identifyEquipment, type EquipmentIdentification } from '@/domain/equipment-identification';
+import {
+  identifyEquipment,
+  type CodeSource,
+  type EquipmentIdentification,
+} from '@/domain/equipment-identification';
 import type { InspectionEquipment } from '@/domain/inspection';
 import { equipmentGateway, isNetworkFailure, type EquipmentGateway } from '@/infrastructure/api';
 import {
-  findEquipmentByCode,
+  findEquipmentByAssetNumber,
   findEquipmentById,
+  findEquipmentByQrCode,
 } from '@/infrastructure/repositories/equipment-repository';
+
+export interface EquipmentCode {
+  readonly code: string;
+  readonly source: CodeSource;
+}
 
 export async function identifyByCode(
   ownerUserId: string,
-  code: string,
+  { code, source }: EquipmentCode,
   expected: InspectionEquipment | null,
   gateway: EquipmentGateway
 ): Promise<EquipmentIdentification> {
-  const local = await findEquipmentByCode(ownerUserId, code);
+  const local =
+    (await findEquipmentByQrCode(ownerUserId, code)) ??
+    (source === 'manual' ? await findEquipmentByAssetNumber(ownerUserId, code) : null);
   if (local !== null) {
-    return identifyEquipment(expected, local, false);
+    return identifyEquipment(expected, local);
   }
 
   const remote = await gateway.findIdByQrCode(code);
   if (!remote.ok) {
-    return identifyEquipment(expected, null, isNetworkFailure(remote.error));
+    return identifyEquipment(expected, null, isNetworkFailure(remote.error) ? 'offline' : 'failed');
   }
   if (remote.value === null) {
-    return identifyEquipment(expected, null, false);
+    return identifyEquipment(expected, null);
   }
-  const inScope = await findEquipmentById(ownerUserId, remote.value);
-  return identifyEquipment(expected, inScope, false);
+  return identifyEquipment(expected, await findEquipmentById(ownerUserId, remote.value));
 }
 
 export function useIdentifyEquipment(expected: InspectionEquipment | null) {
   const ownerUserId = useOwnerUserId();
 
-  return useMutation<EquipmentIdentification, Error, string>({
+  return useMutation<EquipmentIdentification, Error, EquipmentCode>({
     mutationFn: (code) => identifyByCode(ownerUserId, code, expected, equipmentGateway),
   });
 }

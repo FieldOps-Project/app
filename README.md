@@ -129,8 +129,10 @@ API --(download)--> SQLite <--(leitura)-- telas
   inspeções dele, e o detalhe da inspeção, que compara o equipamento lido com o previsto.
 - Cada código é processado uma única vez por ciclo de leitura. Para ler de novo, o técnico toca em
   "Ler novamente". A câmera só fica ligada enquanto a tela está em foco.
-- A busca acontece primeiro nas inspeções baixadas no aparelho, pelo código do QR ou pelo número de
-  patrimônio. Se não achar, o app consulta `GET /api/v1/equipment/by-qr/{código}`.
+- A busca acontece primeiro nas inspeções baixadas no aparelho, pelo código do QR. Na digitação
+  manual também vale o número de patrimônio. Se não achar, o app consulta
+  `GET /api/v1/equipment/by-qr/{código}`. Sem conexão ou com erro do servidor, a mensagem diz isso,
+  em vez de dar o código como desconhecido.
 - **Escopo (RN-063)**: o endpoint devolve qualquer equipamento a qualquer usuário autenticado. Por
   isso o app só mostra o resultado se o equipamento pertence a uma inspeção do técnico. Fora disso,
   aparece a mesma mensagem de equipamento não localizado.

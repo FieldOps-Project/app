@@ -20,9 +20,12 @@ const mockReplace = jest.fn();
 const mockPermission: { current: unknown } = { current: null };
 const mockMutate = jest.fn();
 const mockReset = jest.fn();
-const mockIdentify: {
-  current: { isPending: boolean; data: EquipmentIdentification | undefined };
-} = { current: { isPending: false, data: undefined } };
+const IDLE = {
+  isPending: false,
+  isError: false,
+  data: undefined as EquipmentIdentification | undefined,
+};
+const mockIdentify: { current: typeof IDLE } = { current: IDLE };
 const mockDetail: { current: InspectionDetailState } = { current: { state: 'not-found' } };
 
 jest.mock('expo-router', () => ({
@@ -87,7 +90,7 @@ beforeEach(() => {
   mockParams.current = {};
   mockFocused.current = true;
   mockPermission.current = GRANTED;
-  mockIdentify.current = { isPending: false, data: undefined };
+  mockIdentify.current = IDLE;
   mockDetail.current = { state: 'not-found' };
 });
 
@@ -103,21 +106,47 @@ describe('scanner', () => {
     });
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockMutate).toHaveBeenCalledWith('EQP-001');
+    expect(mockMutate).toHaveBeenCalledWith({ code: 'EQP-001', source: 'camera' });
   });
 
-  it('starts a new cycle when the technician reads again', () => {
-    mockIdentify.current = { isPending: false, data: { kind: 'not-found', offline: false } };
+  it('starts a new cycle only when the technician reads again', () => {
     const screen = render();
-    camera(screen);
+    act(() => camera(screen)?.props.onBarcodeScanned({ data: 'EQP-001' }));
+    mockIdentify.current = { ...IDLE, data: { kind: 'not-found', server: 'answered' } };
+    act(() => screen.update(<ScannerScreen />));
 
     press(screen, 'Ler novamente');
-    mockIdentify.current = { isPending: false, data: undefined };
+    mockIdentify.current = IDLE;
     act(() => screen.update(<ScannerScreen />));
     act(() => camera(screen)?.props.onBarcodeScanned({ data: 'EQP-002' }));
 
     expect(mockReset).toHaveBeenCalled();
-    expect(mockMutate).toHaveBeenCalledWith('EQP-002');
+    expect(mockMutate).toHaveBeenNthCalledWith(1, { code: 'EQP-001', source: 'camera' });
+    expect(mockMutate).toHaveBeenNthCalledWith(2, { code: 'EQP-002', source: 'camera' });
+  });
+
+  it('keeps the scanner usable after a lookup that failed on the device', () => {
+    const screen = render();
+    act(() => camera(screen)?.props.onBarcodeScanned({ data: 'EQP-001' }));
+    mockIdentify.current = { ...IDLE, isError: true };
+    act(() => screen.update(<ScannerScreen />));
+
+    press(screen, 'Tentar de novo');
+    mockIdentify.current = IDLE;
+    act(() => screen.update(<ScannerScreen />));
+    act(() => camera(screen)?.props.onBarcodeScanned({ data: 'EQP-001' }));
+
+    expect(mockMutate).toHaveBeenCalledTimes(2);
+  });
+
+  it('never compares against nothing when the inspection cannot be opened', () => {
+    mockParams.current = { inspectionId: 'insp-1' };
+    mockDetail.current = { state: 'not-found' };
+
+    const screen = render();
+
+    expect(camera(screen)).toBeUndefined();
+    expect(texts(screen)).toContain('Inspeção indisponível');
   });
 
   it('turns the camera off when the screen is left', () => {
@@ -137,7 +166,7 @@ describe('scanner', () => {
 
     expect(texts(screen)).toContain('Permitir nas configurações');
     expect(camera(screen)).toBeUndefined();
-    expect(mockMutate).toHaveBeenCalledWith('PAT-1');
+    expect(mockMutate).toHaveBeenCalledWith({ code: 'PAT-1', source: 'manual' });
   });
 
   it('waits for the inspection before comparing what is read with what it expects', () => {
@@ -153,7 +182,7 @@ describe('scanner', () => {
 
 describe('result', () => {
   it('says clearly when the equipment is unknown, and why the server was not asked', () => {
-    mockIdentify.current = { isPending: false, data: { kind: 'not-found', offline: true } };
+    mockIdentify.current = { ...IDLE, data: { kind: 'not-found', server: 'offline' } };
 
     const screen = render();
 
@@ -168,7 +197,7 @@ describe('result', () => {
       detail: { id: 'insp-1', equipment: COMPRESSOR } as unknown as InspectionDetail,
     } as InspectionDetailState;
     mockIdentify.current = {
-      isPending: false,
+      ...IDLE,
       data: {
         kind: 'divergent',
         expected: COMPRESSOR,
@@ -190,7 +219,7 @@ describe('result', () => {
 
   it('opens one of the equipment inspections', () => {
     mockIdentify.current = {
-      isPending: false,
+      ...IDLE,
       data: {
         kind: 'found',
         match: {

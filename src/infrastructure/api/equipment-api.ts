@@ -4,7 +4,7 @@ import { fail, ok, type Result } from '@/domain/result';
 import type { ApiFailure } from '@/infrastructure/api/api-failure';
 import { request } from '@/infrastructure/api/http-client';
 
-export function equipmentByQrPath(qrCode: string): string {
+function equipmentByQrPath(qrCode: string): string {
   return `/api/v1/equipment/by-qr/${encodeURIComponent(qrCode)}`;
 }
 

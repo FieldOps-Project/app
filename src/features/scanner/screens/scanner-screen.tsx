@@ -7,11 +7,16 @@ import { useIdentifyEquipment } from '@/application/equipment/identify-equipment
 import { useInspectionDetail } from '@/application/inspections/use-inspection-detail';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
+import { ErrorState } from '@/design-system/components/error-state';
 import { Input } from '@/design-system/components/input';
 import { Loading } from '@/design-system/components/loading';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
-import { EQUIPMENT_CODE_MAX, normalizeEquipmentCode } from '@/domain/equipment-identification';
+import {
+  EQUIPMENT_CODE_MAX,
+  normalizeEquipmentCode,
+  type CodeSource,
+} from '@/domain/equipment-identification';
 import { IdentificationResult } from '@/features/scanner/components/identification-result';
 
 export function ScannerScreen() {
@@ -23,19 +28,19 @@ export function ScannerScreen() {
   const identify = useIdentifyEquipment(expected);
   const [permission, requestPermission] = useCameraPermissions();
   const [typing, setTyping] = useState(false);
-  const accepted = useRef(false);
+  const cycleLocked = useRef(false);
 
-  function lookUp(raw: string) {
+  function lookUp(raw: string, source: CodeSource) {
     const code = normalizeEquipmentCode(raw);
-    if (code === null || accepted.current) {
+    if (code === null || cycleLocked.current) {
       return;
     }
-    accepted.current = true;
-    identify.mutate(code);
+    cycleLocked.current = true;
+    identify.mutate({ code, source });
   }
 
   function scanAgain() {
-    accepted.current = false;
+    cycleLocked.current = false;
     identify.reset();
   }
 
@@ -43,12 +48,38 @@ export function ScannerScreen() {
     router.replace({ pathname: '/inspections/[inspectionId]', params: { inspectionId: id } });
   }
 
-  if (inspectionId !== undefined && inspectionId !== '' && inspection.state === 'loading') {
+  const expectsEquipment = inspectionId !== undefined && inspectionId !== '';
+  if (expectsEquipment && inspection.state === 'loading') {
     return <Loading label="Carregando a inspeção..." />;
+  }
+  if (expectsEquipment && inspection.state !== 'ready') {
+    return (
+      <Screen edges={BELOW_HEADER_EDGES}>
+        <ErrorState
+          title="Inspeção indisponível"
+          description="Não foi possível abrir a inspeção para comparar o equipamento. Volte e tente de novo."
+          retryLabel="Voltar"
+          onRetry={() => router.back()}
+        />
+      </Screen>
+    );
   }
 
   if (identify.isPending) {
     return <Loading label="Procurando o equipamento..." />;
+  }
+
+  if (identify.isError) {
+    return (
+      <Screen edges={BELOW_HEADER_EDGES}>
+        <ErrorState
+          title="Não foi possível procurar o equipamento"
+          description="A busca falhou neste aparelho. Tente ler o código de novo."
+          retryLabel="Tentar de novo"
+          onRetry={scanAgain}
+        />
+      </Screen>
+    );
   }
 
   if (identify.data !== undefined) {
@@ -83,7 +114,7 @@ export function ScannerScreen() {
               style={{ flex: 1 }}
               facing="back"
               barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-              onBarcodeScanned={({ data }: BarcodeScanningResult) => lookUp(data)}
+              onBarcodeScanned={({ data }: BarcodeScanningResult) => lookUp(data, 'camera')}
             />
           ) : null}
         </View>
@@ -105,7 +136,7 @@ export function ScannerScreen() {
           <Button label="Digitar o código" variant="secondary" onPress={() => setTyping(true)} />
         </>
       ) : (
-        <ManualCodeForm onSubmit={lookUp} />
+        <ManualCodeForm onSubmit={(code) => lookUp(code, 'manual')} />
       )}
 
       {typing && permission.granted ? (

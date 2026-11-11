@@ -30,14 +30,14 @@ describe('normalizeEquipmentCode', () => {
 
 describe('identifyEquipment', () => {
   it('confirms the equipment the inspection expects', () => {
-    expect(identifyEquipment(COMPRESSOR, match(COMPRESSOR), false)).toEqual({
+    expect(identifyEquipment(COMPRESSOR, match(COMPRESSOR))).toEqual({
       kind: 'confirmed',
       equipment: COMPRESSOR,
     });
   });
 
   it('flags a different equipment instead of going on silently (RN-064)', () => {
-    expect(identifyEquipment(COMPRESSOR, match(GENERATOR), false)).toEqual({
+    expect(identifyEquipment(COMPRESSOR, match(GENERATOR))).toEqual({
       kind: 'divergent',
       expected: COMPRESSOR,
       read: match(GENERATOR),
@@ -45,13 +45,17 @@ describe('identifyEquipment', () => {
   });
 
   it('shows what was read when nothing is expected', () => {
-    expect(identifyEquipment(null, match(GENERATOR), false)).toEqual({
+    expect(identifyEquipment(null, match(GENERATOR))).toEqual({
       kind: 'found',
       match: match(GENERATOR),
     });
   });
 
   it('reports an unknown code, saying when the server could not be asked', () => {
-    expect(identifyEquipment(COMPRESSOR, null, true)).toEqual({ kind: 'not-found', offline: true });
+    expect(identifyEquipment(COMPRESSOR, null, 'offline')).toEqual({
+      kind: 'not-found',
+      server: 'offline',
+    });
+    expect(identifyEquipment(COMPRESSOR, null)).toEqual({ kind: 'not-found', server: 'answered' });
   });
 });
