@@ -568,12 +568,24 @@ describe('migrations', () => {
     const old = await openTestDatabase({ schemaVersion: 2 });
     jest.mocked(getDatabase).mockResolvedValue(old);
     await started();
-    await saveResponse({
-      ownerUserId: OWNER,
-      inspectionId: 'insp-1',
-      operationId: 'op-r',
-      response: answer(),
-    });
+    // Written as the version 2 app wrote them, not through today's repositories.
+    await old.runAsync(
+      `INSERT INTO inspection_responses (
+         id, inspection_id, inspection_item_id, conformity, answered_at_device, base_version,
+         local_sync_status, is_dirty, local_updated_at
+       ) VALUES ('resp-1', 'insp-1', 'item-1', 'CONFORMING', ?, 3, 'PENDING', 1, ?)`,
+      NOW,
+      NOW
+    );
+    await old.runAsync(
+      `INSERT INTO sync_operations (
+         operation_id, owner_user_id, entity_type, entity_id, inspection_id, operation_type,
+         base_version, payload_json, created_at, updated_at
+       ) VALUES ('op-r', ?, 'RESPONSE', 'resp-1', 'insp-1', 'CREATE', 3, '{}', ?, ?)`,
+      OWNER,
+      '2026-08-12T13:00:01.000Z',
+      '2026-08-12T13:00:01.000Z'
+    );
     await old.runAsync(
       `INSERT INTO evidences (id, inspection_id, inspection_item_id, local_uri, created_at_device)
        VALUES ('ev-1', 'insp-1', 'item-1', 'file:///evidences/ev-1.jpg', ?)`,
@@ -593,8 +605,15 @@ describe('migrations', () => {
     expect(stored?.responses).toEqual([expect.objectContaining({ conformity: 'CONFORMING' })]);
     expect(stored?.evidenceCounts.get('item-1')).toBe(1);
     expect(
-      await old.getFirstAsync("SELECT local_uri, deleted_locally FROM evidences WHERE id = 'ev-1'")
-    ).toEqual({ local_uri: 'file:///evidences/ev-1.jpg', deleted_locally: 0 });
+      await old.getFirstAsync(
+        "SELECT local_uri, response_id, is_dirty, deleted_locally FROM evidences WHERE id = 'ev-1'"
+      )
+    ).toEqual({
+      local_uri: 'file:///evidences/ev-1.jpg',
+      response_id: 'resp-1',
+      is_dirty: 0,
+      deleted_locally: 0,
+    });
   });
 });
 
@@ -780,29 +799,76 @@ describe('evidence operations (card #23)', () => {
     expect(JSON.stringify(queued?.payload)).not.toContain('file://');
   });
 
-  it('uploads without waiting when the item has no answer yet', async () => {
+  it('makes a photo taken before the answer wait for the answer created later', async () => {
     await started();
-
     await withPhoto();
-
     expect((await upload())?.dependencyIds).toEqual([]);
+
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: answer({ conformity: 'NON_CONFORMING' }),
+    });
+
+    expect(await upload()).toMatchObject({
+      dependencyIds: ['op-r'],
+      payload: { responseId: 'resp-1' },
+    });
+    expect(
+      await database.getFirstAsync("SELECT response_id FROM evidences WHERE id = 'ev-1'")
+    ).toEqual({ response_id: 'resp-1' });
   });
 
-  it('cancels the pending upload when the evidence is removed before it is sent', async () => {
-    await started();
-    await withPhoto();
-
-    const outcome = await discardEvidence({
+  function discard() {
+    return discardEvidence({
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       evidenceId: 'ev-1',
       operationId: 'op-remove',
       discardedAtDevice: NOW,
     });
+  }
+
+  it('cancels the pending upload when the evidence is removed before it is sent', async () => {
+    await started();
+    await withPhoto();
+
+    const outcome = await discard();
 
     expect(outcome).toEqual({ outcome: 'removed', localUri: PHOTO.localUri });
     expect(await upload()).toBeUndefined();
     expect((await findInspection(OWNER, 'insp-1'))?.evidenceCounts.size).toBe(0);
+  });
+
+  it('shows the inspection as sent when the cancelled upload was all it owed', async () => {
+    await started();
+    const start = await claimOperation('op-start', NOW);
+    await markCompleted(start!, NOW);
+    await withPhoto();
+
+    await discard();
+
+    expect(await countOpenOperations(OWNER)).toBe(0);
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.syncState).toBe('enviado');
+  });
+
+  it('cancels an upload the server refused, which it never stored', async () => {
+    await started();
+    await withPhoto();
+    const claimed = await claimOperation('op-upload', NOW);
+    await markFailed(claimed!, 'FAILED', 'Formato não aceito.', NOW);
+
+    expect(await discard()).toEqual({ outcome: 'removed', localUri: PHOTO.localUri });
+  });
+
+  it('queues the removal after an upload the network cut off, which the server may hold', async () => {
+    await started();
+    await withPhoto();
+    await claimOperation('op-upload', NOW);
+    await releaseOperation('op-upload', NOW);
+
+    expect(await discard()).toEqual({ outcome: 'removal-queued' });
   });
 
   it('queues the removal after an upload already taken for sending', async () => {
@@ -810,13 +876,7 @@ describe('evidence operations (card #23)', () => {
     await withPhoto();
     await claimOperation('op-upload', NOW);
 
-    const outcome = await discardEvidence({
-      ownerUserId: OWNER,
-      inspectionId: 'insp-1',
-      evidenceId: 'ev-1',
-      operationId: 'op-remove',
-      discardedAtDevice: NOW,
-    });
+    const outcome = await discard();
 
     expect(outcome).toEqual({ outcome: 'removal-queued' });
     const removal = (await listOpenOperations(OWNER)).find((op) => op.operationId === 'op-remove');

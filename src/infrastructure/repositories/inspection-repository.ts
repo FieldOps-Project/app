@@ -502,7 +502,58 @@ export async function saveResponse({
       },
       now
     );
+    if (existing === null) {
+      await linkEvidencesToNewAnswer(transaction, {
+        inspectionId,
+        inspectionItemId: response.inspectionItemId,
+        responseId,
+        answerOperationId: operationId,
+        now,
+      });
+    }
   });
+}
+
+/**
+ * A photo taken before the item was answered belongs to the answer created
+ * later. Its evidence is linked to the answer, and an upload not yet
+ * attempted gains the answer's creation as a dependency, so the file never
+ * reaches the server before the answer it proves (document 10.13.3).
+ */
+async function linkEvidencesToNewAnswer(
+  transaction: SQLiteDatabase,
+  link: {
+    readonly inspectionId: string;
+    readonly inspectionItemId: string;
+    readonly responseId: string;
+    readonly answerOperationId: string;
+    readonly now: string;
+  }
+): Promise<void> {
+  const evidences = await transaction.getAllAsync<{ id: string }>(
+    `SELECT id FROM evidences
+      WHERE inspection_id = ? AND inspection_item_id = ? AND response_id IS NULL`,
+    link.inspectionId,
+    link.inspectionItemId
+  );
+  for (const evidence of evidences) {
+    await transaction.runAsync(
+      'UPDATE evidences SET response_id = ? WHERE id = ?',
+      link.responseId,
+      evidence.id
+    );
+    await transaction.runAsync(
+      `UPDATE sync_operations
+          SET dependency_ids = json_insert(dependency_ids, '$[#]', ?),
+              payload_json = json_set(payload_json, '$.responseId', ?), updated_at = ?
+        WHERE entity_type = 'EVIDENCE' AND entity_id = ? AND operation_type = 'UPLOAD'
+          AND status = 'PENDING' AND attempt_count = 0`,
+      link.answerOperationId,
+      link.responseId,
+      link.now,
+      evidence.id
+    );
+  }
 }
 
 /** The file kept on the device for an evidence, and the operation that will upload it. */
@@ -552,11 +603,13 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
     const responseId = response?.id ?? null;
     const file = command.file;
 
+    // Without a file there is nothing to send, so the record owes nothing.
     await transaction.runAsync(
       `INSERT INTO evidences (
          id, inspection_id, inspection_item_id, response_id, local_uri, original_file_name,
-         mime_type, size_bytes, description, created_at_device, base_version, local_updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         mime_type, size_bytes, description, created_at_device, base_version, local_updated_at,
+         is_dirty
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       command.evidenceId,
       command.inspectionId,
       command.inspectionItemId,
@@ -568,7 +621,8 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
       file?.description ?? null,
       command.createdAtDevice,
       base_version,
-      now
+      now,
+      file === undefined ? 0 : 1
     );
 
     if (file === undefined) {
@@ -656,6 +710,14 @@ export async function discardEvidence(command: DiscardEvidenceCommand): Promise<
     );
     if (!reachedServer) {
       await transaction.runAsync('DELETE FROM evidences WHERE id = ?', command.evidenceId);
+      // The cancelled upload may have been the last thing owed for the inspection.
+      await transaction.runAsync(
+        `UPDATE inspections SET is_dirty = 0, local_sync_status = 'SYNCED', sync_error = NULL
+          WHERE id = ? AND is_dirty = 1 AND NOT EXISTS (
+            SELECT 1 FROM sync_operations WHERE inspection_id = ? AND status <> 'COMPLETED')`,
+        command.inspectionId,
+        command.inspectionId
+      );
       return { outcome: 'removed', localUri: evidence.local_uri } as const;
     }
 

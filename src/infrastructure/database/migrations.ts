@@ -148,7 +148,9 @@ export const MIGRATIONS: readonly string[] = [
   // - Evidences take the fields of document 10.9 and the local sync metadata
   //   of 10.13.2. An evidence may belong to the inspection alone, so the item
   //   becomes optional; SQLite cannot relax NOT NULL in place, so the table is
-  //   rebuilt and every row already on the device is copied over.
+  //   rebuilt and every row already on the device is copied over. Those rows
+  //   predate the camera: they have no file and no queued operation, so they
+  //   owe nothing (`is_dirty = 0`), and they are linked to the item's answer.
   // - `deleted_locally` marks a removal the server has not confirmed yet.
   // - Indexes follow the queries the app runs: the list ordered by schedule,
   //   the QR lookup (card #18), the operations owed per inspection, and the
@@ -203,11 +205,14 @@ export const MIGRATIONS: readonly string[] = [
     deleted_locally    INTEGER NOT NULL DEFAULT 0 CHECK (deleted_locally IN (0, 1))
   );
   INSERT INTO evidences_v3 (
-    id, inspection_id, inspection_item_id, local_uri, created_at_device, local_sync_status,
-    local_updated_at
+    id, inspection_id, inspection_item_id, response_id, local_uri, created_at_device,
+    local_sync_status, is_dirty, local_updated_at
   )
-  SELECT id, inspection_id, inspection_item_id, local_uri, created_at_device, local_sync_status,
-         created_at_device
+  SELECT evidences.id, evidences.inspection_id, evidences.inspection_item_id,
+         (SELECT responses.id FROM inspection_responses AS responses
+           WHERE responses.inspection_item_id = evidences.inspection_item_id),
+         evidences.local_uri, evidences.created_at_device, evidences.local_sync_status, 0,
+         evidences.created_at_device
     FROM evidences;
   DROP TABLE evidences;
   ALTER TABLE evidences_v3 RENAME TO evidences;

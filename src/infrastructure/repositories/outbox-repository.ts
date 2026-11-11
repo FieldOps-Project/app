@@ -193,12 +193,16 @@ export async function openOperationIdsFor(
 }
 
 /**
- * A record removed on the device before its operations were sent: those at
- * rest (PENDING, FAILED) leave the queue, so nothing is sent for a record
- * that no longer exists. Reports whether any operation had already been taken
- * for sending or confirmed, in which case the server may hold the record and
- * the caller must queue its removal instead of forgetting it.
+ * A record removed on the device before its operations reached the server:
+ * those operations leave the queue, so nothing is sent for a record that no
+ * longer exists. An operation is known not to have reached the server when it
+ * was never attempted, or when the server answered with a refusal (FAILED) —
+ * a resend with the same id would have been accepted had the first one been
+ * stored. A PENDING operation with attempts may have been cut off by the
+ * network after the server stored it, so it stays.
  *
+ * Reports whether any operation remains, in which case the server may hold
+ * the record and the caller must queue its removal instead of forgetting it.
  * A dependency on a cancelled operation no longer holds anything back: the
  * synchronization only waits for ids still in the queue.
  */
@@ -209,7 +213,8 @@ export async function cancelPendingOperations(
 ): Promise<{ reachedServer: boolean }> {
   await transaction.runAsync(
     `DELETE FROM sync_operations
-      WHERE entity_type = ? AND entity_id = ? AND status IN ('PENDING', 'FAILED')`,
+      WHERE entity_type = ? AND entity_id = ?
+        AND ((status = 'PENDING' AND attempt_count = 0) OR status = 'FAILED')`,
     entityType,
     entityId
   );

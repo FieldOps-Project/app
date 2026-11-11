@@ -95,14 +95,16 @@ API --(download)--> SQLite <--(leitura)-- telas
 - Editar o mesmo registro várias vezes gera uma operação só, que mantém o `operation_id`
   original em todas as tentativas. Uma operação em `PROCESSING` não é consolidada: a próxima
   edição abre outra.
-- O upload de uma evidência espera as operações da resposta que ela comprova. A conclusão
+- O upload de uma evidência espera as operações da resposta que ela comprova. Se a foto vier
+  antes da resposta, o upload passa a esperar a resposta quando ela for criada. A conclusão
   espera tudo o que ainda é devido para a inspeção.
-- Remover uma evidência antes do envio cancela o upload pendente. Se o upload já saiu, a
-  remoção entra na fila depois dele.
+- Remover uma evidência cancela o upload que nunca foi tentado ou que o servidor recusou. Se
+  o upload pode ter chegado ao servidor (em envio, ou cortado pela rede), a remoção entra na
+  fila depois dele e o arquivo fica no aparelho.
 - Uma falha marca só a própria operação. O `last_error` passa por `sanitizeSyncError`, que
   remove tokens e senhas e limita o tamanho.
 - Uploads e remoções de evidência ficam na fila até existir o envio de arquivos (card #25,
-  backend#27).
+  backend#27). As respostas da inspeção continuam sendo enviadas; só a conclusão espera.
 
 ### Inspeções de demonstração
 
