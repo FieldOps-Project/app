@@ -106,6 +106,21 @@ API --(download)--> SQLite <--(leitura)-- telas
 - Uploads e remoções de evidência ficam na fila até existir o envio de arquivos (card #25,
   backend#27). As respostas da inspeção continuam sendo enviadas; só a conclusão espera.
 
+### Evidências fotográficas
+
+- A permissão da câmera é explicada antes do pedido do sistema. Recusar não trava a inspeção:
+  o técnico volta ao checklist e, se o Android não perguntar de novo, recebe o atalho para as
+  configurações.
+- A foto é redimensionada para no máximo 1600 px no lado maior e comprimida em JPEG. Ao lado
+  dela fica uma miniatura de 320 px. As duas vão para `Paths.document/evidences/<inspeção>/`,
+  que o sistema não limpa (RN-047). O arquivo da câmera, que fica no cache, só é apagado
+  depois que a evidência foi salva.
+- Formato e tamanho são conferidos antes de salvar (RN-046): JPEG ou PNG, até 5 MB.
+- O checklist mostra só as miniaturas. A foto em resolução integral abre apenas na tela da
+  evidência, onde também dá para removê-la enquanto a inspeção está em andamento.
+- Bibliotecas: `expo-camera`, `expo-image-manipulator` e `expo-file-system`. O plugin da
+  câmera no `app.json` não pede microfone.
+
 ### Inspeções de demonstração
 
 Os endpoints mobile da API (backend#19, #20 e #21) ainda não existem. Para exercitar as
