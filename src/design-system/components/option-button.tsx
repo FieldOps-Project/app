@@ -29,17 +29,11 @@ export interface OptionButtonProps {
   label: string;
   selected: boolean;
   onPress: () => void;
-  /** Tints the selected state; the label and the icon always carry the meaning. */
   tone?: OptionTone;
   icon?: ComponentProps<typeof Ionicons>['name'];
   disabled?: boolean;
 }
 
-/**
- * One choice of a single-choice group, large enough to hit with gloves in the
- * sun: a radio announced as checked or not, marked by border, fill and a
- * check icon together, never by colour alone (document 13.9).
- */
 export function OptionButton({
   label,
   selected,

@@ -15,11 +15,6 @@ import {
 } from '@/features/checklist/components/response-fields/text-field';
 import { UnsupportedField } from '@/features/checklist/components/response-fields/unsupported-field';
 
-/**
- * The explicit type → component map of document 13.5. A `Record` over the
- * known types makes a missing entry a compile error; reading it only through
- * `responseFieldFor` makes an unknown type a warning, never a crash.
- */
 const RESPONSE_FIELDS: Record<ResponseType, ComponentType<ResponseFieldProps>> = {
   TEXT_SHORT: TextShortField,
   TEXT_LONG: TextLongField,

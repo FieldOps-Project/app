@@ -15,13 +15,6 @@ export interface InspectionCardProps {
   overdue: boolean;
 }
 
-/**
- * List card (document 13.4): client, site, equipment, due date and state.
- *
- * Business status and sync state are two separate badges because they are
- * independent (document 7.5): "em andamento" and "aguardando envio" can be
- * true at once, and each must still be readable on its own.
- */
 export function InspectionCard({ inspection, overdue }: InspectionCardProps) {
   return (
     <Card>

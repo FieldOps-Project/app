@@ -3,16 +3,10 @@ import { View } from 'react-native';
 import { Text } from '@/design-system/components/text';
 
 export interface ProgressBarProps {
-  /** 0–100. */
   percent: number;
-  /** Always shown next to the bar: the bar alone is not enough (document 13.9). */
   label: string;
 }
 
-/**
- * Progress bar with its value in words. Announced as a progress bar with the
- * same text, so the number reaches screen readers too.
- */
 export function ProgressBar({ percent, label }: ProgressBarProps) {
   const clamped = Math.max(0, Math.min(100, percent));
 

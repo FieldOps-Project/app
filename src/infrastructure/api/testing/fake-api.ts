@@ -5,15 +5,8 @@ import {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
-/** What a fake server answers: an HTTP status with a body, or no answer at all. */
 export type Reply = { status: number; data?: unknown } | 'network';
 
-/**
- * Builds an axios adapter from a handler, so tests drive the real client —
- * interceptors and all — without opening a socket. Statuses of 400 and above
- * reject the way axios does, and `'network'` rejects with no response, which
- * is what an offline device or a timeout looks like.
- */
 export function fakeAdapter(
   handler: (config: InternalAxiosRequestConfig) => Reply | Promise<Reply>
 ): AxiosAdapter {

@@ -3,23 +3,10 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { getDatabase } from '@/infrastructure/database/database';
 import { writeTransaction } from '@/infrastructure/database/write-transaction';
 
-/**
- * Persistent outbox (document 10.13.3). Every confirmed change on the device
- * becomes, or updates, one operation here; the synchronization reads them in
- * order and sends them with their idempotent id.
- *
- * The queue lives in SQLite, so it outlives closing the app and restarting
- * the phone (RN-066). An operation id is generated once and kept through
- * every retry (RN-067); a failure marks only its own operation (RN-070); an
- * operation declares the ones it must wait for (RN-069). Batching and the
- * retry policy are card #24's scope.
- */
-
 export type OperationEntity = 'INSPECTION' | 'RESPONSE' | 'EVIDENCE' | 'NON_CONFORMITY';
 
 export type OperationType = 'CREATE' | 'UPDATE' | 'DELETE_LOGICAL' | 'TRANSITION' | 'UPLOAD';
 
-/** Local tables of the records an operation can change, by entity. */
 const ENTITY_TABLES: Partial<Record<OperationEntity, string>> = {
   RESPONSE: 'inspection_responses',
   EVIDENCE: 'evidences',
@@ -28,12 +15,6 @@ const ENTITY_TABLES: Partial<Record<OperationEntity, string>> = {
 
 const MAX_ERROR_LENGTH = 300;
 
-/**
- * The last line before an error reaches `last_error` and the screens: drops
- * anything shaped like a credential (a bearer token, a JWT, a `token=` or
- * `password=` pair), flattens whitespace and caps the length. Callers already
- * pass business wording; this keeps a careless message from storing a secret.
- */
 export function sanitizeSyncError(error: string): string {
   const cleaned = error
     .replace(/bearer\s+[\w.~+/-]+=*/gi, 'Bearer [removido]')
@@ -50,7 +31,6 @@ export function sanitizeSyncError(error: string): string {
 export type OperationStatus = 'PENDING' | 'PROCESSING' | 'FAILED' | 'CONFLICT' | 'COMPLETED';
 
 export interface NewOperation {
-  /** Generated once, here, and never again — retries reuse it (RN-068). */
   readonly operationId: string;
   readonly ownerUserId: string;
   readonly entityType: OperationEntity;
@@ -106,18 +86,6 @@ function toQueuedOperation(row: OperationRow): QueuedOperation {
   };
 }
 
-/**
- * Adds an operation, or folds it into the pending one for the same record:
- * editing an answer five times offline sends it once. Only operations at rest
- * are folded: PENDING, or FAILED, whose new payload is the technician's fix
- * and goes back to PENDING. A PROCESSING one may already have reached the
- * server. Only data edits (CREATE, UPDATE) fold, and the folded operation
- * keeps its id and its type; state transitions, uploads and removals are
- * each their own step.
- *
- * Runs on the caller's transaction, so the record and its operation are saved
- * together or not at all.
- */
 export async function enqueueOperation(
   transaction: SQLiteDatabase,
   operation: NewOperation,
@@ -158,7 +126,6 @@ export async function enqueueOperation(
   );
 }
 
-/** Ids of the operations still owed for an inspection, to declare as dependencies. */
 export async function openOperationIds(
   transaction: SQLiteDatabase,
   inspectionId: string
@@ -172,11 +139,6 @@ export async function openOperationIds(
   return rows.map((row) => row.operation_id);
 }
 
-/**
- * Ids of the operations still owed for one record — what an upload must wait
- * for when its evidence belongs to an answer not yet created on the server
- * (document 10.13.3).
- */
 export async function openOperationIdsFor(
   transaction: SQLiteDatabase,
   entityType: OperationEntity,
@@ -192,20 +154,6 @@ export async function openOperationIdsFor(
   return rows.map((row) => row.operation_id);
 }
 
-/**
- * A record removed on the device before its operations reached the server:
- * those operations leave the queue, so nothing is sent for a record that no
- * longer exists. An operation is known not to have reached the server when it
- * was never attempted, or when the server answered with a refusal (FAILED) —
- * a resend with the same id would have been accepted had the first one been
- * stored. A PENDING operation with attempts may have been cut off by the
- * network after the server stored it, so it stays.
- *
- * Reports whether any operation remains, in which case the server may hold
- * the record and the caller must queue its removal instead of forgetting it.
- * A dependency on a cancelled operation no longer holds anything back: the
- * synchronization only waits for ids still in the queue.
- */
 export async function cancelPendingOperations(
   transaction: SQLiteDatabase,
   entityType: OperationEntity,
@@ -229,11 +177,6 @@ export async function cancelPendingOperations(
 const OPERATION_COLUMNS = `operation_id, entity_type, entity_id, inspection_id, operation_type,
   base_version, payload_json, dependency_ids, status, attempt_count, last_error`;
 
-/**
- * Operations not yet confirmed, oldest first. CONFLICT ones are listed too:
- * they are not resent (card #28 resolves them), but whatever depends on them
- * must be held back.
- */
 export async function listOpenOperations(ownerUserId: string): Promise<QueuedOperation[]> {
   const database = await getDatabase();
   const rows = await database.getAllAsync<OperationRow>(
@@ -245,7 +188,6 @@ export async function listOpenOperations(ownerUserId: string): Promise<QueuedOpe
   return rows.map(toQueuedOperation);
 }
 
-/** RN-071: the count the home screen and the sync tab show. */
 export async function countOpenOperations(ownerUserId: string): Promise<number> {
   const database = await getDatabase();
   const row = await database.getFirstAsync<{ total: number }>(
@@ -256,15 +198,6 @@ export async function countOpenOperations(ownerUserId: string): Promise<number> 
   return row?.total ?? 0;
 }
 
-/**
- * Takes an operation for sending and returns it as stored at that instant.
- *
- * The payload is read again here, inside the same write, because an edit may
- * have been folded into the operation after the run listed it; sending the
- * listed copy would mark the newer answer as delivered without ever sending
- * it. Once PROCESSING, the operation no longer folds, so a later edit opens a
- * new one. Returns `null` when the operation is no longer waiting.
- */
 export function claimOperation(operationId: string, now: string): Promise<QueuedOperation | null> {
   return writeTransaction(async (transaction) => {
     const claimed = await transaction.runAsync(
@@ -287,10 +220,6 @@ export function claimOperation(operationId: string, now: string): Promise<Queued
   });
 }
 
-/**
- * Puts back operations left PROCESSING by a run that never finished — the app
- * closed mid-send. Resending them is safe: the id is the same (RN-068).
- */
 export async function releaseInterruptedOperations(
   ownerUserId: string,
   now: string
@@ -305,10 +234,6 @@ export async function releaseInterruptedOperations(
   );
 }
 
-/**
- * Closes the operation and, when it was the last one owed for its records,
- * marks the record and the inspection as confirmed by the server.
- */
 export async function markCompleted(operation: QueuedOperation, now: string): Promise<void> {
   await writeTransaction(async (transaction) => {
     await transaction.runAsync(
@@ -347,12 +272,6 @@ export async function markCompleted(operation: QueuedOperation, now: string): Pr
   });
 }
 
-/**
- * Records a refusal. The operation stays in the queue — nothing the
- * technician did is dropped — and its records show the failure (RN-070).
- * No other operation is touched. `error` should be business wording or a
- * failure kind; it is sanitized again before it is stored.
- */
 export async function markFailed(
   operation: QueuedOperation,
   status: 'FAILED' | 'CONFLICT',
@@ -388,13 +307,6 @@ export async function markFailed(
   });
 }
 
-/**
- * The server refused the completion — an answer it requires is missing, for
- * instance (backend#20). The inspection goes back to IN_PROGRESS so the
- * technician can fix it (RN-043), the refused submit leaves the queue, and
- * the reason stays on the inspection. Completing again queues a new submit,
- * with a new reading of the position.
- */
 export async function reopenAfterRefusedSubmit(
   operation: QueuedOperation,
   reason: string,
@@ -421,7 +333,6 @@ export async function reopenAfterRefusedSubmit(
   });
 }
 
-/** An attempt cut short by the network goes back to the queue unchanged. */
 export async function releaseOperation(operationId: string, now: string): Promise<void> {
   await writeTransaction((transaction) =>
     transaction.runAsync(

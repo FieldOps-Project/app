@@ -12,12 +12,6 @@ import { CameraConsent } from '@/features/evidence/components/camera-consent';
 import { EvidenceItemLink } from '@/features/evidence/components/evidence-item-link';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
-/**
- * UC-11, first half: the permission, explained before the system prompt
- * (RN-058), and the camera. Moving to the preview uses `replace`, so both
- * screens share one stack entry and the camera is released as soon as the
- * photo is taken — leaving this screen in any way unmounts it.
- */
 export function EvidenceCaptureScreen() {
   const inspectionId = useInspectionId();
   const { itemId = '' } = useLocalSearchParams<{ itemId?: string }>();
@@ -27,7 +21,6 @@ export function EvidenceCaptureScreen() {
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  /** Read synchronously: two taps before the next render must still take one photo. */
   const busy = useRef(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -48,7 +41,6 @@ export function EvidenceCaptureScreen() {
     );
   }
 
-  /** One photo per press: a second tap while the first is being taken is ignored. */
   async function capture() {
     if (camera.current === null || busy.current) {
       return;

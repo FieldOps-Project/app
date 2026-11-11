@@ -11,7 +11,6 @@ const containerClasses: Record<ButtonVariant, string> = {
   danger: 'bg-danger active:bg-danger-strong',
 };
 
-/** Solid backgrounds carry white text; the light surface keeps the default colour. */
 const labelTones: Record<ButtonVariant, TextTone> = {
   primary: 'inverse',
   secondary: 'default',
@@ -31,13 +30,6 @@ export interface ButtonProps extends Omit<PressableProps, 'children' | 'style'> 
   className?: string;
 }
 
-/**
- * Design system button.
- *
- * Minimum height follows the Android touch target guideline, since the app is
- * operated in the field. Disabling while loading prevents duplicate submission
- * of the same operation.
- */
 export function Button({
   label,
   variant = 'primary',

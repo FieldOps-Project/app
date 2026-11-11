@@ -21,11 +21,6 @@ import { plural } from '@/utils/plural';
 
 const UNSENT = filtersForView('pending-sync');
 
-/**
- * A tab, not a screen behind a menu: document 13.8 requires the delivery state
- * to stay visible, and one-touch reach is part of that. The full queue view
- * with per-operation failures is card #27.
- */
 export function SyncScreen() {
   const router = useRouter();
   const pending = usePendingOperationsCount();

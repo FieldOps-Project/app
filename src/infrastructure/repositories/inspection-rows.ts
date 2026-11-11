@@ -10,11 +10,6 @@ import {
   type SyncState,
 } from '@/domain/inspection';
 
-/**
- * Raw SQLite rows and their translation into domain types. Repositories hand
- * out domain types only; no screen ever sees a row (card #21).
- */
-
 export type LocalSyncStatus = 'SYNCED' | 'PENDING' | 'SYNCING' | 'ERROR' | 'CONFLICT';
 
 export interface InspectionRow {
@@ -95,10 +90,6 @@ export interface EvidenceRow {
   local_updated_at: string | null;
 }
 
-/**
- * An evidence counts as local work from the moment it is created, so it reads
- * as "aguardando envio" until the server confirms it — never as merely saved.
- */
 export function toEvidenceSummary(row: EvidenceRow): EvidenceSummary {
   return {
     id: row.id,
@@ -111,11 +102,6 @@ export function toEvidenceSummary(row: EvidenceRow): EvidenceSummary {
   };
 }
 
-/**
- * Collapses the stored sync status into the five states the technician reads
- * (document 13.8). A record downloaded and never touched is "salvo no
- * dispositivo"; once local work was confirmed by the server it is "enviado".
- */
 export function toSyncState(status: LocalSyncStatus, localUpdatedAt: string | null): SyncState {
   switch (status) {
     case 'PENDING':
@@ -141,10 +127,6 @@ function parseJson<TValue>(raw: string | null, fallback: TValue): TValue {
   }
 }
 
-/**
- * Values outside the enums can only come from a newer server; they degrade to
- * the most conservative reading instead of crashing the list.
- */
 export function toSummary(row: InspectionRow): InspectionSummary {
   return {
     id: row.id,
@@ -203,7 +185,6 @@ export function toDetail(row: InspectionRow): InspectionDetail {
   };
 }
 
-/** A coordinate pair is all or nothing; a stored reason is the only other answer. */
 export function toRecordedLocation(
   latitude: number | null,
   longitude: number | null,

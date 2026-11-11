@@ -31,12 +31,6 @@ import { InspectionLocationCard } from '@/features/location/components/inspectio
 import { formatDateTime } from '@/utils/format-date';
 import { plural } from '@/utils/plural';
 
-/**
- * The decision screen (card #11): the technician checks place and equipment
- * and gets exactly one action, derived from the state, so the wrong one is
- * never offered. Reads the device store, so a downloaded inspection opens
- * without signal (RN-065).
- */
 export function InspectionDetailsScreen() {
   const inspectionId = useInspectionId();
   const router = useRouter();
@@ -207,10 +201,6 @@ interface SiteCoordinatesProps {
   longitude: number | null;
 }
 
-/**
- * The site's registered coordinates — never the position captured in the
- * field, which belongs to the start and the completion (card #19).
- */
 function SiteCoordinates({ latitude, longitude }: SiteCoordinatesProps) {
   const [mapFailed, setMapFailed] = useState(false);
 

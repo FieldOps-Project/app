@@ -9,7 +9,6 @@ function choose(props: ResponseFieldProps, value: string | boolean) {
   props.onCommit();
 }
 
-/** BOOLEAN: two large buttons rather than a small switch. */
 export function BooleanField(props: ResponseFieldProps) {
   const { item, value, error, disabled } = props;
   return (
@@ -33,11 +32,6 @@ export function BooleanField(props: ResponseFieldProps) {
   );
 }
 
-/**
- * CONFORMITY: nothing comes selected. A preselected "Conforme" would approve
- * the item by inertia — the technician skips it and the checklist records a
- * conformity nobody checked (card #13).
- */
 export function ConformityField(props: ResponseFieldProps) {
   const { item, value, error, disabled } = props;
   return (
@@ -69,7 +63,6 @@ export function ConformityField(props: ResponseFieldProps) {
   );
 }
 
-/** SINGLE_CHOICE: exactly the options published in the snapshot, in their order. */
 export function SingleChoiceField(props: ResponseFieldProps) {
   const { item, value, error, disabled } = props;
   return (

@@ -15,12 +15,6 @@ import {
   type PresentableApiFailure,
 } from '@/infrastructure/api';
 
-/**
- * Login copy never reveals whether the e-mail exists (document 17.2, AC-AUTH):
- * a bad password and an unknown e-mail both surface this same generic message,
- * overriding `describeApiFailure`'s session-expiry wording for `unauthorized`,
- * which belongs to an already-signed-in context, not this one.
- */
 function describeLoginFailure(failure: PresentableApiFailure): string {
   if (failure.kind === 'unauthorized') {
     return 'E-mail ou senha inválidos.';

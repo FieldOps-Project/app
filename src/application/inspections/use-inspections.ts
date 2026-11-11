@@ -11,15 +11,6 @@ import {
 } from '@/infrastructure/repositories/inspection-repository';
 import { countOpenOperations } from '@/infrastructure/repositories/outbox-repository';
 
-/**
- * Read side of the inspections, served from the device (document 13.6).
- *
- * Screens call these hooks and never the repositories: when the source
- * changes, only this file does (card #9). Each read is scoped to the signed-in
- * technician (RN-004).
- */
-
-/** The signed-in technician; empty while the session is being torn down. */
 export function useOwnerUserId(): string {
   const { session } = useSession();
   return session?.userId ?? '';
@@ -45,7 +36,6 @@ export function useStoredInspection(inspectionId: string) {
   });
 }
 
-/** RN-071: operations still owed to the server. */
 export function usePendingOperationsCount() {
   const ownerUserId = useOwnerUserId();
   return useQuery<number, Error>({

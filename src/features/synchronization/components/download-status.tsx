@@ -6,13 +6,6 @@ import { OfflineNotice } from '@/design-system/components/offline-notice';
 import { Text } from '@/design-system/components/text';
 import { describeApiFailure, isNetworkFailure } from '@/infrastructure/api';
 
-/**
- * State of the latest download, shown above a screen that lists inspections.
- *
- * It only ever adds a notice: the list below keeps showing what the device
- * has, so a failed update never hides the work the technician has to do
- * (AC-MOBILE-LIST). Without signal it reads as offline mode, not as an error.
- */
 export function DownloadStatus() {
   const download = useInspectionsDownload();
 

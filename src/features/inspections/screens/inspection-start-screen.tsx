@@ -24,12 +24,6 @@ import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id'
 import { LocatingNotice, LocationConsent } from '@/features/location/components/location-consent';
 import { formatDateTime } from '@/utils/format-date';
 
-/**
- * Deliberate start of the work (UC-09, card #14). The technician confirms
- * place and equipment; the device records its own clock as the start,
- * because the server may only hear about it hours later (RN-034). Nothing on
- * this path needs the network.
- */
 export function InspectionStartScreen() {
   const inspectionId = useInspectionId();
   const inspection = useInspectionDetail(inspectionId);
@@ -69,11 +63,6 @@ function StartConfirmation({ work }: { work: InspectionWork }) {
   const { detail, progress } = work;
   const router = useRouter();
   const start = useStartInspection(detail.id);
-  /**
-   * Once confirmed, the stored inspection becomes IN_PROGRESS before the
-   * screen is replaced; the confirmation stays up during that instant instead
-   * of flashing "já foi iniciada".
-   */
   const starting = start.isPending || start.isSuccess;
   const blocked = starting ? null : startBlockedReason(detail.status);
 
@@ -84,10 +73,6 @@ function StartConfirmation({ work }: { work: InspectionWork }) {
     });
   }
 
-  /**
-   * Started without a position: the technician is told why before moving on
-   * (card #19). With a position, straight to the checklist.
-   */
   function confirm() {
     start.mutate(undefined, {
       onSuccess: (location) => {

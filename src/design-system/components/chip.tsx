@@ -10,13 +10,6 @@ export interface ChipProps {
   onPress: () => void;
 }
 
-/**
- * Toggleable filter chip.
- *
- * Selection is shown by fill, check icon and the announced `selected` state
- * together, never by colour alone (document 13.9). Height follows the touch
- * target guideline so it works with gloves.
- */
 export function Chip({ label, selected, onPress }: ChipProps) {
   return (
     <Pressable

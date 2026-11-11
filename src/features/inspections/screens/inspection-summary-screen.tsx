@@ -36,12 +36,6 @@ import { describeRecordedLocation } from '@/features/location/describe-location'
 import { SyncNowButton } from '@/features/synchronization/components/sync-now-button';
 import { formatDateTime } from '@/utils/format-date';
 
-/**
- * Last step of the field work (UC-13, card #16): the totals, what still
- * blocks, and an explicit completion. The screen says plainly that
- * completing is not sending — the technician completes without signal and
- * the supervisor only receives it after a synchronization.
- */
 export function InspectionSummaryScreen() {
   const inspectionId = useInspectionId();
   const inspection = useInspectionDetail(inspectionId);
@@ -219,7 +213,6 @@ function Summary({ work }: { work: InspectionWork }) {
   );
 }
 
-/** "Concluir" is not "enviar" — said every time completion is on screen. */
 function SendingNotice() {
   return (
     <View className="flex-row items-start gap-2 rounded-field bg-info-soft p-3 dark:bg-neutral-800">

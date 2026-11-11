@@ -13,16 +13,9 @@ export type HomeOverview =
   | {
       readonly state: 'ready';
       readonly day: DayOverview;
-      /** RN-071: operations still owed to the server. */
       readonly pendingOperations: number;
     };
 
-/**
- * The home screen's use case (card #9): the day's blocks and the pending
- * operations, computed from what is stored on the device. The screen never
- * reaches the source directly, so moving from the API to SQLite — or anything
- * after it — does not touch it.
- */
 export function useHomeOverview(now: Date = new Date()): HomeOverview {
   const summaries = useInspectionSummaries();
   const pending = usePendingOperationsCount();

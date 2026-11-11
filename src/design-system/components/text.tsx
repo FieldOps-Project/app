@@ -31,14 +31,6 @@ export interface TextProps extends RNTextProps {
   className?: string;
 }
 
-/**
- * Design system text.
- *
- * Colour must be chosen through `tone`, never through `className`. Tailwind
- * resolves conflicting utilities by their order in the generated stylesheet,
- * not by the order they appear in the class string, so a colour passed in
- * `className` can silently lose to the tone class.
- */
 export function Text({ variant = 'body', tone = 'default', className, ...props }: TextProps) {
   return (
     <RNText

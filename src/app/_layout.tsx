@@ -13,10 +13,6 @@ import { createQueryClient } from '@/application/query-client';
 import { SessionProvider } from '@/application/session/session-context';
 import { darkNavigationTheme, lightNavigationTheme } from '@/design-system/theme/navigation-theme';
 
-/**
- * Installs the shared providers and holds the two top-level groups. The guard
- * lives in each group layout, so this file knows nothing about the session.
- */
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';

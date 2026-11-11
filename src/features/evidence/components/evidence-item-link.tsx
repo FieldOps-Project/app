@@ -5,10 +5,6 @@ import { useInspectionDetail } from '@/application/inspections/use-inspection-de
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
 
-/**
- * Which item the photo belongs to, shown on every evidence screen so a photo
- * is never attached to the wrong item (card #17).
- */
 export function EvidenceItemLink({
   inspectionId,
   itemId,

@@ -10,7 +10,6 @@ import {
 
 export const MOBILE_INSPECTIONS_PATH = '/api/v1/mobile/inspections';
 
-/** Safety net against a server that never reports the last page. */
 const MAX_PAGES = 50;
 
 export interface LocationPayload {
@@ -43,11 +42,6 @@ export interface ResponsePayload {
   readonly baseVersion: number;
 }
 
-/**
- * The technician's side of the inspection API (backend#19, #20, #21). The
- * server scopes everything to the token's user (RN-004): nothing here sends a
- * technician id.
- */
 export interface MobileInspectionsGateway {
   list(): Promise<Result<readonly MobileInspectionEntry[], ApiFailure>>;
   detail(inspectionId: string): Promise<Result<MobileInspection, ApiFailure>>;
@@ -56,7 +50,6 @@ export interface MobileInspectionsGateway {
   putResponse(inspectionId: string, payload: ResponsePayload): Promise<Result<void, ApiFailure>>;
 }
 
-/** A body that does not match the contract is a server fault, never a crash. */
 function parseWith<TOutput>(
   schema: { safeParse: (data: unknown) => { success: true; data: TOutput } | { success: false } },
   data: unknown

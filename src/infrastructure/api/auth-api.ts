@@ -25,12 +25,6 @@ function isSessionRole(value: string | undefined): value is SessionRole {
   return value !== undefined && (ROLES as readonly string[]).includes(value);
 }
 
-/**
- * Turns the login response into the app's own types, failing closed on any
- * field the contract marks optional but the login flow cannot work without.
- * The API is trusted for shape (12.2) — this only guards the fields whose
- * absence would otherwise surface as a confusing crash deeper in the app.
- */
 function toAuthSession(body: LoginResponseBody): AuthSession | null {
   const { accessToken, refreshToken, expiresIn, user } = body;
   if (
@@ -51,12 +45,6 @@ function toAuthSession(body: LoginResponseBody): AuthSession | null {
   };
 }
 
-/**
- * Authenticates against `POST /api/v1/auth/login` (document 12.2, card #6).
- *
- * Token refresh and the `Authorization` retry loop are card #8's scope; this
- * only starts the session.
- */
 export async function login(
   credentials: LoginCredentials
 ): Promise<Result<AuthSession, ApiFailure>> {
@@ -78,15 +66,6 @@ export async function login(
   return ok(session);
 }
 
-/**
- * Revokes the refresh token on the server (`POST /api/v1/auth/logout`, card #7).
- *
- * The request body is the only thing that matters — the endpoint is public and
- * answers 204 even for a token it does not know — so this is safe to call after
- * the local credentials are already gone. It returns a `Result` like every
- * other call and never throws; the caller decides that a failure here (no
- * signal, most often) must not keep the person signed in.
- */
 export function logout(refreshToken: string): Promise<Result<void, ApiFailure>> {
   return request<void>({
     method: 'POST',

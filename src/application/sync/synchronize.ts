@@ -41,16 +41,10 @@ const transitionPayloadSchema = z.discriminatedUnion('action', [
 
 export interface SyncOutcome {
   readonly sent: number;
-  /** Operations the server refused; they stay in the queue with their error. */
   readonly refused: number;
   readonly refresh: RefreshOutcome;
 }
 
-/**
- * Response payloads are written by `saveResponse` in exactly the shape the API
- * takes, and the server validates them again; transitions carry an `action`
- * the API does not, so they are parsed back into the endpoint's body.
- */
 function send(
   gateway: MobileInspectionsGateway,
   operation: QueuedOperation
@@ -81,12 +75,6 @@ function send(
       });
 }
 
-/**
- * Uploads and removals of evidences wait in the queue until the file
- * synchronization exists (card #25, backend#27). They are skipped without
- * holding their inspection back, so its answers keep flowing; they stay in
- * the run's open set, so the submit, which depends on them, still waits.
- */
 function canSendYet(operation: QueuedOperation): boolean {
   return operation.entityType === 'INSPECTION' || operation.entityType === 'RESPONSE';
 }
@@ -100,20 +88,6 @@ function isSubmit(operation: QueuedOperation): boolean {
 
 let running: Promise<Result<SyncOutcome, ApiFailure>> | null = null;
 
-/**
- * Sends the outbox, then downloads (document 10.14.5).
- *
- * Operations go oldest first, one at a time, each with the id it was created
- * with, so a resend is never a duplicate (RN-068). An operation waits while
- * any operation it depends on is still open, and a refusal holds back the
- * rest of its inspection — the submit must not overtake an answer the server
- * rejected — while other inspections carry on (RN-070). A completion the
- * server refuses reopens the inspection for correction (RN-043). Losing the
- * network stops the run and leaves the queue exactly as it was.
- *
- * Concurrent calls share one run. This is the sprint 4 minimum; batches and
- * the retry policy are card #24's scope.
- */
 export function synchronize(
   ownerUserId: string,
   gateway: MobileInspectionsGateway,

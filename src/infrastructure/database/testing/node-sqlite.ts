@@ -12,22 +12,14 @@ function bind(params: Params): SQLInputValue[] {
 }
 
 export interface TestDatabaseOptions {
-  /** A file to open instead of memory, so a test can close the app and open it again. */
   readonly path?: string;
-  /** Stop at this schema version, to stand in for a device still on an older app. */
   readonly schemaVersion?: number;
 }
 
 export interface TestDatabase extends SQLiteDatabase {
-  /** Closes the native handle, as killing the app would. */
   closeNow(): void;
 }
 
-/**
- * A SQLite exposing the slice of the `expo-sqlite` API the repositories use,
- * backed by Node's built-in driver. Tests run the real SQL and the real
- * migrations against it, without a device.
- */
 export async function openTestDatabase(options: TestDatabaseOptions = {}): Promise<TestDatabase> {
   const native = new DatabaseSync(options.path ?? ':memory:');
   native.exec('PRAGMA foreign_keys = ON');

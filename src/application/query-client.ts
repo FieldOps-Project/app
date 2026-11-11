@@ -1,9 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
 
-/**
- * Defaults target field use: insisting on a request with no network only drains
- * battery. Retrying writes belongs to the synchronization outbox (EP-08).
- */
 export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {

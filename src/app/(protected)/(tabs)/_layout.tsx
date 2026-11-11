@@ -3,7 +3,6 @@ import { Tabs } from 'expo-router';
 
 import { colors } from '@/design-system/tokens/design-tokens';
 
-/** Synchronization is a tab, not a screen behind a menu (document 13.8). */
 export default function TabsLayout() {
   return (
     <Tabs

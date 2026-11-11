@@ -17,12 +17,6 @@ import { DownloadStatus } from '@/features/synchronization/components/download-s
 import { SyncNowButton } from '@/features/synchronization/components/sync-now-button';
 import { plural } from '@/utils/plural';
 
-/**
- * First screen after sign-in (document 13.4): what is due today, what is late,
- * what is under way and what has not been sent. The pending count lives here,
- * not only on the sync tab, so unsent work is noticed without looking for it
- * (document 13.8).
- */
 export function HomeScreen() {
   const { session } = useSession();
   const overview = useHomeOverview();
@@ -109,7 +103,6 @@ interface PendingSyncCardProps {
   onOpen: () => void;
 }
 
-/** RN-071: the pending count, with the action that clears it right next to it. */
 function PendingSyncCard({
   pendingOperations,
   inspectionsWithUnsentWork,
@@ -155,10 +148,6 @@ interface DayBlockProps {
   onPress: () => void;
 }
 
-/**
- * One block of the day. Zero is a good result and reads as one, in a neutral
- * tone with a positive message — never as an error.
- */
 function DayBlock({ icon, title, count, emptyText, tone = 'default', onPress }: DayBlockProps) {
   const isEmpty = count === 0;
   const isAlert = tone === 'danger' && !isEmpty;

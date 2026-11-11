@@ -14,12 +14,6 @@ import {
 } from '@/features/location/describe-location';
 import { MARKER_COLORS, type MapMarkerKind } from '@/features/location/leaflet-html';
 
-/**
- * Where the work happened (card #19): a map with the site's registered point
- * and the positions read at the start and at the completion, followed by the
- * same data as text — readable without tiles, and with the reason whenever a
- * position is missing.
- */
 export function InspectionLocationCard({ detail }: { detail: InspectionDetail }) {
   const markers = useMemo(() => inspectionMarkers(detail), [detail]);
   const moments: TransitionMoment[] = [];

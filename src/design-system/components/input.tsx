@@ -7,23 +7,12 @@ import { colors, minTouchTarget } from '@/design-system/tokens/design-tokens';
 
 export interface InputProps extends Omit<TextInputProps, 'style' | 'className'> {
   label: string;
-  /** Business-language message shown next to the field (document 13.9). */
   error?: string;
-  /** Supporting text shown while the field is valid. */
   hint?: string;
-  /** Taller field for multi-line text; never below the touch target. */
   minHeight?: number;
   className?: string;
 }
 
-/**
- * Design system text field.
- *
- * The label and the error text stay next to the field so the technician does
- * not have to look elsewhere to understand what is wrong. Minimum height
- * follows the Android touch target guideline, and the invalid state is marked
- * by border, icon and text together, never colour alone.
- */
 export const Input = forwardRef<TextInput, InputProps>(function Input(
   { label, error, hint, minHeight, className, ...props },
   ref

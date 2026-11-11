@@ -1,15 +1,3 @@
-/**
- * Versioned local schema (documents 10.13 and 10.14).
- *
- * The device holds work that may not have reached the server yet, so the
- * schema only ever moves forward: each entry runs once, in order, inside the
- * same transaction that records the new version. Never edit a published entry —
- * append a new one. Dropping the database to "fix" a schema would throw away
- * field work (RN-066).
- *
- * Business status and sync status are separate columns (document 10.2): an
- * inspection can be IN_PROGRESS and PENDING at the same time.
- */
 export const MIGRATIONS: readonly string[] = [
   `
   CREATE TABLE inspections (
@@ -127,9 +115,6 @@ export const MIGRATIONS: readonly string[] = [
     last_sync_result     TEXT CHECK (last_sync_result IS NULL OR last_sync_result IN ('SUCCESS', 'PARTIAL', 'FAILED'))
   );
   `,
-  // Card #19: the position read at the start and at the completion (RN-062).
-  // Without a position the coordinates stay empty and `*_location_missing`
-  // keeps the reason; nothing is ever approximated.
   `
   ALTER TABLE inspections ADD COLUMN start_latitude REAL;
   ALTER TABLE inspections ADD COLUMN start_longitude REAL;
@@ -142,19 +127,6 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE inspections ADD COLUMN completion_location_at TEXT;
   ALTER TABLE inspections ADD COLUMN completion_location_missing TEXT;
   `,
-  // Cards #21 and #23: the rest of document 10.13.
-  //
-  // - Non-conformities get their own table (document 10.10), ready for card #20.
-  // - Evidences take the fields of document 10.9 and the local sync metadata
-  //   of 10.13.2. An evidence may belong to the inspection alone, so the item
-  //   becomes optional; SQLite cannot relax NOT NULL in place, so the table is
-  //   rebuilt and every row already on the device is copied over. Those rows
-  //   predate the camera: they have no file and no queued operation, so they
-  //   owe nothing (`is_dirty = 0`), and they are linked to the item's answer.
-  // - `deleted_locally` marks a removal the server has not confirmed yet.
-  // - Indexes follow the queries the app runs: the list ordered by schedule,
-  //   the QR lookup (card #18), the operations owed per inspection, and the
-  //   evidence links of document 10.15.2.
   `
   CREATE TABLE non_conformities (
     id                 TEXT PRIMARY KEY NOT NULL,
@@ -227,8 +199,6 @@ export const MIGRATIONS: readonly string[] = [
   CREATE INDEX ix_inspections_owner_qr ON inspections (owner_user_id, equipment_qr_code);
   CREATE INDEX ix_sync_operations_inspection ON sync_operations (inspection_id, status);
   `,
-  // Card #17: lists show a small copy of each photo and decode the full file
-  // only when it is enlarged (document 13.10). Lives on the device only.
   `
   ALTER TABLE evidences ADD COLUMN thumbnail_uri TEXT;
   `,
