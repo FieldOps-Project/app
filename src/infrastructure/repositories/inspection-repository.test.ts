@@ -1,11 +1,19 @@
+/// <reference types="node" />
+
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ChecklistResponse } from '@/domain/checklist';
 import type { LocationCapture } from '@/domain/field-location';
-import { getDatabase } from '@/infrastructure/database/database';
+import { getDatabase, migrate, readSchemaVersion } from '@/infrastructure/database/database';
+import { MIGRATIONS } from '@/infrastructure/database/migrations';
 import { openTestDatabase } from '@/infrastructure/database/testing/node-sqlite';
 import {
   completeInspection,
+  discardEvidence,
   findInspection,
   InspectionStateError,
   listInspectionSummaries,
@@ -20,7 +28,10 @@ import {
   listOpenOperations,
   markCompleted,
   markFailed,
+  releaseInterruptedOperations,
+  releaseOperation,
   reopenAfterRefusedSubmit,
+  sanitizeSyncError,
 } from '@/infrastructure/repositories/outbox-repository';
 import type { MobileInspection } from '@/schemas/mobile-inspection';
 
@@ -505,8 +516,340 @@ describe('integrity', () => {
 
 describe('migrations', () => {
   it('records the schema version', async () => {
-    expect(await database.getFirstAsync('PRAGMA user_version')).toEqual(
-      expect.objectContaining({ user_version: 2 })
+    expect(await readSchemaVersion(database)).toBe(MIGRATIONS.length);
+  });
+
+  it('creates every local structure of document 10.13', async () => {
+    const tables = await database.getAllAsync<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+    );
+
+    expect(tables.map((table) => table.name)).toEqual(
+      expect.arrayContaining([
+        'inspections',
+        'inspection_items',
+        'inspection_responses',
+        'evidences',
+        'non_conformities',
+        'sync_operations',
+        'sync_metadata',
+      ])
+    );
+  });
+
+  it.each(['inspections', 'inspection_responses', 'evidences', 'non_conformities'])(
+    'keeps the local sync metadata of document 10.13.2 on %s',
+    async (table) => {
+      const columns = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+
+      expect(columns.map((column) => column.name)).toEqual(
+        expect.arrayContaining([
+          'local_sync_status',
+          'is_dirty',
+          'last_synced_at',
+          'base_version',
+          'local_updated_at',
+          'sync_error',
+        ])
+      );
+    }
+  );
+
+  it.each(['inspection_responses', 'evidences', 'non_conformities'])(
+    'marks a removal not yet confirmed on %s',
+    async (table) => {
+      const columns = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+
+      expect(columns.map((column) => column.name)).toContain('deleted_locally');
+    }
+  );
+
+  it('upgrades a device with unsent work without losing any of it', async () => {
+    const old = await openTestDatabase({ schemaVersion: 2 });
+    jest.mocked(getDatabase).mockResolvedValue(old);
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: answer(),
+    });
+    await old.runAsync(
+      `INSERT INTO evidences (id, inspection_id, inspection_item_id, local_uri, created_at_device)
+       VALUES ('ev-1', 'insp-1', 'item-1', 'file:///evidences/ev-1.jpg', ?)`,
+      NOW
+    );
+
+    await migrate(old);
+
+    expect(await readSchemaVersion(old)).toBe(MIGRATIONS.length);
+    expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toEqual([
+      'op-start',
+      'op-r',
+    ]);
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.status).toBe('IN_PROGRESS');
+    expect(stored?.detail.syncState).toBe('aguardando-envio');
+    expect(stored?.responses).toEqual([expect.objectContaining({ conformity: 'CONFORMING' })]);
+    expect(stored?.evidenceCounts.get('item-1')).toBe(1);
+    expect(
+      await old.getFirstAsync("SELECT local_uri, deleted_locally FROM evidences WHERE id = 'ev-1'")
+    ).toEqual({ local_uri: 'file:///evidences/ev-1.jpg', deleted_locally: 0 });
+  });
+});
+
+describe('local queries (card #21)', () => {
+  async function seed(total: number) {
+    for (let index = 0; index < total; index += 1) {
+      const day = String((index % 28) + 1).padStart(2, '0');
+      await saveDownloadedInspection(
+        OWNER,
+        remote({
+          id: `insp-${index}`,
+          scheduledFor: `2026-08-${day}T13:00:00Z`,
+          items: [{ ...remote().items[0]!, id: `item-${index}` }],
+        }),
+        NOW
+      );
+    }
+  }
+
+  it('reads the list through an index, without sorting it in memory', async () => {
+    const plan = await database.getAllAsync<{ detail: string }>(
+      'EXPLAIN QUERY PLAN SELECT * FROM inspections WHERE owner_user_id = ? ORDER BY scheduled_for, id',
+      OWNER
+    );
+    const steps = plan.map((step) => step.detail).join('\n');
+
+    expect(steps).toContain('ix_inspections_owner_schedule');
+    expect(steps).not.toContain('TEMP B-TREE');
+  });
+
+  it('finds an equipment by its QR code through an index', async () => {
+    const plan = await database.getAllAsync<{ detail: string }>(
+      'EXPLAIN QUERY PLAN SELECT id FROM inspections WHERE owner_user_id = ? AND equipment_qr_code = ?',
+      OWNER,
+      'QR-1'
+    );
+
+    expect(plan.map((step) => step.detail).join('\n')).toContain('ix_inspections_owner_qr');
+  });
+
+  it('lists 200 stored inspections quickly', async () => {
+    await seed(200);
+
+    const startedAt = performance.now();
+    const summaries = await listInspectionSummaries(OWNER);
+    const elapsed = performance.now() - startedAt;
+
+    expect(summaries).toHaveLength(200);
+    expect(elapsed).toBeLessThan(500);
+  });
+});
+
+describe('outbox (card #23)', () => {
+  it('keeps the operation id through every retry', async () => {
+    await started();
+
+    await claimOperation('op-start', NOW);
+    await releaseOperation('op-start', NOW);
+    const retried = await claimOperation('op-start', NOW);
+    await markFailed(retried!, 'FAILED', 'Tempo esgotado.', NOW);
+    const again = await claimOperation('op-start', NOW);
+
+    expect(again).toMatchObject({ operationId: 'op-start', attemptCount: 3 });
+    expect(await countOpenOperations(OWNER)).toBe(1);
+  });
+
+  it('leaves the other operations untouched when one fails', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: answer(),
+    });
+    const before = (await listOpenOperations(OWNER)).find((op) => op.operationId === 'op-r');
+    const start = await claimOperation('op-start', NOW);
+
+    await markFailed(start!, 'FAILED', 'Valor inválido.', NOW);
+
+    const after = await listOpenOperations(OWNER);
+    expect(after.find((op) => op.operationId === 'op-r')).toEqual(before);
+    expect(after.map((op) => op.status)).toEqual(['FAILED', 'PENDING']);
+  });
+
+  it('survives closing the app and opening it again', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fieldops-outbox-'));
+    const path = join(directory, 'fieldops.db');
+    try {
+      const first = await openTestDatabase({ path });
+      jest.mocked(getDatabase).mockResolvedValue(first);
+      await started();
+      await claimOperation('op-start', NOW);
+      first.closeNow();
+
+      const reopened = await openTestDatabase({ path });
+      jest.mocked(getDatabase).mockResolvedValue(reopened);
+      await releaseInterruptedOperations(OWNER, NOW);
+
+      expect(await listOpenOperations(OWNER)).toEqual([
+        expect.objectContaining({ operationId: 'op-start', status: 'PENDING', attemptCount: 1 }),
+      ]);
+      reopened.closeNow();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('never stores a credential in the error', async () => {
+    await started();
+    const start = await claimOperation('op-start', NOW);
+
+    await markFailed(
+      start!,
+      'FAILED',
+      'Recusado: Authorization Bearer eyJhbGciOi.eyJzdWIiOiIx.c2lnbmF0dXJl token=abc123',
+      NOW
+    );
+
+    const [failed] = await listOpenOperations(OWNER);
+    expect(failed?.lastError).not.toMatch(/eyJ|abc123/);
+    expect(failed?.lastError).toContain('Recusado');
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.syncState).toBe('falha');
+  });
+
+  it('counts exactly what is still owed', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: answer(),
+    });
+    const start = await claimOperation('op-start', NOW);
+    const response = await claimOperation('op-r', NOW);
+
+    await markCompleted(start!, NOW);
+    await markFailed(response!, 'CONFLICT', 'Versão desatualizada.', NOW);
+
+    expect(await countOpenOperations(OWNER)).toBe(1);
+  });
+});
+
+describe('evidence operations (card #23)', () => {
+  const PHOTO = {
+    localUri: 'file:///data/evidences/ev-1.jpg',
+    mimeType: 'image/jpeg',
+    sizeBytes: 182_000,
+  };
+
+  async function withPhoto(operationId = 'op-upload') {
+    await registerEvidence({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      inspectionItemId: 'item-1',
+      evidenceId: 'ev-1',
+      createdAtDevice: NOW,
+      file: { ...PHOTO, operationId },
+    });
+  }
+
+  function upload() {
+    return listOpenOperations(OWNER).then((ops) => ops.find((op) => op.entityType === 'EVIDENCE'));
+  }
+
+  it('makes the upload wait for the answer it proves', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: answer({ conformity: 'NON_CONFORMING' }),
+    });
+
+    await withPhoto();
+
+    const queued = await upload();
+    expect(queued).toMatchObject({
+      operationId: 'op-upload',
+      operationType: 'UPLOAD',
+      dependencyIds: ['op-r'],
+      payload: { id: 'ev-1', responseId: 'resp-1', mimeType: 'image/jpeg' },
+    });
+    expect(JSON.stringify(queued?.payload)).not.toContain('file://');
+  });
+
+  it('uploads without waiting when the item has no answer yet', async () => {
+    await started();
+
+    await withPhoto();
+
+    expect((await upload())?.dependencyIds).toEqual([]);
+  });
+
+  it('cancels the pending upload when the evidence is removed before it is sent', async () => {
+    await started();
+    await withPhoto();
+
+    const outcome = await discardEvidence({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      evidenceId: 'ev-1',
+      operationId: 'op-remove',
+      discardedAtDevice: NOW,
+    });
+
+    expect(outcome).toEqual({ outcome: 'removed', localUri: PHOTO.localUri });
+    expect(await upload()).toBeUndefined();
+    expect((await findInspection(OWNER, 'insp-1'))?.evidenceCounts.size).toBe(0);
+  });
+
+  it('queues the removal after an upload already taken for sending', async () => {
+    await started();
+    await withPhoto();
+    await claimOperation('op-upload', NOW);
+
+    const outcome = await discardEvidence({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      evidenceId: 'ev-1',
+      operationId: 'op-remove',
+      discardedAtDevice: NOW,
+    });
+
+    expect(outcome).toEqual({ outcome: 'removal-queued' });
+    const removal = (await listOpenOperations(OWNER)).find((op) => op.operationId === 'op-remove');
+    expect(removal).toMatchObject({
+      operationType: 'DELETE_LOGICAL',
+      dependencyIds: ['op-upload'],
+    });
+    expect((await findInspection(OWNER, 'insp-1'))?.evidenceCounts.size).toBe(0);
+  });
+
+  it('marks the evidence as sent once its upload is confirmed', async () => {
+    await started();
+    await withPhoto();
+    const claimed = await claimOperation('op-upload', NOW);
+
+    await markCompleted(claimed!, NOW);
+
+    expect(
+      await database.getFirstAsync(
+        "SELECT is_dirty, local_sync_status FROM evidences WHERE id = 'ev-1'"
+      )
+    ).toEqual({ is_dirty: 0, local_sync_status: 'SYNCED' });
+  });
+});
+
+describe('sanitizeSyncError', () => {
+  it('caps a long message', () => {
+    expect(sanitizeSyncError('x'.repeat(1000))).toHaveLength(300);
+  });
+
+  it('keeps ordinary wording as it is', () => {
+    expect(sanitizeSyncError('Item obrigatório sem resposta.')).toBe(
+      'Item obrigatório sem resposta.'
     );
   });
 });

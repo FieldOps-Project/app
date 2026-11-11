@@ -199,6 +199,35 @@ describe('ordering', () => {
     expect(api.submit).not.toHaveBeenCalled();
   });
 
+  it('keeps evidence uploads queued until files can be sent, holding their submit', async () => {
+    const upload = operation({
+      operationId: 'op-upload',
+      entityType: 'EVIDENCE',
+      entityId: 'ev-1',
+      operationType: 'UPLOAD',
+      payload: { id: 'ev-1' },
+    });
+    const submit = operation({
+      operationId: 'op-submit',
+      payload: { action: 'SUBMIT', completedAtDevice: 'x', location: null },
+      dependencyIds: ['op-upload'],
+    });
+    const other = operation({
+      operationId: 'op-other',
+      inspectionId: 'insp-2',
+      entityId: 'insp-2',
+    });
+    queue([upload, submit, other]);
+    const api = gateway();
+
+    await synchronize('u-1', api, now);
+
+    expect(claimOperation).not.toHaveBeenCalledWith('op-upload', expect.anything());
+    expect(markFailed).not.toHaveBeenCalled();
+    expect(api.submit).not.toHaveBeenCalled();
+    expect(api.start).toHaveBeenCalledWith('insp-2', expect.anything());
+  });
+
   it('reopens the inspection when the server refuses the completion', async () => {
     const submit = operation({
       operationId: 'op-submit',
