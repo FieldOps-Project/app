@@ -189,6 +189,13 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
             {detail.equipment.qrCode === null ? null : (
               <Line icon="qr-code-outline">{`QR ${detail.equipment.qrCode}`}</Line>
             )}
+            <Button
+              label="Confirmar equipamento pelo QR Code"
+              variant="secondary"
+              onPress={() =>
+                router.push({ pathname: '/scanner', params: { inspectionId: detail.id } })
+              }
+            />
           </>
         )}
       </Card>
