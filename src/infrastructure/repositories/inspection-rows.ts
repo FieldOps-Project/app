@@ -5,7 +5,9 @@ import {
   isInspectionPriority,
   isInspectionStatus,
   type InspectionDetail,
+  type InspectionEquipment,
   type InspectionReview,
+  type InspectionStatus,
   type InspectionSummary,
   type SyncState,
 } from '@/domain/inspection';
@@ -127,11 +129,30 @@ function parseJson<TValue>(raw: string | null, fallback: TValue): TValue {
   }
 }
 
+export type EquipmentColumns = Pick<
+  InspectionRow,
+  'equipment_name' | 'equipment_qr_code' | 'equipment_asset_number' | 'equipment_serial_number'
+> & { equipment_id: string };
+
+export function toInspectionStatus(raw: string): InspectionStatus {
+  return isInspectionStatus(raw) ? raw : 'CANCELED';
+}
+
+export function toEquipment(row: EquipmentColumns): InspectionEquipment {
+  return {
+    id: row.equipment_id,
+    name: row.equipment_name ?? '',
+    qrCode: row.equipment_qr_code,
+    assetNumber: row.equipment_asset_number,
+    serialNumber: row.equipment_serial_number,
+  };
+}
+
 export function toSummary(row: InspectionRow): InspectionSummary {
   return {
     id: row.id,
     title: row.title,
-    status: isInspectionStatus(row.status) ? row.status : 'CANCELED',
+    status: toInspectionStatus(row.status),
     priority: isInspectionPriority(row.priority) ? row.priority : 'MEDIUM',
     scheduledFor: row.scheduled_for,
     clientName: row.client_name,
@@ -155,15 +176,7 @@ export function toDetail(row: InspectionRow): InspectionDetail {
       longitude: row.site_longitude,
     },
     equipment:
-      row.equipment_id === null
-        ? null
-        : {
-            id: row.equipment_id,
-            name: row.equipment_name ?? '',
-            qrCode: row.equipment_qr_code,
-            assetNumber: row.equipment_asset_number,
-            serialNumber: row.equipment_serial_number,
-          },
+      row.equipment_id === null ? null : toEquipment({ ...row, equipment_id: row.equipment_id }),
     startedAtDevice: row.started_at_device,
     completedAtDevice: row.completed_at_device,
     startLocation: toRecordedLocation(
