@@ -29,13 +29,9 @@ import { plural } from '@/utils/plural';
 export interface ChecklistItemRowProps {
   item: ChecklistItem;
   response: ChecklistResponse | undefined;
-  /** This item's evidences; the same array while they do not change, so the row stays put. */
   evidences: readonly EvidenceSummary[];
-  /** RN-038: a failure here still lacks its observation. */
   needsObservation: boolean;
-  /** RN-039: a failure here still lacks its evidence. */
   needsEvidence: boolean;
-  /** Flagged by the supervisor's rejection. */
   toCorrect: boolean;
   editable: boolean;
   focused: boolean;
@@ -44,16 +40,6 @@ export interface ChecklistItemRowProps {
   onOpenEvidence: (evidence: EvidenceSummary) => void;
 }
 
-/**
- * One item of the checklist, with its own form.
- *
- * Each row owns its state, so typing in one never re-renders the others
- * (document 13.10); the screen only hears about a confirmed answer. The
- * value is validated by the item's Zod schema as it is typed and saved when
- * editing ends, never on every key. Memoized explicitly: the list calls
- * `renderItem` again after each save, and only the row whose props changed
- * may re-render.
- */
 export const ChecklistItemRow = memo(function ChecklistItemRow({
   item,
   response,
@@ -81,17 +67,12 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
     mode: 'onChange',
   });
 
-  /** A newer answer from the device store replaces the form, unless the technician is mid-edit. */
   useEffect(() => {
     if (!form.formState.isDirty) {
       form.reset(toFormInput(item, response));
     }
   }, [form, item, response]);
 
-  /**
-   * Marks exactly the submitted values as clean — anything typed while the
-   * schema was checking stays dirty — and saves only a real change.
-   */
   function commit() {
     const submitted = form.getValues();
     void form.handleSubmit((answer) => {

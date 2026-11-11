@@ -18,11 +18,6 @@ const OUTCOME: Record<TransitionMoment, string> = {
   completion: 'a conclusão acontece assim mesmo',
 };
 
-/**
- * Said before the system prompt (RN-058): what is read, when, and that saying
- * no does not stop the work (RN-059). A permission Android will not ask for
- * again gets a way to the settings instead.
- */
 export function LocationConsent({ moment }: { moment: TransitionMoment }) {
   const permission = useLocationPermission();
   const refused = permission === 'denied' || permission === 'blocked';
@@ -54,7 +49,6 @@ export function LocationConsent({ moment }: { moment: TransitionMoment }) {
   );
 }
 
-/** Shown while the single reading is under way, so a slow fix never looks frozen. */
 export function LocatingNotice() {
   return (
     <Text variant="caption" tone="muted">

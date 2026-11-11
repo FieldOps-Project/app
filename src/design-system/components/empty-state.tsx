@@ -14,13 +14,6 @@ export interface EmptyStateProps {
   onAction?: () => void;
 }
 
-/**
- * Reusable empty state.
- *
- * Distinguishes "nothing here yet" from a failure: the tone is neutral and the
- * copy uses business language. An optional action gives the technician a way
- * forward instead of a dead end.
- */
 export function EmptyState({
   title,
   description,

@@ -1,16 +1,5 @@
 import { z } from 'zod';
 
-/**
- * Wire format of `GET /api/v1/mobile/inspections/{id}` (backend#19, document
- * 12.10). The aggregate travels in one response because the device can lose
- * the connection between calls.
- *
- * Parsing is strict on what the app cannot work without (ids, status, the
- * snapshot's order) and lenient on the rest: optional text comes as `null`,
- * and `responseType` stays an open string so a type published by a newer
- * panel reaches the checklist as an "unsupported item", not as a rejected
- * payload that hides the whole inspection (document 13.5).
- */
 const nullableText = z
   .string()
   .nullish()
@@ -84,11 +73,6 @@ const checklistResponseSchema = z.object({
   answeredAtDevice: z.string(),
 });
 
-/**
- * A position recorded at the start or at the completion (backend#20, card
- * #19). Absent until the server reports it; a pair outside the valid range is
- * read as no position at all rather than drawn in the wrong place.
- */
 const fieldPositionSchema = z
   .object({
     latitude: z.number().min(-90).max(90),
@@ -153,10 +137,6 @@ export const mobileInspectionSchema = z.object({
 
 export type MobileInspection = z.infer<typeof mobileInspectionSchema>;
 
-/**
- * One entry of `GET /api/v1/mobile/inspections`. Only the id is required: the
- * list is a table of contents, and the full aggregate comes from the detail.
- */
 const mobileInspectionEntrySchema = z.object({
   id: z.string().min(1),
   updatedAt: nullableText,
@@ -164,10 +144,6 @@ const mobileInspectionEntrySchema = z.object({
 
 export type MobileInspectionEntry = z.infer<typeof mobileInspectionEntrySchema>;
 
-/**
- * The list answers either a bare array or a Spring page (`content` + `last`);
- * the contract is still settling (backend#19), and both shapes are accepted.
- */
 export const mobileInspectionListSchema = z.union([
   z.array(mobileInspectionEntrySchema).transform((content) => ({ content, last: true })),
   z.object({

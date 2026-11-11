@@ -7,11 +7,6 @@ import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { canReviewInspections } from '@/domain/session';
 
-/**
- * Signing out asks for confirmation first (ADR-001). Once the outbox exists
- * (EP-08), this confirmation is where the number of pending operations is
- * shown; leaving never deletes them.
- */
 export function ProfileScreen() {
   const { session, signOut } = useSession();
   const [isConfirming, setIsConfirming] = useState(false);

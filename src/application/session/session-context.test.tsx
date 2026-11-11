@@ -58,7 +58,6 @@ let current: ReturnType<typeof useSession>;
 let renderer: ReactTestRenderer | undefined;
 let queryClient: QueryClient;
 
-/** Hands the latest context value to the test from an effect, not from render. */
 function Probe({
   onValue,
 }: {

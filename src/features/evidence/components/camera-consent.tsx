@@ -13,13 +13,6 @@ export interface CameraConsentProps {
   readonly onBack: () => void;
 }
 
-/**
- * Said before the system prompt (RN-058): what the camera is for and that
- * the photos stay on the device until they are sent. A refusal never stops
- * the inspection (RN-059): the technician goes back to the checklist, keeps
- * answering and can come back for the photo; a permission Android will not
- * ask for again gets a way to the settings.
- */
 export function CameraConsent({ permission, onRequest, onBack }: CameraConsentProps) {
   const refused = permission.status === 'denied';
   const blocked = refused && !permission.canAskAgain;

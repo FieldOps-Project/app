@@ -10,10 +10,6 @@ import {
 
 export type DateRange = 'all' | 'today' | 'overdue' | 'next-7-days';
 
-/**
- * What the technician narrowed the list to. Every field combines with the
- * others (AC of card #10), and an empty set means "any".
- */
 export interface InspectionFilters {
   readonly query: string;
   readonly statuses: readonly InspectionStatus[];
@@ -30,7 +26,6 @@ export const NO_FILTERS: InspectionFilters = {
   unsentOnly: false,
 };
 
-/** The filters a home block opens the list with (card #9). */
 export function filtersForView(view: InspectionView | null): InspectionFilters {
   switch (view) {
     case 'today':
@@ -46,7 +41,6 @@ export function filtersForView(view: InspectionView | null): InspectionFilters {
   }
 }
 
-/** Selected options, the search left out: the number shown on the "Filtros" button. */
 export function countActiveFilters(filters: InspectionFilters): number {
   return (
     filters.statuses.length +
@@ -56,12 +50,10 @@ export function countActiveFilters(filters: InspectionFilters): number {
   );
 }
 
-/** Whether the list shows less than everything, which changes its empty state. */
 export function hasActiveFilters(filters: InspectionFilters): boolean {
   return filters.query.trim() !== '' || countActiveFilters(filters) > 0;
 }
 
-/** Case- and accent-insensitive, so "sao jorge" finds "São Jorge". */
 function normalize(text: string): string {
   return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
@@ -84,11 +76,6 @@ function inDateRange(inspection: InspectionSummary, range: DateRange, now: Date)
   }
 }
 
-/**
- * A view over the collection: returns a new array and never touches the
- * source, so filtering can never remove anything stored on the device
- * (AC-MOBILE-LIST). Runs without network — the search is local.
- */
 export function filterInspections(
   inspections: readonly InspectionSummary[],
   filters: InspectionFilters,
@@ -119,10 +106,6 @@ export function dateRangeLabel(range: DateRange): string {
   return labels[range];
 }
 
-/**
- * The home blocks, each counted with the very filter it opens (card #9), so a
- * block can never promise a number the list does not show.
- */
 export function summarizeDay(inspections: readonly InspectionSummary[], now: Date): DayOverview {
   const count = (view: InspectionView) =>
     filterInspections(inspections, filtersForView(view), now).length;

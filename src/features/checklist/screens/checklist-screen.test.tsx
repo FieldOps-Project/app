@@ -12,7 +12,6 @@ import { ChecklistScreen } from '@/features/checklist/screens/checklist-screen';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-/** Icons load their font asynchronously; irrelevant here and noisy under act(). */
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 const mockState: { current: InspectionDetailState } = { current: { state: 'loading' } };

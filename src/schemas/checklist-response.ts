@@ -2,28 +2,15 @@ import { z } from 'zod';
 
 import type { ChecklistItem, ChecklistResponse, Conformity } from '@/domain/checklist';
 
-/**
- * Validation of one checklist answer (card #13), derived from the item's type
- * and the rules frozen in its snapshot. Zod is the single source: the field
- * shows the same message the save would refuse with (RN-036).
- *
- * This is validity — is the value acceptable for the item. Completeness — is a
- * required item answered, does a failure carry its observation — belongs to
- * `computeProgress`, which the checklist, the detail and the summary share.
- */
-
 export const TEXT_SHORT_MAX = 255;
 export const TEXT_LONG_MAX = 4000;
 export const OBSERVATION_MAX = 2000;
 
-/** What a field holds while the technician edits it. */
 export interface ResponseFormInput {
-  /** Text, the number as typed, the chosen option, `YYYY-MM-DD`, or a conformity. */
   value: string | boolean | null;
   observation: string;
 }
 
-/** The typed columns of the API's response, only the one matching the type filled. */
 export type ResponseColumns = Pick<
   ChecklistResponse,
   'valueText' | 'valueNumber' | 'valueBoolean' | 'valueDate' | 'conformity'
@@ -42,11 +29,6 @@ const EMPTY_COLUMNS: ResponseColumns = {
   conformity: null,
 };
 
-/**
- * Accepts the comma Brazilians type and the dot a hardware keyboard sends,
- * and nothing else: no thousands separator, no exponent, no stray text. The
- * API receives a number, so the conversion happens here, at the edge.
- */
 export function parseDecimal(text: string): number | null {
   const trimmed = text.trim();
   if (!/^-?\d+([.,]\d+)?$/.test(trimmed)) {
@@ -55,7 +37,6 @@ export function parseDecimal(text: string): number | null {
   return Number(trimmed.replace(',', '.'));
 }
 
-/** The stored number as the technician reads it: decimal comma. */
 export function formatDecimal(value: number): string {
   return String(value).replace('.', ',');
 }
@@ -64,12 +45,6 @@ const CONFORMITIES: readonly string[] = ['CONFORMING', 'NON_CONFORMING', 'NOT_AP
 
 type Issue = (message: string) => void;
 
-/**
- * A yes/no answer also carries its conformity, as in the API's own example
- * payload (backend#21): "Não" is the failure the item's rules react to, so
- * the observation and evidence required on failure (RN-038, RN-039) apply to
- * BOOLEAN items exactly as the server checks them on submit (backend#20).
- */
 function booleanConformity(answer: boolean | null): Conformity | null {
   if (answer === null) {
     return null;
@@ -101,12 +76,6 @@ function numberValue(item: ChecklistItem, value: unknown, issue: Issue): number 
   return parsed;
 }
 
-/**
- * Reads the edited value into the typed column of the item's type, reporting
- * through `issue` what makes it invalid. An empty value is valid and means
- * "no answer"; whether the item may stay unanswered is completeness, not
- * validity.
- */
 function toColumns(item: ChecklistItem, value: unknown, issue: Issue): ResponseColumns {
   switch (item.responseType) {
     case 'TEXT_SHORT':
@@ -145,7 +114,6 @@ function toColumns(item: ChecklistItem, value: unknown, issue: Issue): ResponseC
   }
 }
 
-/** The form schema of one item: its value by type, and the free observation. */
 export function responseFormSchema(item: ChecklistItem) {
   return z
     .object({
@@ -162,7 +130,6 @@ export function responseFormSchema(item: ChecklistItem) {
     .transform(({ value, observation }): ResponseFormOutput => ({ columns: value, observation }));
 }
 
-/** Puts a stored answer back into the shape the field edits. */
 export function toFormInput(
   item: ChecklistItem,
   response: ChecklistResponse | undefined
@@ -195,12 +162,10 @@ export function toFormInput(
   }
 }
 
-/** Nothing to save: no value and no observation. */
 export function isEmptyAnswer({ columns, observation }: ResponseFormOutput): boolean {
   return observation === null && Object.values(columns).every((value) => value === null);
 }
 
-/** The answer is what is already stored, so saving it again would only queue a no-op. */
 export function isSameAnswer(
   { columns, observation }: ResponseFormOutput,
   stored: ChecklistResponse | undefined

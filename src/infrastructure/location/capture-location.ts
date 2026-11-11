@@ -2,19 +2,10 @@ import * as Location from 'expo-location';
 
 import { isValidCoordinate, type LocationCapture } from '@/domain/field-location';
 
-/**
- * Indoors or without a clear sky a fix may never arrive. Past this limit the
- * transition goes on without a position and the technician is told why.
- */
 export const LOCATION_TIMEOUT_MS = 15_000;
 
 export type LocationPermissionState = 'granted' | 'undetermined' | 'denied' | 'blocked';
 
-/**
- * Reads the permission without asking for it, so the screen can explain the
- * use before the system prompt — and point to the settings when Android will
- * not show the prompt again (RN-058, RN-059).
- */
 export async function readLocationPermission(): Promise<LocationPermissionState> {
   try {
     const permission = await Location.getForegroundPermissionsAsync();
@@ -40,11 +31,6 @@ function withTimeout<TValue>(promise: Promise<TValue>, milliseconds: number): Pr
   return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
 }
 
-/**
- * One explicit reading of the position — no watcher, no background task
- * (RN-060). Every failure becomes a `missing` outcome with its reason: a
- * capture never throws, never closes the app and never invents a coordinate.
- */
 export async function captureLocation(
   timeoutMs: number = LOCATION_TIMEOUT_MS,
   now: () => string = () => new Date().toISOString()
@@ -72,7 +58,6 @@ export async function captureLocation(
         latitude,
         longitude,
         accuracy: typeof accuracy === 'number' && Number.isFinite(accuracy) ? accuracy : null,
-        // The moment of the fix, which a cached reading may place before the call.
         capturedAt: Number.isFinite(reading.timestamp)
           ? new Date(reading.timestamp).toISOString()
           : now(),

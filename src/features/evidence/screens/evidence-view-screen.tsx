@@ -17,12 +17,6 @@ import { EvidenceItemLink } from '@/features/evidence/components/evidence-item-l
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 import { formatDateTime } from '@/utils/format-date';
 
-/**
- * One evidence enlarged: the only place the full-resolution photo is decoded
- * (document 13.10). While the inspection is in progress the technician can
- * remove it; a photo not sent yet is deleted, one the server may hold is
- * removed after it (card #23).
- */
 export function EvidenceViewScreen() {
   const inspectionId = useInspectionId();
   const { itemId = '', evidenceId = '' } = useLocalSearchParams<{
@@ -100,7 +94,6 @@ export function EvidenceViewScreen() {
   );
 }
 
-/** The photo at its own proportions, measured once it loads; portrait until then. */
 function FullPhoto({ path }: { path: string }) {
   const [aspectRatio, setAspectRatio] = useState(3 / 4);
 

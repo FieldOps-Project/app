@@ -1,20 +1,12 @@
 import { isValidCoordinate } from '@/domain/field-location';
 import { colors } from '@/design-system/tokens/design-tokens';
 
-/**
- * A self-contained Leaflet page over OpenStreetMap tiles: no API key, no
- * billing account. The same page runs in a WebView on the device and in an
- * iframe on the web. Only the tiles need the network; the coordinates are
- * always printed next to the map, so the data survives a missing connection.
- */
-
 export type MapMarkerKind = 'site' | 'start' | 'completion';
 
 export interface MapMarker {
   readonly kind: MapMarkerKind;
   readonly latitude: number;
   readonly longitude: number;
-  /** Accuracy radius in meters, drawn as a circle around captured positions. */
   readonly accuracy: number | null;
   readonly label: string;
 }
@@ -27,7 +19,6 @@ export const MARKER_COLORS: Record<MapMarkerKind, string> = {
 
 const LEAFLET = 'https://unpkg.com/leaflet@1.9.4/dist';
 
-/** JSON inside a <script> must not be able to close the tag. */
 function toScriptJson(value: unknown): string {
   return JSON.stringify(value)
     .replace(/</g, '\\u003c')
@@ -37,7 +28,6 @@ function toScriptJson(value: unknown): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
-/** Markers outside the valid range are left out rather than drawn in the wrong place. */
 export function drawableMarkers(markers: readonly MapMarker[]): MapMarker[] {
   return markers.filter((marker) => isValidCoordinate(marker.latitude, marker.longitude));
 }

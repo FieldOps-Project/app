@@ -26,24 +26,11 @@ import {
 import type { LocationPayload } from '@/infrastructure/api/mobile-inspections-api';
 import type { MobileInspection } from '@/schemas/mobile-inspection';
 
-/**
- * Inspections stored on the device: the operational source of the app, not a
- * disposable cache (document 10.13). Every read is scoped to the signed-in
- * technician, so a shared device never shows one person's work to another
- * (RN-004).
- */
-
 export interface StoredInspection {
   readonly detail: InspectionDetail;
   readonly items: readonly ChecklistItem[];
   readonly responses: readonly ChecklistResponse[];
-  /** Evidences registered per snapshot item id. */
   readonly evidenceCounts: ReadonlyMap<string, number>;
-  /**
-   * Evidences per snapshot item id, oldest first. A plain object rather than a
-   * `Map`, so the query cache's structural sharing keeps the array of every
-   * item whose evidences did not change, and those rows do not re-render.
-   */
   readonly evidences: Readonly<Record<string, readonly EvidenceSummary[]>>;
 }
 
@@ -112,19 +99,6 @@ export async function findServerUpdates(ownerUserId: string): Promise<Map<string
   return new Map(rows.map((row) => [row.id, row.server_updated_at]));
 }
 
-/**
- * Writes one downloaded inspection in a single transaction (document 10.14.1).
- *
- * Local work always wins over the download: an inspection with changes not
- * yet sent keeps its local state, and an answer not yet sent is never
- * replaced (card #22). The one server fact applied over local work is a
- * cancellation, which is recorded without discarding anything (RN-077).
- * The snapshot is immutable, so items already stored are left as they are.
- *
- * The local check is by id on purpose: if another technician left unsent
- * work on this device for an inspection now assigned elsewhere, that work is
- * kept rather than handed over (ADR-001 leaves shared devices to EP-08).
- */
 export async function saveDownloadedInspection(
   ownerUserId: string,
   remote: MobileInspection,
@@ -225,12 +199,6 @@ function positionValues(position: MobileInspection['startLocation']) {
     : ([position.latitude, position.longitude, position.accuracy, position.capturedAt] as const);
 }
 
-/**
- * A position the server reports replaces the local one as a whole, and clears
- * any recorded reason for a gap. One it does not report — a contract still
- * settling (backend#19), or a transition sent without a position — never
- * erases what the device captured or why it could not.
- */
 function keepLocalPositionUnlessReported(prefix: 'start' | 'completion'): string {
   const reported = `excluded.${prefix}_latitude IS NOT NULL`;
   const columns = ['latitude', 'longitude', 'accuracy', 'location_at'].map(
@@ -270,10 +238,6 @@ async function insertSnapshot(transaction: SQLiteDatabase, remote: MobileInspect
   }
 }
 
-/**
- * Server answers fill the gaps and refresh what is already confirmed; an
- * answer edited on the device and not yet sent is left untouched.
- */
 async function upsertServerResponses(
   transaction: SQLiteDatabase,
   remote: MobileInspection,
@@ -330,11 +294,6 @@ function toSqlBoolean(value: boolean | null): number | null {
   return value === null ? null : value ? 1 : 0;
 }
 
-/**
- * Thrown when a write meets a state that no longer allows it, such as an
- * answer saved after the completion. The screens prevent these paths; this is
- * the last line, checked inside the same transaction as the write.
- */
 export class InspectionStateError extends Error {
   constructor(readonly status: InspectionStatus | null) {
     super('A inspeção não está em um estado que permita esta alteração.');
@@ -372,18 +331,14 @@ export interface StartCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;
   readonly operationId: string;
-  /** Device clock at the moment of the confirmation (RN-034). */
   readonly startedAtDevice: string;
-  /** The single reading taken at the start (card #19). */
   readonly location: LocationCapture;
 }
 
-/** The server takes the position or `null`; the reason for a gap stays on the device. */
 function toLocationPayload(capture: LocationCapture): LocationPayload | null {
   return capture.status === 'captured' ? capture.position : null;
 }
 
-/** Column values in the order latitude, longitude, accuracy, captured at, missing reason. */
 function locationColumns(capture: LocationCapture) {
   return capture.status === 'captured'
     ? ([
@@ -396,7 +351,6 @@ function locationColumns(capture: LocationCapture) {
     : ([null, null, null, null, capture.reason] as const);
 }
 
-/** UC-09: the local state and its queued operation are written together. */
 export async function startInspection(command: StartCommand): Promise<void> {
   const now = command.startedAtDevice;
 
@@ -446,10 +400,6 @@ export interface SaveResponseCommand {
   readonly response: ChecklistResponse;
 }
 
-/**
- * Document 10.14.2: the answer is saved on the device and its operation is
- * created or folded into the pending one. Nothing here waits for the network.
- */
 export async function saveResponse({
   ownerUserId,
   inspectionId,
@@ -530,12 +480,6 @@ export async function saveResponse({
   });
 }
 
-/**
- * A photo taken before the item was answered belongs to the answer created
- * later. Its evidence is linked to the answer, and an upload not yet
- * attempted gains the answer's creation as a dependency, so the file never
- * reaches the server before the answer it proves (document 10.13.3).
- */
 async function linkEvidencesToNewAnswer(
   transaction: SQLiteDatabase,
   link: {
@@ -572,12 +516,9 @@ async function linkEvidencesToNewAnswer(
   }
 }
 
-/** The file kept on the device for an evidence, and the operation that will upload it. */
 export interface EvidenceFile {
   readonly operationId: string;
-  /** Relative to the app's persistent directory, never the cache (RN-047). */
   readonly photoPath: string;
-  /** The small copy lists show; stays on the device. */
   readonly thumbnailPath: string;
   readonly mimeType: string;
   readonly sizeBytes: number;
@@ -594,14 +535,6 @@ export interface RegisterEvidenceCommand {
   readonly file: EvidenceFile;
 }
 
-/**
- * Document 10.14.3: the evidence is stored on the device and its upload joins
- * the outbox in the same transaction. The evidence is linked to the item's
- * answer when there is one, and the upload waits for every operation still
- * owed for that answer — the server must have the answer before the file
- * that proves it (document 10.13.3). Nothing about the file's contents goes
- * into the queue, only its metadata.
- */
 export async function registerEvidence(command: RegisterEvidenceCommand): Promise<void> {
   const now = command.createdAtDevice;
 
@@ -676,26 +609,15 @@ export interface DiscardEvidenceCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;
   readonly evidenceId: string;
-  /** Used only when the server may already hold the evidence. */
   readonly operationId: string;
   readonly discardedAtDevice: string;
 }
 
 export type DiscardedEvidence =
-  /** Never sent: the record and its upload are gone; the caller deletes these files. */
   | { readonly outcome: 'removed'; readonly files: readonly string[] }
-  /** Already taken for sending: hidden on the device, removal queued, file kept. */
   | { readonly outcome: 'removal-queued' }
   | { readonly outcome: 'not-found' };
 
-/**
- * The technician removes an evidence before completing. If its upload never
- * left the device, the pending operation is cancelled with it and nothing is
- * sent. If the upload was already taken for sending or confirmed, the server
- * may hold the file: the evidence is hidden and marked `deleted_locally`, and
- * a removal is queued after the upload, so the server's audit trail records
- * it (backend#22).
- */
 export async function discardEvidence(command: DiscardEvidenceCommand): Promise<DiscardedEvidence> {
   const now = command.discardedAtDevice;
 
@@ -726,7 +648,6 @@ export async function discardEvidence(command: DiscardEvidenceCommand): Promise<
     );
     if (!reachedServer) {
       await transaction.runAsync('DELETE FROM evidences WHERE id = ?', command.evidenceId);
-      // The cancelled upload may have been the last thing owed for the inspection.
       await transaction.runAsync(
         `UPDATE inspections SET is_dirty = 0, local_sync_status = 'SYNCED', sync_error = NULL
           WHERE id = ? AND is_dirty = 1 AND NOT EXISTS (
@@ -772,17 +693,10 @@ export interface CompleteCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;
   readonly operationId: string;
-  /** Device clock at the moment of the confirmation (RN-042). */
   readonly completedAtDevice: string;
-  /** The single reading taken at the completion (card #19). */
   readonly location: LocationCapture;
 }
 
-/**
- * Document 10.14.4: the inspection is locked locally and the completion joins
- * the outbox after everything still owed for it, which it declares as
- * dependencies — the server must receive the answers before the submit.
- */
 export async function completeInspection(command: CompleteCommand): Promise<void> {
   const now = command.completedAtDevice;
 
@@ -827,7 +741,6 @@ export async function completeInspection(command: CompleteCommand): Promise<void
   });
 }
 
-/** Sync bookkeeping shown on the sync tab and the home screen. */
 export async function recordSyncRun(
   ownerUserId: string,
   result: 'SUCCESS' | 'PARTIAL' | 'FAILED',

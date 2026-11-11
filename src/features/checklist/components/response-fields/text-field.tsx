@@ -6,7 +6,6 @@ function asText(value: ResponseFieldProps['value']): string {
   return typeof value === 'string' ? value : '';
 }
 
-/** TEXT_SHORT: one line, with the remaining room always visible. */
 export function TextShortField({
   item,
   value,
@@ -32,7 +31,6 @@ export function TextShortField({
   );
 }
 
-/** TEXT_LONG: grows with the text; the screen keeps it above the keyboard. */
 export function TextLongField({
   item,
   value,

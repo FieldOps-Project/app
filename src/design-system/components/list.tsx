@@ -5,19 +5,10 @@ export interface ListProps<TItem> {
   data: readonly TItem[];
   renderItem: (item: TItem, index: number) => ReactNode;
   keyExtractor: (item: TItem, index: number) => string;
-  /** Rendered in place of the list when there are no items. */
   empty?: ReactNode;
   className?: string;
 }
 
-/**
- * Design system list.
- *
- * A plain mapped list, not a `FlatList`, so it composes inside the scroll view
- * that {@link Screen} already provides without nesting virtualized lists. The
- * empty state is part of the component so every list handles "no items" the
- * same way.
- */
 export function List<TItem>({
   data,
   renderItem,

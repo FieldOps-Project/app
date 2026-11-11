@@ -5,12 +5,6 @@ import { View } from 'react-native';
 import { isDevelopment } from '@/config/env';
 import { Text } from '@/design-system/components/text';
 
-/**
- * Stack depth, shown only in development.
- *
- * Makes the "camera does not pile up screens" rule observable: the number must
- * return to the same value after each capture cycle.
- */
 export function NavigationDepthBadge() {
   const navigation = useNavigation();
   const [depth, setDepth] = useState<number | null>(null);

@@ -15,7 +15,6 @@ const MOMENT_LABELS: Record<TransitionMoment, string> = {
   completion: 'Conclusão',
 };
 
-/** One sentence per transition, for the technician and for the review (AC-LOCATION). */
 export function describeRecordedLocation(
   moment: TransitionMoment,
   recorded: RecordedLocation
@@ -33,11 +32,6 @@ export function describeRecordedLocation(
   }
 }
 
-/**
- * The site's registered point and the positions read in the field, kept
- * apart: the site is where the inspection should happen, the others are where
- * the technician's device was when it started and when it was completed.
- */
 export function inspectionMarkers(detail: InspectionDetail): MapMarker[] {
   const markers: MapMarker[] = [];
   if (detail.site.latitude !== null && detail.site.longitude !== null) {

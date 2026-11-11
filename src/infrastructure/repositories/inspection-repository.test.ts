@@ -591,7 +591,6 @@ describe('migrations', () => {
     const old = await openTestDatabase({ schemaVersion: 2 });
     jest.mocked(getDatabase).mockResolvedValue(old);
     await started();
-    // Written as the version 2 app wrote them, not through today's repositories.
     await old.runAsync(
       `INSERT INTO inspection_responses (
          id, inspection_id, inspection_item_id, conformity, answered_at_device, base_version,

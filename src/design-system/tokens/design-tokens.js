@@ -1,8 +1,3 @@
-/**
- * Visual tokens, in plain JavaScript because `tailwind.config.js` runs as
- * CommonJS outside the bundler while the app code is TypeScript. One file keeps
- * the utility-class palette and the navigation theme from diverging.
- */
 const colors = {
   brand: {
     50: '#eff6ff',
@@ -47,7 +42,6 @@ const borderRadius = {
   card: '14px',
 };
 
-/** Android accessibility guideline for touch targets (48dp — React Native's numeric sizes are already density-independent). */
 const minTouchTarget = 48;
 
 module.exports = { colors, spacing, borderRadius, minTouchTarget };

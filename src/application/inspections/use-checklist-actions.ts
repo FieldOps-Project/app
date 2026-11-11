@@ -20,19 +20,6 @@ import {
 } from '@/infrastructure/repositories/inspection-repository';
 import type { ResponseFormOutput } from '@/schemas/checklist-response';
 
-/**
- * Saves one confirmed answer on the device (RN-041, document 10.14.2).
- *
- * The cached inspection is patched in place before the write: only the
- * answered item's response changes identity, so the other rows of a long
- * checklist do not re-render, and the progress recomputes once per confirmed
- * answer rather than per keystroke (cards #12 and #15). Nothing waits for the
- * network. A refused write — the inspection was completed meanwhile — rolls
- * the cache back to what the device holds.
- *
- * The response is built once, before the write, so the cache and the device
- * agree on its id from the start.
- */
 export function useSaveAnswer(inspectionId: string) {
   const ownerUserId = useOwnerUserId();
   const queryClient = useQueryClient();
@@ -69,11 +56,6 @@ export function useSaveAnswer(inspectionId: string) {
       queryClient.setQueryData(detailKey, context?.previous);
       void queryClient.invalidateQueries({ queryKey: detailKey });
     },
-    /**
-     * Re-reads the inspection once the write is on the device, so a read that
-     * raced with it cannot leave the screen on the older answer. Structural
-     * sharing keeps every unchanged response object, so the rows stay put.
-     */
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: detailKey });
       void queryClient.invalidateQueries({ queryKey: queryKeys.inspections.list({ ownerUserId }) });
@@ -148,14 +130,6 @@ function useInvalidateInspection(inspectionId: string) {
     ]);
 }
 
-/**
- * UC-11: the confirmed photo becomes an evidence of the item. The file is
- * prepared and moved to the persistent directory first, then the evidence
- * and its upload are recorded in one transaction; if that write is refused,
- * the files just stored are removed, so nothing is left without a record, and
- * the camera's file stays for another try. Errors reach the screen already
- * worded for the technician. Nothing waits for the network.
- */
 export function useAttachPhoto(inspectionId: string) {
   const ownerUserId = useOwnerUserId();
   const invalidate = useInvalidateInspection(inspectionId);
@@ -192,16 +166,10 @@ export function useAttachPhoto(inspectionId: string) {
       }
       deleteFile(photo.uri);
     },
-    // Not awaited: the screen leaves as soon as the write is done, and the
-    // lists refresh behind it.
     onSettled: () => void invalidate(),
   });
 }
 
-/**
- * Removes an evidence. A file never sent is deleted with it; one the server
- * may already hold stays until the removal is confirmed (RN-047).
- */
 export function useDiscardEvidence(inspectionId: string) {
   const ownerUserId = useOwnerUserId();
   const invalidate = useInvalidateInspection(inspectionId);

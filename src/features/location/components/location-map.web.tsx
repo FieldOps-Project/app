@@ -4,7 +4,6 @@ import { View } from 'react-native';
 import type { LocationMapProps } from '@/features/location/components/location-map';
 import { buildLeafletHtml } from '@/features/location/leaflet-html';
 
-/** The browser: the same Leaflet page, isolated in an iframe. */
 export function LocationMap({ markers }: LocationMapProps) {
   const html = useMemo(() => buildLeafletHtml(markers), [markers]);
 

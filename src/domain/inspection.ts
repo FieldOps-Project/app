@@ -2,7 +2,6 @@ import type { RecordedLocation } from '@/domain/field-location';
 
 export type InspectionId = string;
 
-/** Business states of an inspection (document 7.6), as the API names them. */
 export const INSPECTION_STATUSES = [
   'DRAFT',
   'ASSIGNED',
@@ -20,21 +19,14 @@ export const INSPECTION_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as co
 
 export type InspectionPriority = (typeof INSPECTION_PRIORITIES)[number];
 
-/**
- * Local delivery state of a record (document 13.8). Independent of the business
- * status: an inspection can be in progress and waiting to be sent at once
- * (document 7.5).
- */
 export type SyncState =
   'salvo-no-dispositivo' | 'aguardando-envio' | 'enviado' | 'falha' | 'conflito';
 
-/** What a list card shows: enough to pick the inspection without opening it. */
 export interface InspectionSummary {
   readonly id: InspectionId;
   readonly title: string;
   readonly status: InspectionStatus;
   readonly priority: InspectionPriority;
-  /** ISO 8601 instant. */
   readonly scheduledFor: string;
   readonly clientName: string;
   readonly siteName: string;
@@ -46,7 +38,6 @@ export interface InspectionSite {
   readonly id: string;
   readonly name: string;
   readonly addressLine: string | null;
-  /** Registered coordinates of the site, never the position captured in the field. */
   readonly latitude: number | null;
   readonly longitude: number | null;
 }
@@ -59,35 +50,26 @@ export interface InspectionEquipment {
   readonly serialNumber: string | null;
 }
 
-/** The supervisor's decision, present once the inspection was reviewed. */
 export interface InspectionReview {
   readonly decision: 'APPROVED' | 'REJECTED';
   readonly reason: string | null;
-  /** Snapshot item ids the technician has to correct. */
   readonly itemsToCorrect: readonly string[];
 }
 
 export interface InspectionDetail extends InspectionSummary {
   readonly instructions: string | null;
-  /** Server version, carried as `baseVersion` by every queued operation. */
   readonly version: number;
   readonly client: { readonly id: string; readonly name: string };
   readonly site: InspectionSite;
   readonly equipment: InspectionEquipment | null;
-  /** Device clock at the moment the technician started (RN-034). */
   readonly startedAtDevice: string | null;
-  /** Device clock at the moment the technician completed (RN-042). */
   readonly completedAtDevice: string | null;
-  /** Where the technician's device was when the inspection started (card #19). */
   readonly startLocation: RecordedLocation;
-  /** Where the technician's device was when the inspection was completed. */
   readonly completionLocation: RecordedLocation;
   readonly review: InspectionReview | null;
-  /** Why the last send failed, in business language; `null` when nothing failed. */
   readonly syncError: string | null;
 }
 
-/** Business language, not API wording (document 13.9). */
 export function syncStateLabel(state: SyncState): string {
   const labels: Record<SyncState, string> = {
     'salvo-no-dispositivo': 'Salvo no dispositivo',
@@ -99,11 +81,6 @@ export function syncStateLabel(state: SyncState): string {
   return labels[state];
 }
 
-/**
- * SUBMITTED reads as "Concluída": on the device it is set the moment the
- * technician completes, before anything reached the server. The sync badge is
- * what tells "concluída" apart from "enviada".
- */
 export function inspectionStatusLabel(status: InspectionStatus): string {
   const labels: Record<InspectionStatus, string> = {
     DRAFT: 'Rascunho',
@@ -136,7 +113,6 @@ export function isInspectionPriority(value: string): value is InspectionPriority
   return (INSPECTION_PRIORITIES as readonly string[]).includes(value);
 }
 
-/** High and critical work is flagged on the card so it stands out in a long list. */
 export function isUrgentPriority(priority: InspectionPriority): boolean {
   return priority === 'HIGH' || priority === 'CRITICAL';
 }

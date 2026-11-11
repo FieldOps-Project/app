@@ -4,12 +4,6 @@ import type { Session } from '@/domain/session';
 
 const SESSION_KEY = 'fieldops.session';
 
-/**
- * Reads the stored session.
- *
- * An unreadable or corrupted entry resolves to `null`, which the route guard
- * treats as signed out. The stored value is never logged.
- */
 export async function readSession(): Promise<Session | null> {
   try {
     const raw = await SecureStore.getItemAsync(SESSION_KEY);

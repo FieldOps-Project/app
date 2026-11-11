@@ -34,14 +34,12 @@ import type { ResponseFormOutput } from '@/schemas/checklist-response';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 import { plural } from '@/utils/plural';
 
-/** One shared empty list, so an item without evidences keeps the same prop across renders. */
 const NO_EVIDENCE: readonly EvidenceSummary[] = [];
 
 type Row =
   | { readonly kind: 'section'; readonly key: string; readonly section: ChecklistSection }
   | { readonly kind: 'item'; readonly key: string; readonly item: ChecklistItem };
 
-/** Sections and items as one flat, virtualized list, in the snapshot's order. */
 function toRows(items: readonly ChecklistItem[]): Row[] {
   return toSections(items).flatMap((section): Row[] => [
     { kind: 'section', key: `section-${section.order}`, section },
@@ -49,11 +47,6 @@ function toRows(items: readonly ChecklistItem[]): Row[] {
   ]);
 }
 
-/**
- * The checklist, built at run time from the inspection's snapshot (card #12):
- * the app does not know how many sections or items exist, nor their types,
- * until it reads them.
- */
 export function ChecklistScreen() {
   const inspectionId = useInspectionId();
   const inspection = useInspectionDetail(inspectionId);
@@ -119,20 +112,11 @@ function Checklist({ work }: { work: InspectionWork }) {
     }
   }
 
-  /**
-   * The pending panel stays open: collapsing it in the same tick would shift
-   * the content by its height after the scroll was measured.
-   */
   function goToItem(itemId: string) {
     focusItem(detail.id, itemId);
     scrollToRow(rows.findIndex((row) => row.key === itemId));
   }
 
-  /**
-   * Text answers save when editing ends. Dismissing the keyboard before
-   * leaving the screen ends the edit, so nothing typed is left unsaved behind
-   * the next screen.
-   */
   function leaveTo(navigate: () => void) {
     Keyboard.dismiss();
     navigate();
@@ -168,13 +152,6 @@ function Checklist({ work }: { work: InspectionWork }) {
     saveAnswer.save(itemId, answer);
   }
 
-  /**
-   * Coming back to the checklist lands on the item the technician was on
-   * (document 13.9). Done once per mount, and only marked done when the
-   * scroll actually ran — a re-render that cancels the timer retries it.
-   * While the screen stays mounted under the camera, the list keeps its own
-   * position.
-   */
   const restored = useRef(false);
   useEffect(() => {
     if (restored.current || focusedItemId === null) {
@@ -188,10 +165,6 @@ function Checklist({ work }: { work: InspectionWork }) {
     return () => clearTimeout(timer);
   });
 
-  /**
-   * Another screen — the summary's pending list — can send the technician to
-   * an item of this already mounted checklist through the `itemId` parameter.
-   */
   const { itemId: requestedItemId } = useLocalSearchParams<{ itemId?: string }>();
   useEffect(() => {
     if (requestedItemId === undefined || requestedItemId === '') {
@@ -340,7 +313,6 @@ function SectionHeader({
   );
 }
 
-/** Why the answers are locked, when they are, and the way forward. */
 function StatusNotice({
   status,
   inspectionId,

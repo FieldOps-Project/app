@@ -4,11 +4,6 @@ import { ImageManipulator } from 'expo-image-manipulator';
 import { PHOTO_MAX_BYTES } from '@/domain/evidence';
 import { deleteFile, storePhoto } from '@/infrastructure/evidence/photo-storage';
 
-/**
- * A minimal in-memory file system: each `File` knows its uri and size, `move`
- * renames it, and `delete` drops it. Enough to check where the photo ends up
- * and that nothing is left behind.
- */
 const mockFiles = new Map<string, number>();
 
 jest.mock('expo-file-system', () => {

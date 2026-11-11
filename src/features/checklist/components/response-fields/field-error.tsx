@@ -4,7 +4,6 @@ import { View } from 'react-native';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
 
-/** The error right under the control, icon and text, as `Input` shows it. */
 export function FieldError({ message }: { message: string | undefined }) {
   if (message === undefined) {
     return null;

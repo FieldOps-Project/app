@@ -12,18 +12,12 @@ export interface ListedInspection {
 
 export interface InspectionList {
   readonly visible: readonly ListedInspection[];
-  /** Everything stored for the technician, before filtering. */
   readonly total: number;
   readonly isLoading: boolean;
   readonly isError: boolean;
   readonly reload: () => void;
 }
 
-/**
- * The list screen's use case (card #10): the stored inspections, narrowed by
- * the technician's filters. Filtering is a view computed here; the stored
- * collection — and the device — are never touched by it.
- */
 export function useInspectionList(
   filters: InspectionFilters,
   now: Date = new Date()

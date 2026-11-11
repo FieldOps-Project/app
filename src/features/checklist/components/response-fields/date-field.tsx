@@ -10,7 +10,6 @@ import { Text } from '@/design-system/components/text';
 import { FieldError } from '@/features/checklist/components/response-fields/field-error';
 import type { ResponseFieldProps } from '@/features/checklist/components/response-fields/response-field-props';
 
-/** `YYYY-MM-DD` as a local calendar date; never through UTC, which shifts the day. */
 function toDate(value: ResponseFieldProps['value']): Date {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const [year, month, day] = value.split('-').map(Number);
@@ -31,11 +30,6 @@ function formatDate(value: ResponseFieldProps['value']): string | null {
     : null;
 }
 
-/**
- * DATE: the native picker only, with no free typing — a typed date is a
- * format to guess and a value to mistype (card #13). Android opens its system
- * dialog; iOS shows the calendar inline until confirmed.
- */
 export function DateField({
   item,
   value,

@@ -9,7 +9,6 @@ import { UnsupportedField } from '@/features/checklist/components/response-field
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-/** Icons load their font asynchronously; irrelevant here and noisy under act(). */
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 const ITEM: ChecklistItem = {

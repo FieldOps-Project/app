@@ -5,11 +5,6 @@ import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
 import type { ResponseFieldProps } from '@/features/checklist/components/response-fields/response-field-props';
 
-/**
- * Stands in for a response type this version does not know (document 13.5).
- * The rest of the checklist keeps working; a required item of this kind is
- * listed as pending, which blocks the completion with this same explanation.
- */
 export function UnsupportedField({ item }: ResponseFieldProps) {
   return (
     <View

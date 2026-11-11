@@ -23,12 +23,6 @@ export interface EvidenceThumbnailsProps {
   readonly onOpen: (evidence: EvidenceSummary) => void;
 }
 
-/**
- * The item's photos as small copies (document 13.10): the full file is only
- * decoded when one is opened. A photo not sent yet carries an upload mark,
- * so pending work is visible without a connection; a refused one is marked
- * as a failure, never as merely waiting.
- */
 export const EvidenceThumbnails = memo(function EvidenceThumbnails({
   evidences,
   onOpen,

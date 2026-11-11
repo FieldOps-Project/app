@@ -27,14 +27,6 @@ import { InspectionFiltersPanel } from '@/features/inspections/components/inspec
 import { DownloadStatus } from '@/features/synchronization/components/download-status';
 import { plural } from '@/utils/plural';
 
-/**
- * The most used screen of the app (card #10).
- *
- * Reads what is stored on the device, so it opens and searches offline; the
- * download only adds to it, and its failure shows as a notice above a list
- * that stays in place. Virtualized with `FlatList` — never a mapped list in a
- * scroll view — so 200 inspections scroll smoothly (document 13.10).
- */
 export function InspectionsListScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ view?: string }>();
@@ -43,11 +35,6 @@ export function InspectionsListScreen() {
   const list = useInspectionList(filters);
   const download = useInspectionsDownload();
 
-  /**
-   * A home block opens the list with its filter. The parameter is applied
-   * while rendering (React's "adjust state on prop change" pattern) and then
-   * cleared, so tapping the same block again re-applies it.
-   */
   const [appliedView, setAppliedView] = useState<string | undefined>(undefined);
   if (params.view !== appliedView) {
     setAppliedView(params.view);

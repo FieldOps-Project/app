@@ -9,11 +9,6 @@ export interface SyncNowButtonProps {
   variant?: ButtonVariant;
 }
 
-/**
- * "Sincronizar": sends what is pending and downloads again. The outcome stays
- * on screen next to the button instead of a toast that disappears (document
- * 13.8).
- */
 export function SyncNowButton({ variant = 'primary' }: SyncNowButtonProps) {
   const sync = useSynchronize();
 

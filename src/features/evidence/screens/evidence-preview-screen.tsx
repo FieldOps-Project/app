@@ -26,13 +26,6 @@ function toSize(value: string | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-/**
- * UC-11, second half: the photo as taken, the item it will belong to, and an
- * optional description. Confirming stores the photo and returns to the same
- * point of the checklist (document 13.9); retaking and discarding throw the
- * camera's file away. Every exit replaces this entry or unwinds, so no path
- * leaves an extra one.
- */
 export function EvidencePreviewScreen() {
   const inspectionId = useInspectionId();
   const { itemId = '', photoUri, width, height } = useLocalSearchParams<PreviewParams>();

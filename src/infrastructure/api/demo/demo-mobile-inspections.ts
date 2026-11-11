@@ -5,16 +5,6 @@ import type {
 } from '@/infrastructure/api/mobile-inspections-api';
 import type { MobileInspection } from '@/schemas/mobile-inspection';
 
-/**
- * In-memory stand-in for the technician endpoints, turned on with
- * `EXPO_PUBLIC_DEMO_INSPECTIONS=true`.
- *
- * Exists because the app's sprint 4 runs ahead of backend#19–#21: it lets the
- * screens be exercised end to end — download, start, answer, complete, send —
- * with the same payloads the contract defines. It never ships enabled: the
- * flag is off unless set, and sign-in still goes to the real API.
- */
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function atHour(dayOffset: number, hour: number): string {
@@ -64,7 +54,6 @@ function item(
   };
 }
 
-/** Covers every response type of the MVP, the failure rules and one unknown type. */
 function generatorChecklist(inspection: string): DemoItem[] {
   return [
     item(inspection, 1, 'Identificação', 1, 'Placa de identificação legível', 'CONFORMITY', {
@@ -93,7 +82,6 @@ function generatorChecklist(inspection: string): DemoItem[] {
   ];
 }
 
-/** A long checklist, to check that the screen stays fluid with 100 items. */
 function longChecklist(inspection: string): DemoItem[] {
   return Array.from({ length: 100 }, (_, index) => {
     const sectionOrder = Math.floor(index / 20) + 1;
@@ -254,7 +242,6 @@ function toResponse(payload: ResponsePayload): MobileInspection['responses'][num
   };
 }
 
-/** A short delay keeps loading states visible, as they are on a real network. */
 function settle(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 400));
 }

@@ -15,10 +15,6 @@ function rangeHint(min: number | null, max: number | null): string {
   return 'Use vírgula para decimais.';
 }
 
-/**
- * NUMBER: numeric keypad, decimal comma accepted. The text stays as typed
- * while editing; the schema turns it into a number when it is saved.
- */
 export function NumberField({
   item,
   value,

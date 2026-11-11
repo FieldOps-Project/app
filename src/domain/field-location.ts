@@ -1,18 +1,10 @@
-/**
- * A position captured once, at the start or at the completion (card #19,
- * RN-060 to RN-062). It is where the technician's device was at that moment:
- * not the site's registered address and not the equipment.
- */
 export interface FieldPosition {
   readonly latitude: number;
   readonly longitude: number;
-  /** Radius in meters reported by the device; poor accuracy is information, not an error. */
   readonly accuracy: number | null;
-  /** Device clock when the position was read (ISO 8601). */
   readonly capturedAt: string;
 }
 
-/** Why a position is missing. Never replaced by an invented or approximate coordinate. */
 export type LocationAbsence = 'PERMISSION_DENIED' | 'SERVICES_DISABLED' | 'TIMEOUT' | 'UNAVAILABLE';
 
 export const LOCATION_ABSENCES: readonly LocationAbsence[] = [
@@ -22,16 +14,10 @@ export const LOCATION_ABSENCES: readonly LocationAbsence[] = [
   'UNAVAILABLE',
 ];
 
-/** Outcome of one capture attempt. A capture never throws and never blocks the transition. */
 export type LocationCapture =
   | { readonly status: 'captured'; readonly position: FieldPosition }
   | { readonly status: 'missing'; readonly reason: LocationAbsence };
 
-/**
- * What the device knows about the position of one transition. `not-recorded`
- * is a transition that has not happened yet, or one downloaded from a server
- * that did not report a position.
- */
 export type RecordedLocation = LocationCapture | { readonly status: 'not-recorded' };
 
 export function isLocationAbsence(value: string): value is LocationAbsence {
@@ -49,7 +35,6 @@ export function isValidCoordinate(latitude: number, longitude: number): boolean 
   );
 }
 
-/** Business language for the technician (document 13.9). */
 export function locationAbsenceLabel(reason: LocationAbsence): string {
   const labels: Record<LocationAbsence, string> = {
     PERMISSION_DENIED: 'a permissão de localização foi negada',

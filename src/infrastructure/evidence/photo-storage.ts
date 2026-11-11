@@ -13,18 +13,12 @@ import {
 } from '@/domain/evidence';
 import { fail, ok, type Result } from '@/domain/result';
 
-/** A picture on disk and its size in pixels: what the camera returns, in the cache. */
 export interface CapturedPhoto {
   readonly uri: string;
   readonly width: number;
   readonly height: number;
 }
 
-/**
- * Where the evidence files were kept. The paths are relative to the app's
- * document directory, not absolute URIs: iOS moves the app container on every
- * update, so an absolute path saved today would point nowhere tomorrow.
- */
 export interface StoredPhoto {
   readonly photoPath: string;
   readonly thumbnailPath: string;
@@ -35,13 +29,8 @@ export interface StoredPhoto {
 export type StorePhotoFailure =
   { readonly kind: 'rejected'; readonly reason: PhotoRejection } | { readonly kind: 'storage' };
 
-/** Evidence files live under the document directory, which the system never clears (RN-047). */
 const EVIDENCE_ROOT = 'evidences';
 
-/**
- * The URI to read or delete a stored file. Accepts the relative paths this
- * module saves and, for anything older, an absolute URI as it is.
- */
 export function evidenceFileUri(path: string): string {
   return path.includes('://') ? path : new File(Paths.document, path).uri;
 }
@@ -65,7 +54,6 @@ async function render(photo: CapturedPhoto, maxEdge: number, quality: number) {
   }
 }
 
-/** Removes a file if it is there; a file already gone is not an error. */
 export function deleteFile(path: string | null): void {
   if (path === null) {
     return;
@@ -75,20 +63,9 @@ export function deleteFile(path: string | null): void {
     if (file.exists) {
       file.delete();
     }
-  } catch {
-    // Nothing to do: the file is unreachable or already gone.
-  }
+  } catch {}
 }
 
-/**
- * Turns a captured photo into an evidence file (document 13.10): resized to a
- * useful size, compressed as JPEG, checked against RN-046 and moved out of the
- * cache into the persistent directory, with its thumbnail beside it. The
- * thumbnail is made from the resized copy, so the large original is decoded
- * once. Nothing is left behind on failure. The camera's own file is left
- * alone, so a failed attempt can be retried; the caller removes it once the
- * evidence is saved.
- */
 export async function storePhoto(
   photo: CapturedPhoto,
   target: { readonly inspectionId: string; readonly evidenceId: string }

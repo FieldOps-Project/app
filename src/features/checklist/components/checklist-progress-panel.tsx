@@ -21,10 +21,6 @@ export interface SectionTabsProps {
   onSelect: (sectionOrder: number) => void;
 }
 
-/**
- * Jump to a section, each showing its own count and, when done, a check —
- * completion read from icon and text, not colour (card #12, card #15).
- */
 export function SectionTabs({ progress, onSelect }: SectionTabsProps) {
   if (progress.sections.length < 2) {
     return null;
@@ -61,10 +57,6 @@ export interface PendingListProps {
   onSelect: (itemId: string) => void;
 }
 
-/**
- * Everything that blocks the completion, each entry leading to its item
- * (card #15). Knowing that "3 are missing" is useless without knowing which.
- */
 export function PendingList({ pending, onSelect }: PendingListProps) {
   return (
     <Card title={`Pendências (${pending.length})`}>

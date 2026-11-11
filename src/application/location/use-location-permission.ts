@@ -5,10 +5,6 @@ import {
   type LocationPermissionState,
 } from '@/infrastructure/location/capture-location';
 
-/**
- * The permission as it stands, read without prompting, so the screen can
- * explain the use before the system asks (RN-058). `null` while reading.
- */
 export function useLocationPermission(): LocationPermissionState | null {
   const [state, setState] = useState<LocationPermissionState | null>(null);
 

@@ -9,10 +9,8 @@ import type { InspectionDetail } from '@/domain/inspection';
 export interface InspectionWork {
   readonly detail: InspectionDetail;
   readonly items: readonly ChecklistItem[];
-  /** Current answer per snapshot item id. */
   readonly responses: ReadonlyMap<string, ChecklistResponse>;
   readonly evidenceCounts: ReadonlyMap<string, number>;
-  /** Evidences per snapshot item id; an item without any has no key. */
   readonly evidences: Readonly<Record<string, readonly EvidenceSummary[]>>;
   readonly progress: ChecklistProgress;
 }
@@ -23,12 +21,6 @@ export type InspectionDetailState =
   | { readonly state: 'not-found' }
   | ({ readonly state: 'ready' } & InspectionWork);
 
-/**
- * One inspection as stored on the device, with its progress computed by the
- * same function the checklist and the summary use — so the three screens can
- * never disagree (card #11). Opens offline for any inspection already
- * downloaded (RN-065).
- */
 export function useInspectionDetail(inspectionId: string): InspectionDetailState {
   const stored = useStoredInspection(inspectionId);
 

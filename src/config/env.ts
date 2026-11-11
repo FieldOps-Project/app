@@ -1,10 +1,5 @@
 import { z } from 'zod';
 
-/**
- * Every `EXPO_PUBLIC_` value is inlined into the bundle and readable by anyone
- * who opens the app, so none may carry a key, password or server token. Reads
- * must be static `process.env.NAME`; the bundler does not resolve dynamic access.
- */
 const environmentSchema = z.object({
   apiUrl: z
     .url({
@@ -12,7 +7,6 @@ const environmentSchema = z.object({
     })
     .transform((url) => url.replace(/\/+$/, '')),
   appEnv: z.enum(['development', 'staging', 'production']).default('development'),
-  /** Serves the technician endpoints from memory while backend#19–#21 are pending. */
   demoInspections: z
     .enum(['true', 'false'])
     .default('false')

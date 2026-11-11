@@ -9,7 +9,6 @@ export type BadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 
 export type BadgeIcon = ComponentProps<typeof Ionicons>['name'];
 
-/** Soft background per tone; the dark theme keeps a neutral chip with tinted content. */
 const containerClasses: Record<BadgeTone, string> = {
   neutral: 'bg-neutral-100 dark:bg-neutral-800',
   info: 'bg-info-soft dark:bg-neutral-800',
@@ -26,7 +25,6 @@ const labelTones: Record<BadgeTone, TextTone> = {
   danger: 'danger',
 };
 
-/** Mid tone reads on both the light soft background and the dark neutral chip. */
 const iconColors: Record<BadgeTone, string> = {
   neutral: colors.neutral[500],
   info: colors.info.DEFAULT,
@@ -42,13 +40,6 @@ export interface BadgeProps {
   className?: string;
 }
 
-/**
- * State badge.
- *
- * Combines colour, icon and text so meaning survives colour blindness and
- * strong sunlight (document 13.9). Colour never carries the state on its own:
- * the label always names it.
- */
 export function Badge({ label, tone = 'neutral', icon, className }: BadgeProps) {
   return (
     <View

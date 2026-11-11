@@ -2,11 +2,6 @@ import { DarkTheme, DefaultTheme, type Theme } from 'expo-router';
 
 import { colors } from '@/design-system/tokens/design-tokens';
 
-/**
- * Derived from the same tokens as the utility classes, so headers and screen
- * transitions match the styled content. The symbols come from `expo-router` to
- * avoid depending on a package the project does not declare.
- */
 export const lightNavigationTheme: Theme = {
   ...DefaultTheme,
   colors: {

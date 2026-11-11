@@ -38,7 +38,6 @@ export interface InspectionFiltersPanelProps {
   onChange: (filters: InspectionFilters) => void;
 }
 
-/** Status, date and priority, each a group of chips; groups combine with each other. */
 export function InspectionFiltersPanel({ filters, onChange }: InspectionFiltersPanelProps) {
   return (
     <View className="gap-4">
