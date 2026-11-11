@@ -17,6 +17,7 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 const mockState: { current: InspectionDetailState } = { current: { state: 'loading' } };
 const mockStart = jest.fn();
 const mockComplete = jest.fn();
+const mockStartState: { current: Record<string, unknown> } = { current: {} };
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), navigate: jest.fn() }),
@@ -26,7 +27,12 @@ jest.mock('@/application/inspections/use-inspection-detail', () => ({
   useInspectionDetail: () => mockState.current,
 }));
 jest.mock('@/application/inspections/use-execution-actions', () => ({
-  useStartInspection: () => ({ mutate: mockStart, isPending: false, error: null }),
+  useStartInspection: () => ({
+    mutate: mockStart,
+    isPending: false,
+    error: null,
+    ...mockStartState.current,
+  }),
   useCompleteInspection: () => ({
     mutate: mockComplete,
     reset: jest.fn(),
@@ -40,6 +46,9 @@ jest.mock('@/application/inspection-draft/inspection-draft-context', () => ({
 jest.mock('@/features/checklist/hooks/use-return-to-checklist', () => ({
   useReturnToChecklist: () => jest.fn(),
   useReturnToChecklistItem: () => jest.fn(),
+}));
+jest.mock('@/application/location/use-location-permission', () => ({
+  useLocationPermission: () => 'undetermined',
 }));
 jest.mock('@/features/synchronization/components/sync-now-button', () => ({
   SyncNowButton: () => null,
@@ -96,6 +105,8 @@ function ready(
       equipment: null,
       scheduledFor: '2026-08-12T13:00:00Z',
       completedAtDevice: null,
+      startLocation: { status: 'not-recorded' },
+      completionLocation: { status: 'not-recorded' },
       ...detail,
     } as InspectionDetail,
     items: [ITEM],
@@ -121,7 +132,10 @@ function texts(renderer: ReactTestRenderer): string {
   return JSON.stringify(renderer.toJSON());
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockStartState.current = {};
+});
 
 describe('InspectionStartScreen', () => {
   it('starts an assigned inspection after an explicit confirmation', () => {
@@ -134,7 +148,20 @@ describe('InspectionStartScreen', () => {
     act(() => confirm?.props.onPress());
 
     expect(mockStart).toHaveBeenCalledTimes(1);
-    expect(texts(renderer)).toContain('A localização não será registrada');
+    expect(texts(renderer)).toContain('o aparelho pede permissão');
+    expect(texts(renderer)).toContain('Não há rastreamento contínuo');
+  });
+
+  it('says when the start was recorded without a position (card #19)', () => {
+    mockState.current = ready({ status: 'IN_PROGRESS' });
+    mockStartState.current = {
+      isSuccess: true,
+      data: { status: 'missing', reason: 'PERMISSION_DENIED' },
+    };
+    const renderer = render(<InspectionStartScreen />);
+
+    expect(texts(renderer)).toContain('a permissão de localização foi negada');
+    expect(buttonLabels(renderer)).toContain('Continuar para o checklist');
   });
 
   it('refuses a canceled inspection with the reason (RN-077)', () => {
@@ -174,12 +201,29 @@ describe('InspectionSummaryScreen', () => {
   });
 
   it('shows a completed inspection as waiting to be sent', () => {
-    mockState.current = ready({ status: 'SUBMITTED', completedAtDevice: '2026-08-12T11:00:00Z' }, [
-      ANSWER,
-    ]);
+    mockState.current = ready(
+      {
+        status: 'SUBMITTED',
+        startedAtDevice: '2026-08-12T10:00:00Z',
+        completedAtDevice: '2026-08-12T11:00:00Z',
+        startLocation: {
+          status: 'captured',
+          position: {
+            latitude: -23.5,
+            longitude: -47.4,
+            accuracy: 9,
+            capturedAt: '2026-08-12T10:00:00Z',
+          },
+        },
+        completionLocation: { status: 'missing', reason: 'TIMEOUT' },
+      },
+      [ANSWER]
+    );
     const renderer = render(<InspectionSummaryScreen />);
 
     expect(texts(renderer)).toContain('ainda não foi enviada');
+    expect(texts(renderer)).toContain('-23.50000, -47.40000');
+    expect(texts(renderer)).toContain('o aparelho não encontrou a posição a tempo');
     expect(buttonLabels(renderer)).not.toContain('Concluir inspeção');
   });
 });

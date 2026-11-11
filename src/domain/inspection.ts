@@ -1,3 +1,5 @@
+import type { RecordedLocation } from '@/domain/field-location';
+
 export type InspectionId = string;
 
 /** Business states of an inspection (document 7.6), as the API names them. */
@@ -76,6 +78,10 @@ export interface InspectionDetail extends InspectionSummary {
   readonly startedAtDevice: string | null;
   /** Device clock at the moment the technician completed (RN-042). */
   readonly completedAtDevice: string | null;
+  /** Where the technician's device was when the inspection started (card #19). */
+  readonly startLocation: RecordedLocation;
+  /** Where the technician's device was when the inspection was completed. */
+  readonly completionLocation: RecordedLocation;
   readonly review: InspectionReview | null;
   /** Why the last send failed, in business language; `null` when nothing failed. */
   readonly syncError: string | null;

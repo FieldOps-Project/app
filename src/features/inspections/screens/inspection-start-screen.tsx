@@ -17,9 +17,11 @@ import { Loading } from '@/design-system/components/loading';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
+import { locationAbsenceLabel } from '@/domain/field-location';
 import { startBlockedReason } from '@/domain/inspection-actions';
 import { FieldError } from '@/features/checklist/components/response-fields/field-error';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
+import { LocatingNotice, LocationConsent } from '@/features/location/components/location-consent';
 import { formatDateTime } from '@/utils/format-date';
 
 /**
@@ -75,15 +77,29 @@ function StartConfirmation({ work }: { work: InspectionWork }) {
   const starting = start.isPending || start.isSuccess;
   const blocked = starting ? null : startBlockedReason(detail.status);
 
-  function confirm() {
-    start.mutate(undefined, {
-      onSuccess: () =>
-        router.replace({
-          pathname: '/inspections/[inspectionId]/checklist',
-          params: { inspectionId: detail.id },
-        }),
+  function openChecklist() {
+    router.replace({
+      pathname: '/inspections/[inspectionId]/checklist',
+      params: { inspectionId: detail.id },
     });
   }
+
+  /**
+   * Started without a position: the technician is told why before moving on
+   * (card #19). With a position, straight to the checklist.
+   */
+  function confirm() {
+    start.mutate(undefined, {
+      onSuccess: (location) => {
+        if (location.status === 'captured') {
+          openChecklist();
+        }
+      },
+    });
+  }
+
+  const startedWithoutLocation =
+    start.isSuccess && start.data?.status === 'missing' ? start.data.reason : null;
 
   return (
     <Screen scrollable edges={BELOW_HEADER_EDGES}>
@@ -121,16 +137,22 @@ function StartConfirmation({ work }: { work: InspectionWork }) {
         <Fact icon="list-outline" text={`${progress.total} itens no checklist`} />
       </Card>
 
-      {blocked === null ? (
+      {startedWithoutLocation !== null ? (
+        <Card title="Inspeção iniciada" className="border-2 border-warning">
+          <Fact
+            icon="alert-circle-outline"
+            text={`O início foi registrado sem localização: ${locationAbsenceLabel(startedWithoutLocation)}. A ausência fica registrada na inspeção.`}
+            tone="warning"
+          />
+          <Button label="Continuar para o checklist" onPress={openChecklist} />
+        </Card>
+      ) : blocked === null ? (
         <Card title="Ao confirmar">
           <Fact
             icon="time-outline"
             text="O horário deste aparelho fica registrado como o início."
           />
-          <Fact
-            icon="navigate-outline"
-            text="A localização não será registrada: a captura de posição ainda não está disponível nesta versão."
-          />
+          <LocationConsent moment="start" />
           <Fact
             icon="cloud-offline-outline"
             text="Funciona sem internet. O início é enviado na próxima sincronização."
@@ -142,6 +164,7 @@ function StartConfirmation({ work }: { work: InspectionWork }) {
                 : `O início não foi registrado: ${describeLocalFailure(start.error)}`
             }
           />
+          {start.locating ? <LocatingNotice /> : null}
           <Button label="Confirmar início" loading={start.isPending} onPress={confirm} />
           <Button label="Agora não" variant="secondary" onPress={() => router.back()} />
         </Card>
@@ -158,17 +181,19 @@ function StartConfirmation({ work }: { work: InspectionWork }) {
 interface FactProps {
   icon: ComponentProps<typeof Ionicons>['name'];
   text: string;
-  tone?: 'default' | 'danger';
+  tone?: 'default' | 'danger' | 'warning';
 }
+
+const FACT_COLORS = {
+  default: colors.neutral[500],
+  danger: colors.danger.DEFAULT,
+  warning: colors.warning.DEFAULT,
+} as const;
 
 function Fact({ icon, text, tone = 'default' }: FactProps) {
   return (
     <View className="flex-row items-start gap-2">
-      <Ionicons
-        name={icon}
-        size={18}
-        color={tone === 'danger' ? colors.danger.DEFAULT : colors.neutral[500]}
-      />
+      <Ionicons name={icon} size={18} color={FACT_COLORS[tone]} />
       <Text variant="body" tone={tone} className="flex-1">
         {text}
       </Text>

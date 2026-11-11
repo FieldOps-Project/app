@@ -301,7 +301,8 @@ export async function markFailed(
  * The server refused the completion — an answer it requires is missing, for
  * instance (backend#20). The inspection goes back to IN_PROGRESS so the
  * technician can fix it (RN-043), the refused submit leaves the queue, and
- * the reason stays on the inspection. Completing again queues a new submit.
+ * the reason stays on the inspection. Completing again queues a new submit,
+ * with a new reading of the position.
  */
 export async function reopenAfterRefusedSubmit(
   operation: QueuedOperation,
@@ -316,6 +317,8 @@ export async function reopenAfterRefusedSubmit(
     await transaction.runAsync(
       `UPDATE inspections
           SET status = 'IN_PROGRESS', completed_at_device = NULL, local_sync_status = 'ERROR',
+              completion_latitude = NULL, completion_longitude = NULL, completion_accuracy = NULL,
+              completion_location_at = NULL, completion_location_missing = NULL,
               sync_error = ?, local_updated_at = ?
         WHERE id = ? AND status = 'SUBMITTED'`,
       error,

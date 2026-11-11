@@ -37,6 +37,16 @@
       ],
       "expo-secure-store",
       "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O FieldOps lê a posição do aparelho uma única vez, no início e na conclusão da inspeção, para registrar onde o trabalho foi feito.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
       "@react-native-community/datetimepicker"
     ],
     "experiments": {

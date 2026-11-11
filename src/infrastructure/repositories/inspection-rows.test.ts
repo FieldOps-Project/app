@@ -2,6 +2,7 @@ import {
   toChecklistItem,
   toChecklistResponse,
   toSummary,
+  toRecordedLocation,
   toSyncState,
   type InspectionRow,
 } from '@/infrastructure/repositories/inspection-rows';
@@ -29,6 +30,16 @@ const ROW: InspectionRow = {
   started_at_device: null,
   completed_at_device: null,
   review_json: null,
+  start_latitude: null,
+  start_longitude: null,
+  start_accuracy: null,
+  start_location_at: null,
+  start_location_missing: null,
+  completion_latitude: null,
+  completion_longitude: null,
+  completion_accuracy: null,
+  completion_location_at: null,
+  completion_location_missing: null,
   base_version: 1,
   local_sync_status: 'PENDING',
   is_dirty: 1,
@@ -102,5 +113,39 @@ describe('toChecklistResponse', () => {
     expect(toChecklistResponse({ ...base, value_boolean: 0 }).valueBoolean).toBe(false);
     expect(toChecklistResponse({ ...base, value_boolean: 1 }).valueBoolean).toBe(true);
     expect(toChecklistResponse({ ...base, value_boolean: null }).valueBoolean).toBeNull();
+  });
+});
+
+describe('toRecordedLocation', () => {
+  it('reads a full coordinate pair as captured', () => {
+    expect(toRecordedLocation(-23.5, -47.4, 12, '2026-08-12T13:00:00Z', null)).toEqual({
+      status: 'captured',
+      position: {
+        latitude: -23.5,
+        longitude: -47.4,
+        accuracy: 12,
+        capturedAt: '2026-08-12T13:00:00Z',
+      },
+    });
+  });
+
+  it('reads the stored reason when there is no coordinate', () => {
+    expect(toRecordedLocation(null, null, null, null, 'TIMEOUT')).toEqual({
+      status: 'missing',
+      reason: 'TIMEOUT',
+    });
+  });
+
+  it('never reads half a coordinate as a position', () => {
+    expect(toRecordedLocation(-23.5, null, null, '2026-08-12T13:00:00Z', null)).toEqual({
+      status: 'not-recorded',
+    });
+  });
+
+  it('degrades an unknown reason to "unavailable"', () => {
+    expect(toRecordedLocation(null, null, null, null, 'SOMETHING_NEW')).toEqual({
+      status: 'missing',
+      reason: 'UNAVAILABLE',
+    });
   });
 });
