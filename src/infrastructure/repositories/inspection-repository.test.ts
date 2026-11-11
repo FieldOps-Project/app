@@ -275,17 +275,40 @@ describe('answers', () => {
     ).rejects.toBeInstanceOf(InspectionStateError);
   });
 
-  it('counts evidences per item', async () => {
+  it('lists the evidences of each item with their thumbnail and pending state', async () => {
     await started();
-    await registerEvidence({
-      ownerUserId: OWNER,
-      inspectionId: 'insp-1',
-      inspectionItemId: 'item-1',
-      evidenceId: 'ev-1',
-      createdAtDevice: NOW,
-    });
+    for (const id of ['ev-1', 'ev-2']) {
+      await registerEvidence({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        inspectionItemId: 'item-1',
+        evidenceId: id,
+        createdAtDevice: NOW,
+        file: {
+          operationId: `op-${id}`,
+          localUri: `file:///data/evidences/${id}.jpg`,
+          thumbnailUri: `file:///data/evidences/${id}-thumb.jpg`,
+          mimeType: 'image/jpeg',
+          sizeBytes: 150_000,
+          description: id === 'ev-1' ? 'Trinca na base' : null,
+        },
+      });
+    }
 
-    expect((await findInspection(OWNER, 'insp-1'))?.evidenceCounts.get('item-1')).toBe(1);
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.evidenceCounts.get('item-1')).toBe(2);
+    expect(stored?.evidences['item-1']).toEqual([
+      {
+        id: 'ev-1',
+        inspectionItemId: 'item-1',
+        photoUri: 'file:///data/evidences/ev-1.jpg',
+        thumbnailUri: 'file:///data/evidences/ev-1-thumb.jpg',
+        description: 'Trinca na base',
+        createdAtDevice: NOW,
+        syncState: 'aguardando-envio',
+      },
+      expect.objectContaining({ id: 'ev-2', description: null }),
+    ]);
   });
 });
 
@@ -759,6 +782,7 @@ describe('outbox (card #23)', () => {
 describe('evidence operations (card #23)', () => {
   const PHOTO = {
     localUri: 'file:///data/evidences/ev-1.jpg',
+    thumbnailUri: 'file:///data/evidences/ev-1-thumb.jpg',
     mimeType: 'image/jpeg',
     sizeBytes: 182_000,
   };
@@ -836,7 +860,7 @@ describe('evidence operations (card #23)', () => {
 
     const outcome = await discard();
 
-    expect(outcome).toEqual({ outcome: 'removed', localUri: PHOTO.localUri });
+    expect(outcome).toEqual({ outcome: 'removed', files: [PHOTO.localUri, PHOTO.thumbnailUri] });
     expect(await upload()).toBeUndefined();
     expect((await findInspection(OWNER, 'insp-1'))?.evidenceCounts.size).toBe(0);
   });
@@ -859,7 +883,10 @@ describe('evidence operations (card #23)', () => {
     const claimed = await claimOperation('op-upload', NOW);
     await markFailed(claimed!, 'FAILED', 'Formato não aceito.', NOW);
 
-    expect(await discard()).toEqual({ outcome: 'removed', localUri: PHOTO.localUri });
+    expect(await discard()).toEqual({
+      outcome: 'removed',
+      files: [PHOTO.localUri, PHOTO.thumbnailUri],
+    });
   });
 
   it('queues the removal after an upload the network cut off, which the server may hold', async () => {

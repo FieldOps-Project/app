@@ -1,4 +1,5 @@
 import type { ChecklistItem, ChecklistResponse, Conformity, ItemRules } from '@/domain/checklist';
+import type { EvidenceSummary } from '@/domain/evidence';
 import { isLocationAbsence, type RecordedLocation } from '@/domain/field-location';
 import {
   isInspectionPriority,
@@ -81,6 +82,33 @@ export interface ResponseRow {
   conformity: Conformity | null;
   observation: string | null;
   answered_at_device: string;
+}
+
+export interface EvidenceRow {
+  id: string;
+  inspection_item_id: string | null;
+  local_uri: string | null;
+  thumbnail_uri: string | null;
+  description: string | null;
+  created_at_device: string;
+  local_sync_status: LocalSyncStatus;
+  local_updated_at: string | null;
+}
+
+/**
+ * An evidence counts as local work from the moment it is created, so it reads
+ * as "aguardando envio" until the server confirms it — never as merely saved.
+ */
+export function toEvidenceSummary(row: EvidenceRow): EvidenceSummary {
+  return {
+    id: row.id,
+    inspectionItemId: row.inspection_item_id,
+    photoUri: row.local_uri,
+    thumbnailUri: row.thumbnail_uri,
+    description: row.description,
+    createdAtDevice: row.created_at_device,
+    syncState: toSyncState(row.local_sync_status, row.local_updated_at ?? row.created_at_device),
+  };
 }
 
 /**

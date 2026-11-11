@@ -11,8 +11,10 @@ import { Input } from '@/design-system/components/input';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
 import { hasAnswer, type ChecklistItem, type ChecklistResponse } from '@/domain/checklist';
+import type { EvidenceSummary } from '@/domain/evidence';
 import { responseFieldFor } from '@/features/checklist/components/response-fields';
 import { FieldError } from '@/features/checklist/components/response-fields/field-error';
+import { EvidenceThumbnails } from '@/features/evidence/components/evidence-thumbnails';
 import {
   isEmptyAnswer,
   isSameAnswer,
@@ -27,7 +29,8 @@ import { plural } from '@/utils/plural';
 export interface ChecklistItemRowProps {
   item: ChecklistItem;
   response: ChecklistResponse | undefined;
-  evidenceCount: number;
+  /** This item's evidences; the same array while they do not change, so the row stays put. */
+  evidences: readonly EvidenceSummary[];
   /** RN-038: a failure here still lacks its observation. */
   needsObservation: boolean;
   /** RN-039: a failure here still lacks its evidence. */
@@ -38,6 +41,7 @@ export interface ChecklistItemRowProps {
   focused: boolean;
   onSave: (itemId: string, answer: ResponseFormOutput) => void;
   onCaptureEvidence: (itemId: string) => void;
+  onOpenEvidence: (evidence: EvidenceSummary) => void;
 }
 
 /**
@@ -53,7 +57,7 @@ export interface ChecklistItemRowProps {
 export const ChecklistItemRow = memo(function ChecklistItemRow({
   item,
   response,
-  evidenceCount,
+  evidences,
   needsObservation,
   needsEvidence,
   toCorrect,
@@ -61,7 +65,10 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
   focused,
   onSave,
   onCaptureEvidence,
+  onOpenEvidence,
 }: ChecklistItemRowProps) {
+  const evidenceCount = evidences.length;
+  const pending = evidences.filter((evidence) => evidence.syncState !== 'enviado').length;
   const schema = useMemo(() => responseFormSchema(item), [item]);
   const form = useForm<ResponseFormInput, unknown, ResponseFormOutput>({
     resolver: zodResolver(schema),
@@ -168,8 +175,10 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
               {evidenceCount > 0
                 ? plural(evidenceCount, 'evidência registrada', 'evidências registradas')
                 : 'Nenhuma evidência'}
+              {pending > 0 ? ` · ${pending} aguardando envio` : ''}
             </Text>
           </View>
+          <EvidenceThumbnails evidences={evidences} onOpen={onOpenEvidence} />
           <FieldError
             message={
               needsEvidence ? 'Registre ao menos uma evidência desta não conformidade.' : undefined
@@ -177,7 +186,7 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
           />
           {editable ? (
             <Button
-              label="Registrar evidência"
+              label={evidenceCount > 0 ? 'Fotografar outra evidência' : 'Fotografar evidência'}
               variant="secondary"
               onPress={() => onCaptureEvidence(item.id)}
             />

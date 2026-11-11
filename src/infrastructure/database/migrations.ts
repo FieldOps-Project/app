@@ -227,4 +227,9 @@ export const MIGRATIONS: readonly string[] = [
   CREATE INDEX ix_inspections_owner_qr ON inspections (owner_user_id, equipment_qr_code);
   CREATE INDEX ix_sync_operations_inspection ON sync_operations (inspection_id, status);
   `,
+  // Card #17: lists show a small copy of each photo and decode the full file
+  // only when it is enlarged (document 13.10). Lives on the device only.
+  `
+  ALTER TABLE evidences ADD COLUMN thumbnail_uri TEXT;
+  `,
 ];

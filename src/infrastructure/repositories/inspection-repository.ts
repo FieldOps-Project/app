@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ChecklistItem, ChecklistResponse } from '@/domain/checklist';
+import type { EvidenceSummary } from '@/domain/evidence';
 import type { LocationCapture } from '@/domain/field-location';
 import type { InspectionDetail, InspectionStatus, InspectionSummary } from '@/domain/inspection';
 import { getDatabase } from '@/infrastructure/database/database';
@@ -15,7 +16,9 @@ import {
   toChecklistItem,
   toChecklistResponse,
   toDetail,
+  toEvidenceSummary,
   toSummary,
+  type EvidenceRow,
   type InspectionRow,
   type ItemRow,
   type ResponseRow,
@@ -36,6 +39,12 @@ export interface StoredInspection {
   readonly responses: readonly ChecklistResponse[];
   /** Evidences registered per snapshot item id. */
   readonly evidenceCounts: ReadonlyMap<string, number>;
+  /**
+   * Evidences per snapshot item id, oldest first. A plain object rather than a
+   * `Map`, so the query cache's structural sharing keeps the array of every
+   * item whose evidences did not change, and those rows do not re-render.
+   */
+  readonly evidences: Readonly<Record<string, readonly EvidenceSummary[]>>;
 }
 
 export async function listInspectionSummaries(ownerUserId: string): Promise<InspectionSummary[]> {
@@ -71,19 +80,26 @@ export async function findInspection(
       'SELECT * FROM inspection_responses WHERE inspection_id = ?',
       inspectionId
     ),
-    database.getAllAsync<{ inspection_item_id: string; total: number }>(
-      `SELECT inspection_item_id, COUNT(*) AS total FROM evidences
+    database.getAllAsync<EvidenceRow>(
+      `SELECT * FROM evidences
         WHERE inspection_id = ? AND deleted_locally = 0 AND inspection_item_id IS NOT NULL
-        GROUP BY inspection_item_id`,
+        ORDER BY created_at_device, rowid`,
       inspectionId
     ),
   ]);
+
+  const byItem: Record<string, EvidenceSummary[]> = {};
+  for (const evidence of evidences.map(toEvidenceSummary)) {
+    const key = evidence.inspectionItemId ?? '';
+    (byItem[key] ??= []).push(evidence);
+  }
 
   return {
     detail: toDetail(row),
     items: items.map(toChecklistItem),
     responses: responses.map(toChecklistResponse),
-    evidenceCounts: new Map(evidences.map((entry) => [entry.inspection_item_id, entry.total])),
+    evidenceCounts: new Map(Object.entries(byItem).map(([itemId, list]) => [itemId, list.length])),
+    evidences: byItem,
   };
 }
 
@@ -561,6 +577,8 @@ export interface EvidenceFile {
   readonly operationId: string;
   /** In the app's persistent directory, never the cache (RN-047). */
   readonly localUri: string;
+  /** The small copy lists show; stays on the device. */
+  readonly thumbnailUri: string;
   readonly mimeType: string;
   readonly sizeBytes: number;
   readonly originalFileName?: string | null;
@@ -573,13 +591,12 @@ export interface RegisterEvidenceCommand {
   readonly inspectionItemId: string;
   readonly evidenceId: string;
   readonly createdAtDevice: string;
-  /** Absent while the camera (card #17) is not in place: the record alone satisfies RN-039. */
-  readonly file?: EvidenceFile;
+  readonly file: EvidenceFile;
 }
 
 /**
- * Document 10.14.3: the evidence is stored on the device and, when it has a
- * file, its upload joins the outbox. The evidence is linked to the item's
+ * Document 10.14.3: the evidence is stored on the device and its upload joins
+ * the outbox in the same transaction. The evidence is linked to the item's
  * answer when there is one, and the upload waits for every operation still
  * owed for that answer — the server must have the answer before the file
  * that proves it (document 10.13.3). Nothing about the file's contents goes
@@ -603,31 +620,27 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
     const responseId = response?.id ?? null;
     const file = command.file;
 
-    // Without a file there is nothing to send, so the record owes nothing.
     await transaction.runAsync(
       `INSERT INTO evidences (
-         id, inspection_id, inspection_item_id, response_id, local_uri, original_file_name,
-         mime_type, size_bytes, description, created_at_device, base_version, local_updated_at,
-         is_dirty
+         id, inspection_id, inspection_item_id, response_id, local_uri, thumbnail_uri,
+         original_file_name, mime_type, size_bytes, description, created_at_device, base_version,
+         local_updated_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       command.evidenceId,
       command.inspectionId,
       command.inspectionItemId,
       responseId,
-      file?.localUri ?? null,
-      file?.originalFileName ?? null,
-      file?.mimeType ?? null,
-      file?.sizeBytes ?? null,
-      file?.description ?? null,
+      file.localUri,
+      file.thumbnailUri,
+      file.originalFileName ?? null,
+      file.mimeType,
+      file.sizeBytes,
+      file.description ?? null,
       command.createdAtDevice,
       base_version,
-      now,
-      file === undefined ? 0 : 1
+      now
     );
 
-    if (file === undefined) {
-      return;
-    }
     const dependencyIds =
       responseId === null ? [] : await openOperationIdsFor(transaction, 'RESPONSE', responseId);
     await markInspectionDirty(transaction, command.inspectionId, now);
@@ -669,8 +682,8 @@ export interface DiscardEvidenceCommand {
 }
 
 export type DiscardedEvidence =
-  /** Never sent: the record and its upload are gone; the caller may delete the file. */
-  | { readonly outcome: 'removed'; readonly localUri: string | null }
+  /** Never sent: the record and its upload are gone; the caller deletes these files. */
+  | { readonly outcome: 'removed'; readonly files: readonly string[] }
   /** Already taken for sending: hidden on the device, removal queued, file kept. */
   | { readonly outcome: 'removal-queued' }
   | { readonly outcome: 'not-found' };
@@ -693,8 +706,11 @@ export async function discardEvidence(command: DiscardEvidenceCommand): Promise<
       command.inspectionId,
       ['IN_PROGRESS']
     );
-    const evidence = await transaction.getFirstAsync<{ local_uri: string | null }>(
-      `SELECT local_uri FROM evidences
+    const evidence = await transaction.getFirstAsync<{
+      local_uri: string | null;
+      thumbnail_uri: string | null;
+    }>(
+      `SELECT local_uri, thumbnail_uri FROM evidences
         WHERE id = ? AND inspection_id = ? AND deleted_locally = 0`,
       command.evidenceId,
       command.inspectionId
@@ -718,7 +734,10 @@ export async function discardEvidence(command: DiscardEvidenceCommand): Promise<
         command.inspectionId,
         command.inspectionId
       );
-      return { outcome: 'removed', localUri: evidence.local_uri } as const;
+      const files = [evidence.local_uri, evidence.thumbnail_uri].filter(
+        (uri): uri is string => uri !== null
+      );
+      return { outcome: 'removed', files } as const;
     }
 
     const dependencyIds = await openOperationIdsFor(transaction, 'EVIDENCE', command.evidenceId);

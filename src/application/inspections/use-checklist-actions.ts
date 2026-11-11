@@ -2,9 +2,18 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useOwnerUserId } from '@/application/inspections/use-inspections';
 import type { ChecklistResponse } from '@/domain/checklist';
+import { normalizeDescription } from '@/domain/evidence';
 import { queryKeys } from '@/infrastructure/api';
 import { newId } from '@/infrastructure/ids';
 import {
+  deleteFile,
+  storePhoto,
+  type CapturedPhoto,
+  type StorePhotoFailure,
+} from '@/infrastructure/evidence/photo-storage';
+import {
+  discardEvidence,
+  InspectionStateError,
   registerEvidence,
   saveResponse,
   type StoredInspection,
@@ -99,26 +108,115 @@ function toResponse(
   };
 }
 
-/**
- * Records that an evidence was attached to an item, so RN-039 can be
- * checked. The photo file and its upload arrive with the camera (card #17).
- */
-export function useRegisterEvidence(inspectionId: string) {
+export class EvidenceError extends Error {
+  constructor(readonly failure: StorePhotoFailure) {
+    super(describeEvidenceFailure(failure));
+    this.name = 'EvidenceError';
+  }
+}
+
+function describeEvidenceFailure(failure: StorePhotoFailure): string {
+  if (failure.kind === 'storage') {
+    return 'Não foi possível guardar a foto no aparelho. Verifique o espaço livre e tente de novo.';
+  }
+  switch (failure.reason) {
+    case 'TOO_LARGE':
+      return 'A foto ficou maior que o permitido. Fotografe de novo.';
+    case 'UNSUPPORTED_TYPE':
+      return 'Formato de imagem não aceito. Fotografe de novo.';
+    case 'EMPTY':
+      return 'A foto veio vazia. Fotografe de novo.';
+  }
+}
+
+export interface AttachPhotoInput {
+  readonly inspectionItemId: string;
+  readonly photo: CapturedPhoto;
+  readonly description: string;
+}
+
+function useInvalidateInspection(inspectionId: string) {
   const ownerUserId = useOwnerUserId();
   const queryClient = useQueryClient();
-
-  return useMutation<void, Error, { inspectionItemId: string }>({
-    mutationFn: ({ inspectionItemId }) =>
-      registerEvidence({
-        ownerUserId,
-        inspectionId,
-        inspectionItemId,
-        evidenceId: newId(),
-        createdAtDevice: new Date().toISOString(),
-      }),
-    onSettled: () =>
+  return () =>
+    Promise.all([
       queryClient.invalidateQueries({
         queryKey: queryKeys.inspections.detail(ownerUserId, inspectionId),
       }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.inspections.list({ ownerUserId }) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.pending(ownerUserId) }),
+    ]);
+}
+
+/**
+ * UC-11: the confirmed photo becomes an evidence of the item. The file is
+ * prepared and moved to the persistent directory first, then the evidence
+ * and its upload are recorded in one transaction; if that write is refused,
+ * the files just stored are removed, so nothing is left without a record, and
+ * the camera's file stays for another try. Errors reach the screen already
+ * worded for the technician. Nothing waits for the network.
+ */
+export function useAttachPhoto(inspectionId: string) {
+  const ownerUserId = useOwnerUserId();
+  const invalidate = useInvalidateInspection(inspectionId);
+
+  return useMutation<void, Error, AttachPhotoInput>({
+    mutationFn: async ({ inspectionItemId, photo, description }) => {
+      const evidenceId = newId();
+      const stored = await storePhoto(photo, { inspectionId, evidenceId });
+      if (!stored.ok) {
+        throw new EvidenceError(stored.error);
+      }
+      try {
+        await registerEvidence({
+          ownerUserId,
+          inspectionId,
+          inspectionItemId,
+          evidenceId,
+          createdAtDevice: new Date().toISOString(),
+          file: {
+            operationId: newId(),
+            localUri: stored.value.photoUri,
+            thumbnailUri: stored.value.thumbnailUri,
+            mimeType: stored.value.mimeType,
+            sizeBytes: stored.value.sizeBytes,
+            description: normalizeDescription(description),
+          },
+        });
+      } catch (error) {
+        deleteFile(stored.value.photoUri);
+        deleteFile(stored.value.thumbnailUri);
+        throw error instanceof InspectionStateError
+          ? error
+          : new Error('Não foi possível salvar a evidência no aparelho. Tente de novo.');
+      }
+      deleteFile(photo.uri);
+    },
+    onSettled: invalidate,
+  });
+}
+
+/**
+ * Removes an evidence. A file never sent is deleted with it; one the server
+ * may already hold stays until the removal is confirmed (RN-047).
+ */
+export function useDiscardEvidence(inspectionId: string) {
+  const ownerUserId = useOwnerUserId();
+  const invalidate = useInvalidateInspection(inspectionId);
+
+  return useMutation<void, Error, { evidenceId: string }>({
+    mutationFn: async ({ evidenceId }) => {
+      const outcome = await discardEvidence({
+        ownerUserId,
+        inspectionId,
+        evidenceId,
+        operationId: newId(),
+        discardedAtDevice: new Date().toISOString(),
+      });
+      if (outcome.outcome === 'removed') {
+        outcome.files.forEach(deleteFile);
+      }
+    },
+    onSettled: invalidate,
   });
 }
