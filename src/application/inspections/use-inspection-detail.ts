@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { useStoredInspection } from '@/application/inspections/use-inspections';
 import type { ChecklistItem, ChecklistResponse } from '@/domain/checklist';
+import type { EvidenceSummary } from '@/domain/evidence';
 import { computeProgress, type ChecklistProgress } from '@/domain/checklist-progress';
 import type { InspectionDetail } from '@/domain/inspection';
 
@@ -11,6 +12,8 @@ export interface InspectionWork {
   /** Current answer per snapshot item id. */
   readonly responses: ReadonlyMap<string, ChecklistResponse>;
   readonly evidenceCounts: ReadonlyMap<string, number>;
+  /** Evidences per snapshot item id; an item without any has no key. */
+  readonly evidences: Readonly<Record<string, readonly EvidenceSummary[]>>;
   readonly progress: ChecklistProgress;
 }
 
@@ -41,6 +44,7 @@ export function useInspectionDetail(inspectionId: string): InspectionDetailState
       items: stored.data.items,
       responses,
       evidenceCounts: stored.data.evidenceCounts,
+      evidences: stored.data.evidences,
       progress: computeProgress({
         items: stored.data.items,
         responses,

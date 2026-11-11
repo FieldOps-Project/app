@@ -47,6 +47,14 @@
           "isIosBackgroundLocationEnabled": false
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O FieldOps usa a câmera para fotografar as evidências dos itens da inspeção. As fotos ficam no aparelho até serem enviadas.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
       "@react-native-community/datetimepicker"
     ],
     "experiments": {

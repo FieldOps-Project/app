@@ -94,6 +94,7 @@ function ready(
   const evidenceCounts = new Map<string, number>();
   return {
     state: 'ready',
+    evidences: {},
     detail: {
       id: 'insp-1',
       title: 'Inspeção do gerador',

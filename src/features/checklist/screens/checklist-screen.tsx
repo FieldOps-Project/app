@@ -20,6 +20,7 @@ import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { toSections, type ChecklistItem, type ChecklistSection } from '@/domain/checklist';
 import { nextPending } from '@/domain/checklist-progress';
+import type { EvidenceSummary } from '@/domain/evidence';
 import type { InspectionStatus } from '@/domain/inspection';
 import { canEditAnswers } from '@/domain/inspection-actions';
 import { ChecklistItemRow } from '@/features/checklist/components/checklist-item-row';
@@ -32,6 +33,9 @@ import { FieldError } from '@/features/checklist/components/response-fields/fiel
 import type { ResponseFormOutput } from '@/schemas/checklist-response';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 import { plural } from '@/utils/plural';
+
+/** One shared empty list, so an item without evidences keeps the same prop across renders. */
+const NO_EVIDENCE: readonly EvidenceSummary[] = [];
 
 type Row =
   | { readonly kind: 'section'; readonly key: string; readonly section: ChecklistSection }
@@ -86,7 +90,7 @@ export function ChecklistScreen() {
 }
 
 function Checklist({ work }: { work: InspectionWork }) {
-  const { detail, items, responses, evidenceCounts, progress } = work;
+  const { detail, items, responses, evidences, progress } = work;
   const router = useRouter();
   const listRef = useRef<FlatList<Row>>(null);
   const { focusedItemFor, focusItem } = useInspectionDraft();
@@ -142,6 +146,20 @@ function Checklist({ work }: { work: InspectionWork }) {
     focusItem(detail.id, itemId);
     leaveTo(() =>
       router.push({ pathname: '/evidence/capture', params: { inspectionId: detail.id, itemId } })
+    );
+  }
+
+  function openEvidence(evidence: EvidenceSummary) {
+    if (evidence.inspectionItemId === null) {
+      return;
+    }
+    const itemId = evidence.inspectionItemId;
+    focusItem(detail.id, itemId);
+    leaveTo(() =>
+      router.push({
+        pathname: '/evidence/view',
+        params: { inspectionId: detail.id, itemId, evidenceId: evidence.id },
+      })
     );
   }
 
@@ -275,7 +293,7 @@ function Checklist({ work }: { work: InspectionWork }) {
               <ChecklistItemRow
                 item={row.item}
                 response={responses.get(row.item.id)}
-                evidenceCount={evidenceCounts.get(row.item.id) ?? 0}
+                evidences={evidences[row.item.id] ?? NO_EVIDENCE}
                 needsObservation={blocking.get(row.item.id)?.has('OBSERVATION_REQUIRED') ?? false}
                 needsEvidence={blocking.get(row.item.id)?.has('EVIDENCE_REQUIRED') ?? false}
                 toCorrect={toCorrect.has(row.item.id)}
@@ -283,6 +301,7 @@ function Checklist({ work }: { work: InspectionWork }) {
                 focused={row.item.id === focusedItemId}
                 onSave={save}
                 onCaptureEvidence={captureEvidence}
+                onOpenEvidence={openEvidence}
               />
             )
           }

@@ -78,6 +78,7 @@ function ready(status: InspectionDetail['status'] = 'IN_PROGRESS'): InspectionDe
     state: 'ready',
     detail: { ...DETAIL, status },
     items: ITEMS,
+    evidences: {},
     responses,
     evidenceCounts,
     progress: computeProgress({ items: ITEMS, responses, evidenceCounts }),
@@ -124,7 +125,7 @@ describe('ChecklistScreen', () => {
         <ChecklistItemRow
           item={ITEMS[7]!}
           response={undefined}
-          evidenceCount={0}
+          evidences={[]}
           needsObservation={false}
           needsEvidence={false}
           toCorrect={false}
@@ -132,6 +133,7 @@ describe('ChecklistScreen', () => {
           focused={false}
           onSave={jest.fn()}
           onCaptureEvidence={jest.fn()}
+          onOpenEvidence={jest.fn()}
         />
       );
     });

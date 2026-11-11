@@ -34,6 +34,7 @@ export default function ProtectedLayout() {
       <Stack.Screen name="scanner" options={{ title: 'Leitor de código' }} />
       <Stack.Screen name="evidence/capture" options={{ title: 'Captura' }} />
       <Stack.Screen name="evidence/preview" options={{ title: 'Conferir evidência' }} />
+      <Stack.Screen name="evidence/view" options={{ title: 'Evidência' }} />
       <Stack.Screen name="sync/details" options={{ title: 'Fila de envio' }} />
     </Stack>
   );
