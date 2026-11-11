@@ -1,13 +1,14 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useRef, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { Alert, Linking, View } from 'react-native';
 
 import { useIdentifyEquipment } from '@/application/equipment/identify-equipment';
 import { useInspectionDetail } from '@/application/inspections/use-inspection-detail';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
-import { ErrorState } from '@/design-system/components/error-state';
+import { ErrorState, type ErrorStateProps } from '@/design-system/components/error-state';
 import { Input } from '@/design-system/components/input';
 import { Loading } from '@/design-system/components/loading';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
@@ -22,6 +23,7 @@ import { IdentificationResult } from '@/features/scanner/components/identificati
 export function ScannerScreen() {
   const { inspectionId } = useLocalSearchParams<{ inspectionId?: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const isFocused = useIsFocused();
   const inspection = useInspectionDetail(inspectionId ?? '');
   const expected = inspection.state === 'ready' ? inspection.detail.equipment : null;
@@ -29,10 +31,29 @@ export function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [typing, setTyping] = useState(false);
   const cycleLocked = useRef(false);
+  const leavingForScannedInspection = useRef(false);
+  const divergence = identify.data?.kind === 'divergent' ? identify.data : null;
 
-  function lookUp(raw: string, source: CodeSource) {
-    const code = normalizeEquipmentCode(raw);
-    if (code === null || cycleLocked.current) {
+  usePreventRemove(divergence !== null, ({ data }) => {
+    if (divergence === null || leavingForScannedInspection.current) {
+      navigation.dispatch(data.action);
+      return;
+    }
+    Alert.alert(
+      'Seguir mesmo assim?',
+      `O código lido é de ${divergence.scanned.equipment.name}. Confirme que você está em ${divergence.expected.name}.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Estou no equipamento previsto',
+          onPress: () => navigation.dispatch(data.action),
+        },
+      ]
+    );
+  });
+
+  function lookUp(code: string, source: CodeSource) {
+    if (cycleLocked.current) {
       return;
     }
     cycleLocked.current = true;
@@ -41,10 +62,12 @@ export function ScannerScreen() {
 
   function scanAgain() {
     cycleLocked.current = false;
+    leavingForScannedInspection.current = false;
     identify.reset();
   }
 
   function openInspection(id: string) {
+    leavingForScannedInspection.current = true;
     router.replace({ pathname: '/inspections/[inspectionId]', params: { inspectionId: id } });
   }
 
@@ -54,14 +77,12 @@ export function ScannerScreen() {
   }
   if (expectsEquipment && inspection.state !== 'ready') {
     return (
-      <Screen edges={BELOW_HEADER_EDGES}>
-        <ErrorState
-          title="Inspeção indisponível"
-          description="Não foi possível abrir a inspeção para comparar o equipamento. Volte e tente de novo."
-          retryLabel="Voltar"
-          onRetry={() => router.back()}
-        />
-      </Screen>
+      <ScannerError
+        title="Inspeção indisponível"
+        description="Não foi possível abrir a inspeção para comparar o equipamento. Volte e tente de novo."
+        retryLabel="Voltar"
+        onRetry={() => router.back()}
+      />
     );
   }
 
@@ -71,14 +92,12 @@ export function ScannerScreen() {
 
   if (identify.isError) {
     return (
-      <Screen edges={BELOW_HEADER_EDGES}>
-        <ErrorState
-          title="Não foi possível procurar o equipamento"
-          description="A busca falhou neste aparelho. Tente ler o código de novo."
-          retryLabel="Tentar de novo"
-          onRetry={scanAgain}
-        />
-      </Screen>
+      <ScannerError
+        title="Não foi possível procurar o equipamento"
+        description="A busca falhou neste aparelho. Tente ler o código de novo."
+        retryLabel="Tentar de novo"
+        onRetry={scanAgain}
+      />
     );
   }
 
@@ -177,6 +196,14 @@ function ScannerConsent({
   );
 }
 
+function ScannerError(props: ErrorStateProps) {
+  return (
+    <Screen edges={BELOW_HEADER_EDGES}>
+      <ErrorState {...props} />
+    </Screen>
+  );
+}
+
 function ManualCodeForm({ onSubmit }: { onSubmit: (code: string) => void }) {
   const [code, setCode] = useState('');
   const valid = normalizeEquipmentCode(code) !== null;
@@ -187,11 +214,15 @@ function ManualCodeForm({ onSubmit }: { onSubmit: (code: string) => void }) {
         label="Código do QR ou patrimônio"
         value={code}
         onChangeText={setCode}
-        autoCapitalize="characters"
+        autoCapitalize="none"
         autoCorrect={false}
         maxLength={EQUIPMENT_CODE_MAX}
         returnKeyType="search"
-        onSubmitEditing={() => onSubmit(code)}
+        onSubmitEditing={() => {
+          if (valid) {
+            onSubmit(code);
+          }
+        }}
       />
       <Button label="Buscar equipamento" disabled={!valid} onPress={() => onSubmit(code)} />
     </Card>

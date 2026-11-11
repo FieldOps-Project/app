@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Alert, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { InspectionStatusBadge } from '@/components/inspection-status-badge';
 import { Button } from '@/design-system/components/button';
@@ -42,7 +42,7 @@ export function IdentificationResult({
           <Notice icon="checkmark-circle" tone="success">
             O código lido é do equipamento previsto nesta inspeção.
           </Notice>
-          <EquipmentLines equipment={result.equipment} />
+          <EquipmentPanel equipment={result.equipment} />
           <Button label="Voltar à inspeção" onPress={onContinue} />
         </Card>
       );
@@ -56,33 +56,24 @@ export function IdentificationResult({
           <Text variant="label" tone="muted">
             Previsto
           </Text>
-          <EquipmentLines equipment={result.expected} />
+          <EquipmentPanel equipment={result.expected} />
           <Text variant="label" tone="muted">
             Lido
           </Text>
-          <EquipmentLines equipment={result.read.equipment} />
-          <InspectionLinks inspections={result.read.inspections} onOpen={onOpenInspection} />
+          <EquipmentPanel equipment={result.scanned.equipment} />
+          <InspectionLinks inspections={result.scanned.inspections} onOpen={onOpenInspection} />
           <Button label="Ler novamente" onPress={onScanAgain} />
           <Button
             label="Seguir com o equipamento previsto"
             variant="secondary"
-            onPress={() =>
-              Alert.alert(
-                'Seguir mesmo assim?',
-                `O código lido é de ${result.read.equipment.name}. Confirme que você está em ${result.expected.name}.`,
-                [
-                  { text: 'Cancelar', style: 'cancel' },
-                  { text: 'Estou no equipamento previsto', onPress: onContinue },
-                ]
-              )
-            }
+            onPress={onContinue}
           />
         </Card>
       );
     case 'found':
       return (
         <Card title="Equipamento identificado">
-          <EquipmentLines equipment={result.match.equipment} />
+          <EquipmentPanel equipment={result.match.equipment} />
           <InspectionLinks inspections={result.match.inspections} onOpen={onOpenInspection} />
           <Button label="Ler outro código" variant="secondary" onPress={onScanAgain} />
         </Card>
@@ -118,7 +109,7 @@ function Notice({
   );
 }
 
-function EquipmentLines({ equipment }: { equipment: InspectionEquipment }) {
+function EquipmentPanel({ equipment }: { equipment: InspectionEquipment }) {
   return (
     <View className="gap-1 rounded-field bg-neutral-100 p-3 dark:bg-neutral-800">
       <Text variant="subtitle">{equipment.name}</Text>
