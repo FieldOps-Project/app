@@ -30,6 +30,7 @@ import {
   SectionTabs,
 } from '@/features/checklist/components/checklist-progress-panel';
 import { FieldError } from '@/features/checklist/components/response-fields/field-error';
+import { useStableCallback } from '@/hooks/use-stable-callback';
 import type { ResponseFormOutput } from '@/schemas/checklist-response';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 import { plural } from '@/utils/plural';
@@ -126,14 +127,14 @@ function Checklist({ work }: { work: InspectionWork }) {
     scrollToRow(rows.findIndex((row) => row.key === `section-${sectionOrder}`));
   }
 
-  function captureEvidence(itemId: string) {
+  const captureEvidence = useStableCallback((itemId: string) => {
     focusItem(detail.id, itemId);
     leaveTo(() =>
       router.push({ pathname: '/evidence/capture', params: { inspectionId: detail.id, itemId } })
     );
-  }
+  });
 
-  function openEvidence(evidence: EvidenceSummary) {
+  const openEvidence = useStableCallback((evidence: EvidenceSummary) => {
     if (evidence.inspectionItemId === null) {
       return;
     }
@@ -145,12 +146,12 @@ function Checklist({ work }: { work: InspectionWork }) {
         params: { inspectionId: detail.id, itemId, evidenceId: evidence.id },
       })
     );
-  }
+  });
 
-  function save(itemId: string, answer: ResponseFormOutput) {
+  const save = useStableCallback((itemId: string, answer: ResponseFormOutput) => {
     focusItem(detail.id, itemId);
     saveAnswer.save(itemId, answer);
-  }
+  });
 
   const restored = useRef(false);
   useEffect(() => {
