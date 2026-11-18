@@ -73,7 +73,7 @@ export function SyncScreen() {
               Inspeções não enviadas
             </Text>
             {unsent.isLoading ? (
-              <Text variant="body" tone="muted">
+              <Text variant="body" tone="muted" accessibilityLiveRegion="polite">
                 Carregando...
               </Text>
             ) : null}

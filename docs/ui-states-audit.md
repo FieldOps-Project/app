@@ -24,12 +24,30 @@ uma falha: a tela funciona e diz isso. O estado offline aparece onde há chamada
 | Não conformidades    | não se aplica                      | "Registro em breve", com saída          | não se aplica                               | não se aplica                                    |
 | Perfil               | não se aplica                      | não se aplica                           | não se aplica                               | saída explica que entrar de novo exige internet  |
 
+A auditoria descreve o comportamento que já existia. Só as telas de sincronização, fila de envio e
+não conformidades mudaram neste card.
+
 ## Linguagem de negócio
 
 - Recusa de negócio do servidor (400 e 422) é descrita por um mapa de código para frase em
   [`api-failure.ts`](../src/infrastructure/api/api-failure.ts), com uma frase genérica para código
   desconhecido. O texto que o servidor envia nunca chega à tela.
 - Telas provisórias deixaram de citar épicos e de mostrar o identificador da inspeção.
+
+## Acessibilidade
+
+Verificado lendo os componentes e as telas; nenhuma correção foi necessária além das citadas acima.
+
+- Todo elemento interativo do design system (`Button`, `OptionButton`, `Chip`) tem papel, rótulo e
+  estado acessíveis e altura mínima de 48 pt (`minTouchTarget`); as miniaturas têm 64 pt e as
+  abas de seção e a lista de pendências, 48 pt.
+- Os cartões tocáveis da lista e do início declaram papel de botão e dica; o início também compõe
+  o rótulo com a contagem.
+- Estado nunca depende só de cor: `Badge` leva texto e ícone, `OptionButton` troca o ícone ao
+  selecionar, `Chip` mostra um visto, a barra de progresso tem rótulo e as seções do checklist
+  dizem "Seção completa".
+- Avisos e erros usam `accessibilityRole="alert"`, e os textos de carregamento das telas de
+  sincronização usam região viva educada.
 
 ## Desempenho
 
