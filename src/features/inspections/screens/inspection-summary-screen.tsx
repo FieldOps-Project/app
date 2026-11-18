@@ -87,6 +87,7 @@ function Summary({ work }: { work: InspectionWork }) {
   const evidences = [...evidenceCounts.values()].reduce((total, count) => total + count, 0);
   const completedHere = isAwaitingSend(detail.status, detail.syncState);
   const withoutEvidence = blockingCompletion(nonConformities.data ?? []);
+  const checkingNonConformities = nonConformities.isPending || nonConformities.isError;
   const registered = nonConformities.data?.length ?? 0;
 
   function openNonConformities() {
@@ -175,13 +176,24 @@ function Summary({ work }: { work: InspectionWork }) {
             </Card>
           ) : null}
 
-          {progress.pending.length > 0 || withoutEvidence.length > 0 ? (
+          {progress.pending.length > 0 || withoutEvidence.length > 0 || checkingNonConformities ? (
             <Card title="Conclusão bloqueada">
               <Text variant="body">
                 {progress.pending.length > 0
                   ? 'Resolva as pendências acima para concluir. Toque em uma delas para ir ao item.'
-                  : 'Registre a evidência das não conformidades críticas para concluir.'}
+                  : withoutEvidence.length > 0
+                    ? 'Registre a evidência das não conformidades críticas para concluir.'
+                    : nonConformities.isError
+                      ? 'Não foi possível conferir as não conformidades. Tente de novo.'
+                      : 'Conferindo as não conformidades...'}
               </Text>
+              {nonConformities.isError ? (
+                <Button
+                  label="Tentar de novo"
+                  variant="secondary"
+                  onPress={() => void nonConformities.refetch()}
+                />
+              ) : null}
               <Button label="Voltar ao checklist" variant="secondary" onPress={returnToChecklist} />
             </Card>
           ) : confirming ? (

@@ -5,19 +5,16 @@ import {
   lockInspection,
   markInspectionDirty,
 } from '@/infrastructure/repositories/inspection-repository';
+import {
+  NonConformityAnswerError,
+  NonConformityItemError,
+} from '@/infrastructure/repositories/non-conformity-errors';
 import { toSyncState, type LocalSyncStatus } from '@/infrastructure/repositories/inspection-rows';
 import {
   cancelPendingOperations,
   enqueueOperation,
   openOperationIdsFor,
 } from '@/infrastructure/repositories/outbox-repository';
-
-export class NonConformityItemError extends Error {
-  constructor() {
-    super('O item desta não conformidade não pertence a esta inspeção.');
-    this.name = 'NonConformityItemError';
-  }
-}
 
 export interface CreateNonConformityCommand {
   readonly ownerUserId: string;
@@ -54,7 +51,10 @@ export async function createNonConformity(command: CreateNonConformityCommand): 
       command.inspectionItemId,
       command.inspectionId
     );
-    const responseId = response?.id ?? null;
+    if (response === null) {
+      throw new NonConformityAnswerError();
+    }
+    const responseId = response.id;
 
     await transaction.runAsync(
       `INSERT INTO non_conformities (
@@ -73,8 +73,7 @@ export async function createNonConformity(command: CreateNonConformityCommand): 
       now
     );
 
-    const dependencyIds =
-      responseId === null ? [] : await openOperationIdsFor(transaction, 'RESPONSE', responseId);
+    const dependencyIds = await openOperationIdsFor(transaction, 'RESPONSE', responseId);
     await markInspectionDirty(transaction, command.inspectionId, now);
     await enqueueOperation(
       transaction,

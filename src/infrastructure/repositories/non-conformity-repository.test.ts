@@ -3,6 +3,8 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { getDatabase } from '@/infrastructure/database/database';
 import { openTestDatabase } from '@/infrastructure/database/testing/node-sqlite';
 import {
+  completeInspection,
+  discardEvidence,
   findInspection,
   registerEvidence,
   saveDownloadedInspection,
@@ -13,8 +15,12 @@ import {
   createNonConformity,
   deleteNonConformity,
   listNonConformities,
-  NonConformityItemError,
 } from '@/infrastructure/repositories/non-conformity-repository';
+import {
+  NonConformityAnswerError,
+  NonConformityEvidenceError,
+  NonConformityItemError,
+} from '@/infrastructure/repositories/non-conformity-errors';
 import {
   countOpenOperations,
   listOpenOperations,
@@ -139,6 +145,16 @@ describe('createNonConformity', () => {
     expect(await countOpenOperations(OWNER)).toBe(before);
   });
 
+  it('refuses an item that has not been answered, so the link to the answer never goes stale', async () => {
+    await database.runAsync('DELETE FROM inspection_responses');
+    const before = await countOpenOperations(OWNER);
+
+    await expect(create()).rejects.toBeInstanceOf(NonConformityAnswerError);
+
+    expect(await listNonConformities(OWNER, 'insp-1')).toEqual([]);
+    expect(await countOpenOperations(OWNER)).toBe(before);
+  });
+
   it('refuses a registration once the inspection is no longer in progress', async () => {
     await database.runAsync(`UPDATE inspections SET status = 'SUBMITTED' WHERE id = 'insp-1'`);
 
@@ -153,7 +169,7 @@ describe('createNonConformity', () => {
     expect(await listNonConformities('someone-else', 'insp-1')).toEqual([]);
   });
 
-  it('survives closing the app and opening it again', async () => {
+  it('reads back, from the database, what was registered', async () => {
     await create();
 
     const reopened = await listNonConformities(OWNER, 'insp-1');
@@ -182,6 +198,82 @@ describe('evidence of a non-conformity', () => {
     );
     expect(upload?.dependencyIds).toEqual(expect.arrayContaining(['op-answer', 'op-nc']));
     expect(upload?.payload).toMatchObject({ nonConformityId: 'nc-1' });
+  });
+});
+
+describe('photo of a non-conformity', () => {
+  it.each([
+    ['one that does not exist', 'ghost'],
+    ['one of another item', 'nc-other-item'],
+  ])('refuses %s and stores nothing', async (_name, nonConformityId) => {
+    await create();
+    await database.runAsync(
+      `INSERT INTO non_conformities (id, inspection_id, inspection_item_id, title, description, severity, created_at_device)
+       VALUES ('nc-other-item', 'insp-1', NULL, 'x', 'y', 'LOW', ?)`,
+      FIXTURE_TIME
+    );
+
+    await expect(attachPhoto('ev-bad', nonConformityId)).rejects.toBeInstanceOf(
+      NonConformityItemError
+    );
+
+    const photos = await database.getFirstAsync<{ total: number }>(
+      'SELECT COUNT(*) AS total FROM evidences'
+    );
+    expect(photos?.total).toBe(0);
+  });
+});
+
+describe('completing with a critical non-conformity (RN-055)', () => {
+  const complete = () =>
+    completeInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-submit',
+      completedAtDevice: FIXTURE_TIME,
+      location: { status: 'missing', reason: 'PERMISSION_DENIED' },
+    });
+
+  it('refuses while a critical registration has no photo, and changes nothing', async () => {
+    await create({ severity: 'CRITICAL' });
+
+    await expect(complete()).rejects.toBeInstanceOf(NonConformityEvidenceError);
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.status).toBe('IN_PROGRESS');
+    expect((await listOpenOperations(OWNER)).map((entry) => entry.operationId)).not.toContain(
+      'op-submit'
+    );
+  });
+
+  it('completes once the critical registration has its photo', async () => {
+    await create({ severity: 'CRITICAL' });
+    await attachPhoto('ev-nc', 'nc-1');
+
+    await complete();
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.status).toBe('SUBMITTED');
+  });
+
+  it('refuses again when the only photo is discarded', async () => {
+    await create({ severity: 'CRITICAL' });
+    await attachPhoto('ev-nc', 'nc-1');
+    await discardEvidence({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      evidenceId: 'ev-nc',
+      operationId: 'op-discard',
+      discardedAtDevice: FIXTURE_TIME,
+    });
+
+    await expect(complete()).rejects.toBeInstanceOf(NonConformityEvidenceError);
+  });
+
+  it('never asks for a photo of a less severe registration', async () => {
+    await create({ severity: 'HIGH' });
+
+    await complete();
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.status).toBe('SUBMITTED');
   });
 });
 
@@ -226,6 +318,7 @@ describe('deleteNonConformity', () => {
 
   it('never deletes what the server already has (RN-056)', async () => {
     await create();
+    await attachPhoto('ev-nc', 'nc-1');
     const claimed = await claimOperation('op-nc', FIXTURE_TIME);
     if (claimed === null) {
       throw new Error('A operação não foi reservada.');
@@ -240,7 +333,8 @@ describe('deleteNonConformity', () => {
     });
 
     expect(result).toEqual({ outcome: 'already-sent' });
-    expect(await listNonConformities(OWNER, 'insp-1')).toHaveLength(1);
+    const [kept] = await listNonConformities(OWNER, 'insp-1');
+    expect(kept?.evidenceCount).toBe(1);
   });
 
   it('answers not-found for a registration that does not exist', async () => {

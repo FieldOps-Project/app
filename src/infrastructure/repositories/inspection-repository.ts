@@ -7,6 +7,10 @@ import type { InspectionDetail, InspectionStatus, InspectionSummary } from '@/do
 import { getDatabase } from '@/infrastructure/database/database';
 import { writeTransaction } from '@/infrastructure/database/write-transaction';
 import {
+  NonConformityEvidenceError,
+  NonConformityItemError,
+} from '@/infrastructure/repositories/non-conformity-errors';
+import {
   cancelPendingOperations,
   enqueueOperation,
   openOperationIds,
@@ -557,6 +561,18 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
     );
     const responseId = response?.id ?? null;
     const nonConformityId = command.nonConformityId ?? null;
+    if (nonConformityId !== null) {
+      const owner = await transaction.getFirstAsync<{ id: string }>(
+        `SELECT id FROM non_conformities
+          WHERE id = ? AND inspection_id = ? AND inspection_item_id = ? AND deleted_locally = 0`,
+        nonConformityId,
+        command.inspectionId,
+        command.inspectionItemId
+      );
+      if (owner === null) {
+        throw new NonConformityItemError();
+      }
+    }
     const file = command.file;
 
     await transaction.runAsync(
@@ -721,6 +737,17 @@ export async function completeInspection(command: CompleteCommand): Promise<void
       command.inspectionId,
       ['IN_PROGRESS']
     );
+    const withoutEvidence = await transaction.getFirstAsync<{ total: number }>(
+      `SELECT COUNT(*) AS total FROM non_conformities nc
+        WHERE nc.inspection_id = ? AND nc.severity = 'CRITICAL' AND nc.deleted_locally = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM evidences ev
+             WHERE ev.non_conformity_id = nc.id AND ev.deleted_locally = 0)`,
+      command.inspectionId
+    );
+    if ((withoutEvidence?.total ?? 0) > 0) {
+      throw new NonConformityEvidenceError();
+    }
     const dependencyIds = await openOperationIds(transaction, command.inspectionId);
 
     await transaction.runAsync(

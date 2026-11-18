@@ -14,8 +14,9 @@ export const queryKeys = {
   },
 
   nonConformities: {
+    all: () => ['non-conformities'] as const,
     list: (ownerUserId: string, inspectionId: string) =>
-      ['non-conformities', ownerUserId, inspectionId] as const,
+      [...queryKeys.nonConformities.all(), ownerUserId, inspectionId] as const,
   },
 
   synchronization: {
