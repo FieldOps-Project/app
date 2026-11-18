@@ -10,6 +10,7 @@ import { Card } from '@/design-system/components/card';
 import { Input } from '@/design-system/components/input';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
+import { suggestsNonConformity } from '@/domain/non-conformity';
 import { hasAnswer, type ChecklistItem, type ChecklistResponse } from '@/domain/checklist';
 import { evidenceUploadState, type EvidenceSummary } from '@/domain/evidence';
 import { responseFieldFor } from '@/features/checklist/components/response-fields';
@@ -35,8 +36,10 @@ export interface ChecklistItemRowProps {
   toCorrect: boolean;
   editable: boolean;
   focused: boolean;
+  nonConformityCount: number;
   onSave: (itemId: string, answer: ResponseFormOutput) => void;
   onCaptureEvidence: (itemId: string) => void;
+  onRegisterNonConformity: (itemId: string) => void;
   onOpenEvidence: (evidence: EvidenceSummary) => void;
 }
 
@@ -49,8 +52,10 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
   toCorrect,
   editable,
   focused,
+  nonConformityCount,
   onSave,
   onCaptureEvidence,
+  onRegisterNonConformity,
   onOpenEvidence,
 }: ChecklistItemRowProps) {
   const evidenceCount = evidences.length;
@@ -147,6 +152,29 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
             />
           )}
         />
+      ) : null}
+
+      {editable && suggestsNonConformity(response) ? (
+        <View className="gap-2">
+          <Text variant="caption" tone={nonConformityCount > 0 ? 'success' : 'muted'}>
+            {nonConformityCount > 0
+              ? plural(
+                  nonConformityCount,
+                  'não conformidade registrada',
+                  'não conformidades registradas'
+                )
+              : 'Item não conforme. Se for um achado formal, registre a não conformidade.'}
+          </Text>
+          <Button
+            label={
+              nonConformityCount > 0
+                ? 'Registrar outra não conformidade'
+                : 'Registrar não conformidade'
+            }
+            variant="secondary"
+            onPress={() => onRegisterNonConformity(item.id)}
+          />
+        </View>
       ) : null}
 
       {answered || evidenceCount > 0 ? (

@@ -39,6 +39,11 @@ jest.mock('@/application/inspections/use-execution-actions', () => ({
     error: null,
   }),
 }));
+const READY_LIST = { data: [] as unknown[], isPending: false, isError: false, refetch: jest.fn() };
+const mockNonConformities = { current: READY_LIST };
+jest.mock('@/application/non-conformities/use-non-conformities', () => ({
+  useNonConformities: () => mockNonConformities.current,
+}));
 jest.mock('@/application/inspection-draft/inspection-draft-context', () => ({
   useInspectionDraft: () => ({ focusedItemFor: () => null, focusItem: jest.fn() }),
 }));
@@ -128,6 +133,14 @@ function buttonLabels(renderer: ReactTestRenderer): string[] {
   return renderer.root.findAllByType(Button).map((button) => button.props.label);
 }
 
+function press(renderer: ReactTestRenderer, label: string) {
+  const button = renderer.root.findAllByType(Button).find((entry) => entry.props.label === label);
+  if (button === undefined) {
+    throw new Error(`Sem botão "${label}"`);
+  }
+  act(() => button.props.onPress());
+}
+
 function texts(renderer: ReactTestRenderer): string {
   return JSON.stringify(renderer.toJSON());
 }
@@ -135,6 +148,7 @@ function texts(renderer: ReactTestRenderer): string {
 beforeEach(() => {
   jest.clearAllMocks();
   mockStartState.current = {};
+  mockNonConformities.current = READY_LIST;
 });
 
 describe('InspectionStartScreen', () => {
@@ -180,6 +194,69 @@ describe('InspectionSummaryScreen', () => {
 
     expect(buttonLabels(renderer)).not.toContain('Concluir inspeção');
     expect(texts(renderer)).toContain('Conclusão bloqueada');
+  });
+
+  it('blocks the completion while a critical non-conformity has no evidence', () => {
+    mockState.current = ready({}, [ANSWER]);
+    mockNonConformities.current = {
+      ...READY_LIST,
+      data: [
+        {
+          id: 'nc-1',
+          title: 'Vazamento hidráulico',
+          severity: 'CRITICAL',
+          evidenceCount: 0,
+        },
+      ],
+    };
+    const renderer = render(<InspectionSummaryScreen />);
+
+    expect(buttonLabels(renderer)).not.toContain('Concluir inspeção');
+    expect(texts(renderer)).toContain('Vazamento hidráulico');
+    expect(texts(renderer)).toContain('criticidade crítica ainda não tem evidência');
+    expect(buttonLabels(renderer)).toContain('Fotografar as evidências');
+  });
+
+  it('does not offer the completion while the non-conformities are still being read', () => {
+    mockState.current = ready({}, [ANSWER]);
+    mockNonConformities.current = { ...READY_LIST, isPending: true };
+    const renderer = render(<InspectionSummaryScreen />);
+
+    expect(buttonLabels(renderer)).not.toContain('Concluir inspeção');
+    expect(texts(renderer)).toContain('Conferindo as não conformidades');
+  });
+
+  it('does not offer the completion when the non-conformities cannot be read, and retries', () => {
+    mockState.current = ready({}, [ANSWER]);
+    mockNonConformities.current = { ...READY_LIST, isError: true };
+    const renderer = render(<InspectionSummaryScreen />);
+
+    expect(buttonLabels(renderer)).not.toContain('Concluir inspeção');
+    press(renderer, 'Tentar de novo');
+    expect(READY_LIST.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the technician conclude once the critical non-conformity has its evidence', () => {
+    mockState.current = ready({}, [ANSWER]);
+    mockNonConformities.current = {
+      ...READY_LIST,
+      data: [{ id: 'nc-1', title: 'Vazamento hidráulico', severity: 'CRITICAL', evidenceCount: 1 }],
+    };
+    const renderer = render(<InspectionSummaryScreen />);
+
+    expect(buttonLabels(renderer)).toContain('Concluir inspeção');
+  });
+
+  it('never asks for evidence of a non-critical non-conformity', () => {
+    mockState.current = ready({}, [ANSWER]);
+    mockNonConformities.current = {
+      ...READY_LIST,
+      data: [{ id: 'nc-1', title: 'Pintura riscada', severity: 'HIGH', evidenceCount: 0 }],
+    };
+    const renderer = render(<InspectionSummaryScreen />);
+
+    expect(buttonLabels(renderer)).toContain('Concluir inspeção');
+    expect(texts(renderer)).not.toContain('sem evidência');
   });
 
   it('asks for confirmation and says that completing is not sending', () => {

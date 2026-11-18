@@ -113,11 +113,12 @@ function describeEvidenceFailure(failure: StorePhotoFailure): string {
 
 export interface AttachPhotoInput {
   readonly inspectionItemId: string;
+  readonly nonConformityId?: string;
   readonly photo: CapturedPhoto;
   readonly description: string;
 }
 
-function useInvalidateInspection(inspectionId: string) {
+export function useInvalidateInspection(inspectionId: string) {
   const ownerUserId = useOwnerUserId();
   const queryClient = useQueryClient();
   return () =>
@@ -127,6 +128,9 @@ function useInvalidateInspection(inspectionId: string) {
       }),
       queryClient.invalidateQueries({ queryKey: queryKeys.inspections.list({ ownerUserId }) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.pending(ownerUserId) }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.nonConformities.list(ownerUserId, inspectionId),
+      }),
     ]);
 }
 
@@ -135,7 +139,7 @@ export function useAttachPhoto(inspectionId: string) {
   const invalidate = useInvalidateInspection(inspectionId);
 
   return useMutation<void, Error, AttachPhotoInput>({
-    mutationFn: async ({ inspectionItemId, photo, description }) => {
+    mutationFn: async ({ inspectionItemId, nonConformityId, photo, description }) => {
       const evidenceId = newId();
       const stored = await storePhoto(photo, { inspectionId, evidenceId });
       if (!stored.ok) {
@@ -146,6 +150,7 @@ export function useAttachPhoto(inspectionId: string) {
           ownerUserId,
           inspectionId,
           inspectionItemId,
+          nonConformityId,
           evidenceId,
           createdAtDevice: new Date().toISOString(),
           file: {

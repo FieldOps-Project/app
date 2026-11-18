@@ -3,6 +3,7 @@ import { FlatList } from 'react-native';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
 
 import type { InspectionDetailState } from '@/application/inspections/use-inspection-detail';
+import { Button } from '@/design-system/components/button';
 import type { ChecklistItem } from '@/domain/checklist';
 import { computeProgress } from '@/domain/checklist-progress';
 import type { InspectionDetail } from '@/domain/inspection';
@@ -25,6 +26,9 @@ jest.mock('expo-router/react-navigation', () => ({ useHeaderHeight: () => 56 }))
 jest.mock('@/config/env', () => ({ env: { appEnv: 'production' }, isDevelopment: false }));
 jest.mock('@/application/inspections/use-inspection-detail', () => ({
   useInspectionDetail: () => mockState.current,
+}));
+jest.mock('@/application/non-conformities/use-non-conformities', () => ({
+  useNonConformities: () => ({ data: [] }),
 }));
 jest.mock('@/application/inspections/use-checklist-actions', () => ({
   useSaveAnswer: () => ({ save: jest.fn(), error: null, reset: jest.fn() }),
@@ -92,6 +96,81 @@ function render(): ReactTestRenderer {
   return renderer!;
 }
 
+function rowFor(options: {
+  conformity: 'CONFORMING' | 'NON_CONFORMING';
+  nonConformityCount?: number;
+  editable?: boolean;
+  onRegister?: () => void;
+}): ReactTestRenderer {
+  let renderer: ReactTestRenderer | undefined;
+  act(() => {
+    renderer = create(
+      <ChecklistItemRow
+        item={ITEMS[4]!}
+        response={{
+          id: 'resp-1',
+          inspectionItemId: ITEMS[4]!.id,
+          valueText: null,
+          valueNumber: null,
+          valueBoolean: null,
+          valueDate: null,
+          conformity: options.conformity,
+          observation: null,
+          answeredAtDevice: '2026-08-12T10:00:00Z',
+        }}
+        evidences={[]}
+        needsObservation={false}
+        needsEvidence={false}
+        toCorrect={false}
+        editable={options.editable ?? true}
+        focused={false}
+        nonConformityCount={options.nonConformityCount ?? 0}
+        onSave={jest.fn()}
+        onCaptureEvidence={jest.fn()}
+        onRegisterNonConformity={options.onRegister ?? jest.fn()}
+        onOpenEvidence={jest.fn()}
+      />
+    );
+  });
+  return renderer!;
+}
+
+function registerButtons(renderer: ReactTestRenderer) {
+  return renderer.root
+    .findAllByType(Button)
+    .filter((button) => String(button.props.label).includes('não conformidade'));
+}
+
+describe('suggesting a non-conformity', () => {
+  it('suggests the registration for a non-conforming answer, without forcing it', () => {
+    const onRegister = jest.fn();
+    const renderer = rowFor({ conformity: 'NON_CONFORMING', onRegister });
+
+    const [button] = registerButtons(renderer);
+    expect(button?.props.label).toBe('Registrar não conformidade');
+    act(() => button?.props.onPress());
+
+    expect(onRegister).toHaveBeenCalledWith(ITEMS[4]!.id);
+    expect(
+      renderer.root.findAllByType(Button).every((entry) => entry.props.disabled !== true)
+    ).toBe(true);
+  });
+
+  it('says how many were registered and offers another one', () => {
+    const renderer = rowFor({ conformity: 'NON_CONFORMING', nonConformityCount: 2 });
+
+    expect(registerButtons(renderer)[0]?.props.label).toBe('Registrar outra não conformidade');
+    expect(JSON.stringify(renderer.toJSON())).toContain('2 não conformidades registradas');
+  });
+
+  it('stays quiet for a conforming answer and for a locked inspection', () => {
+    expect(registerButtons(rowFor({ conformity: 'CONFORMING' }))).toHaveLength(0);
+    expect(registerButtons(rowFor({ conformity: 'NON_CONFORMING', editable: false }))).toHaveLength(
+      0
+    );
+  });
+});
+
 describe('ChecklistScreen', () => {
   it('builds the whole checklist from the snapshot, in order, behind a virtualized list', () => {
     mockState.current = ready();
@@ -130,8 +209,10 @@ describe('ChecklistScreen', () => {
           toCorrect={false}
           editable
           focused={false}
+          nonConformityCount={0}
           onSave={jest.fn()}
           onCaptureEvidence={jest.fn()}
+          onRegisterNonConformity={jest.fn()}
           onOpenEvidence={jest.fn()}
         />
       );

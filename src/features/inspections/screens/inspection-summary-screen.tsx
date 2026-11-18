@@ -5,6 +5,7 @@ import { View } from 'react-native';
 
 import { describeLocalFailure } from '@/application/inspections/describe-local-failure';
 import { useCompleteInspection } from '@/application/inspections/use-execution-actions';
+import { useNonConformities } from '@/application/non-conformities/use-non-conformities';
 import {
   useInspectionDetail,
   type InspectionWork,
@@ -21,6 +22,7 @@ import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
 import { countRequiredPending } from '@/domain/checklist-progress';
 import { canEditAnswers, isAwaitingSend } from '@/domain/inspection-actions';
+import { blockingCompletion } from '@/domain/non-conformity';
 import {
   PendingList,
   ProgressSummary,
@@ -77,12 +79,23 @@ function Summary({ work }: { work: InspectionWork }) {
   const returnToChecklist = useReturnToChecklist(detail.id);
   const openItem = useReturnToChecklistItem(detail.id);
   const complete = useCompleteInspection(detail.id);
+  const nonConformities = useNonConformities(detail.id);
   const [confirming, setConfirming] = useState(false);
 
   const editable = canEditAnswers(detail.status);
   const requiredPending = countRequiredPending(progress);
   const evidences = [...evidenceCounts.values()].reduce((total, count) => total + count, 0);
   const completedHere = isAwaitingSend(detail.status, detail.syncState);
+  const withoutEvidence = blockingCompletion(nonConformities.data ?? []);
+  const checkingNonConformities = nonConformities.isPending || nonConformities.isError;
+  const registered = nonConformities.data?.length ?? 0;
+
+  function openNonConformities() {
+    router.push({
+      pathname: '/inspections/[inspectionId]/non-conformities',
+      params: { inspectionId: detail.id },
+    });
+  }
 
   function askConfirmation() {
     complete.reset();
@@ -123,6 +136,13 @@ function Summary({ work }: { work: InspectionWork }) {
           tone={progress.nonConformities > 0 ? 'warning' : 'default'}
         />
         <Total icon="images-outline" label="Evidências" value={evidences} />
+        {progress.nonConformities > 0 || registered > 0 ? (
+          <Button
+            label={`Ver não conformidades registradas (${registered})`}
+            variant="secondary"
+            onPress={openNonConformities}
+          />
+        ) : null}
         {detail.startedAtDevice === null ? null : (
           <LocationLine text={describeRecordedLocation('start', detail.startLocation)} />
         )}
@@ -140,11 +160,40 @@ function Summary({ work }: { work: InspectionWork }) {
         <>
           <PendingList pending={progress.pending} onSelect={openItem} />
 
-          {progress.pending.length > 0 ? (
+          {withoutEvidence.length > 0 ? (
+            <Card title="Não conformidades sem evidência" className="border-2 border-danger">
+              <Text variant="body" tone="danger" accessibilityRole="alert">
+                {withoutEvidence.length === 1
+                  ? 'Uma não conformidade de criticidade crítica ainda não tem evidência.'
+                  : `${withoutEvidence.length} não conformidades de criticidade crítica ainda não têm evidência.`}
+              </Text>
+              {withoutEvidence.map((entry) => (
+                <Text key={entry.id} variant="body">
+                  {entry.title}
+                </Text>
+              ))}
+              <Button label="Fotografar as evidências" onPress={openNonConformities} />
+            </Card>
+          ) : null}
+
+          {progress.pending.length > 0 || withoutEvidence.length > 0 || checkingNonConformities ? (
             <Card title="Conclusão bloqueada">
               <Text variant="body">
-                Resolva as pendências acima para concluir. Toque em uma delas para ir ao item.
+                {progress.pending.length > 0
+                  ? 'Resolva as pendências acima para concluir. Toque em uma delas para ir ao item.'
+                  : withoutEvidence.length > 0
+                    ? 'Registre a evidência das não conformidades críticas para concluir.'
+                    : nonConformities.isError
+                      ? 'Não foi possível conferir as não conformidades. Tente de novo.'
+                      : 'Conferindo as não conformidades...'}
               </Text>
+              {nonConformities.isError ? (
+                <Button
+                  label="Tentar de novo"
+                  variant="secondary"
+                  onPress={() => void nonConformities.refetch()}
+                />
+              ) : null}
               <Button label="Voltar ao checklist" variant="secondary" onPress={returnToChecklist} />
             </Card>
           ) : confirming ? (

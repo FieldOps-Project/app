@@ -7,6 +7,10 @@ import type { InspectionDetail, InspectionStatus, InspectionSummary } from '@/do
 import { getDatabase } from '@/infrastructure/database/database';
 import { writeTransaction } from '@/infrastructure/database/write-transaction';
 import {
+  NonConformityEvidenceError,
+  NonConformityItemError,
+} from '@/infrastructure/repositories/non-conformity-errors';
+import {
   cancelPendingOperations,
   enqueueOperation,
   openOperationIds,
@@ -301,7 +305,7 @@ export class InspectionStateError extends Error {
   }
 }
 
-async function lockInspection(
+export async function lockInspection(
   transaction: SQLiteDatabase,
   ownerUserId: string,
   inspectionId: string,
@@ -318,7 +322,11 @@ async function lockInspection(
   return row;
 }
 
-async function markInspectionDirty(transaction: SQLiteDatabase, inspectionId: string, now: string) {
+export async function markInspectionDirty(
+  transaction: SQLiteDatabase,
+  inspectionId: string,
+  now: string
+) {
   await transaction.runAsync(
     `UPDATE inspections SET is_dirty = 1, local_sync_status = 'PENDING', local_updated_at = ?
       WHERE id = ?`,
@@ -530,6 +538,7 @@ export interface RegisterEvidenceCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;
   readonly inspectionItemId: string;
+  readonly nonConformityId?: string | null;
   readonly evidenceId: string;
   readonly createdAtDevice: string;
   readonly file: EvidenceFile;
@@ -551,18 +560,32 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
       command.inspectionId
     );
     const responseId = response?.id ?? null;
+    const nonConformityId = command.nonConformityId ?? null;
+    if (nonConformityId !== null) {
+      const owner = await transaction.getFirstAsync<{ id: string }>(
+        `SELECT id FROM non_conformities
+          WHERE id = ? AND inspection_id = ? AND inspection_item_id = ? AND deleted_locally = 0`,
+        nonConformityId,
+        command.inspectionId,
+        command.inspectionItemId
+      );
+      if (owner === null) {
+        throw new NonConformityItemError();
+      }
+    }
     const file = command.file;
 
     await transaction.runAsync(
       `INSERT INTO evidences (
-         id, inspection_id, inspection_item_id, response_id, local_uri, thumbnail_uri,
-         original_file_name, mime_type, size_bytes, description, created_at_device, base_version,
-         local_updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         id, inspection_id, inspection_item_id, response_id, non_conformity_id, local_uri,
+         thumbnail_uri, original_file_name, mime_type, size_bytes, description, created_at_device,
+         base_version, local_updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       command.evidenceId,
       command.inspectionId,
       command.inspectionItemId,
       responseId,
+      nonConformityId,
       file.photoPath,
       file.thumbnailPath,
       file.originalFileName ?? null,
@@ -574,8 +597,14 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
       now
     );
 
-    const dependencyIds =
-      responseId === null ? [] : await openOperationIdsFor(transaction, 'RESPONSE', responseId);
+    const dependencyIds = [
+      ...(responseId === null
+        ? []
+        : await openOperationIdsFor(transaction, 'RESPONSE', responseId)),
+      ...(nonConformityId === null
+        ? []
+        : await openOperationIdsFor(transaction, 'NON_CONFORMITY', nonConformityId)),
+    ];
     await markInspectionDirty(transaction, command.inspectionId, now);
     await enqueueOperation(
       transaction,
@@ -591,6 +620,7 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
           id: command.evidenceId,
           inspectionItemId: command.inspectionItemId,
           responseId,
+          nonConformityId,
           type: 'PHOTO',
           mimeType: file.mimeType,
           sizeBytes: file.sizeBytes,
@@ -707,6 +737,17 @@ export async function completeInspection(command: CompleteCommand): Promise<void
       command.inspectionId,
       ['IN_PROGRESS']
     );
+    const withoutEvidence = await transaction.getFirstAsync<{ total: number }>(
+      `SELECT COUNT(*) AS total FROM non_conformities nc
+        WHERE nc.inspection_id = ? AND nc.severity = 'CRITICAL' AND nc.deleted_locally = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM evidences ev
+             WHERE ev.non_conformity_id = nc.id AND ev.deleted_locally = 0)`,
+      command.inspectionId
+    );
+    if ((withoutEvidence?.total ?? 0) > 0) {
+      throw new NonConformityEvidenceError();
+    }
     const dependencyIds = await openOperationIds(transaction, command.inspectionId);
 
     await transaction.runAsync(

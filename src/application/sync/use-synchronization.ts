@@ -8,6 +8,7 @@ import { mobileInspectionsGateway, queryKeys, type ApiFailure } from '@/infrastr
 function invalidateLocalReads(queryClient: QueryClient, ownerUserId: string): Promise<void> {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.nonConformities.all() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.pending(ownerUserId) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.lastRun(ownerUserId) }),
   ]).then(() => undefined);

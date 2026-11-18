@@ -24,6 +24,9 @@ jest.mock('@/config/env', () => ({ env: { appEnv: 'production' }, isDevelopment:
 jest.mock('@/application/inspections/use-inspection-detail', () => ({
   useInspectionDetail: () => mockState.current,
 }));
+jest.mock('@/application/non-conformities/use-non-conformities', () => ({
+  useNonConformities: () => ({ data: [] }),
+}));
 jest.mock('@/application/inspections/use-checklist-actions', () => ({
   useSaveAnswer: () => ({ save: jest.fn(), error: null, reset: jest.fn() }),
 }));

@@ -7,16 +7,19 @@ import { Button } from '@/design-system/components/button';
 import { Loading } from '@/design-system/components/loading';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
-import { useReturnToChecklist } from '@/features/checklist/hooks/use-return-to-checklist';
+import { useReturnFromEvidence } from '@/features/evidence/hooks/use-return-from-evidence';
 import { CameraConsent } from '@/features/evidence/components/camera-consent';
 import { EvidenceItemLink } from '@/features/evidence/components/evidence-item-link';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
 export function EvidenceCaptureScreen() {
   const inspectionId = useInspectionId();
-  const { itemId = '' } = useLocalSearchParams<{ itemId?: string }>();
+  const { itemId = '', nonConformityId = '' } = useLocalSearchParams<{
+    itemId?: string;
+    nonConformityId?: string;
+  }>();
   const router = useRouter();
-  const returnToChecklist = useReturnToChecklist(inspectionId);
+  const returnFromEvidence = useReturnFromEvidence(inspectionId, nonConformityId);
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
@@ -35,7 +38,7 @@ export function EvidenceCaptureScreen() {
         <CameraConsent
           permission={permission}
           onRequest={() => void requestPermission()}
-          onBack={returnToChecklist}
+          onBack={returnFromEvidence}
         />
       </Screen>
     );
@@ -55,6 +58,7 @@ export function EvidenceCaptureScreen() {
         params: {
           inspectionId,
           itemId,
+          ...(nonConformityId === '' ? {} : { nonConformityId }),
           photoUri: picture.uri,
           width: String(picture.width),
           height: String(picture.height),
@@ -90,7 +94,7 @@ export function EvidenceCaptureScreen() {
         disabled={!ready}
         onPress={() => void capture()}
       />
-      <Button label="Cancelar" variant="secondary" onPress={returnToChecklist} />
+      <Button label="Cancelar" variant="secondary" onPress={returnFromEvidence} />
     </Screen>
   );
 }

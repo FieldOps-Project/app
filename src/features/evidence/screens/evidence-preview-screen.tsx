@@ -10,12 +10,13 @@ import { Input } from '@/design-system/components/input';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { EVIDENCE_DESCRIPTION_MAX } from '@/domain/evidence';
-import { useReturnToChecklist } from '@/features/checklist/hooks/use-return-to-checklist';
+import { useReturnFromEvidence } from '@/features/evidence/hooks/use-return-from-evidence';
 import { EvidenceItemLink } from '@/features/evidence/components/evidence-item-link';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
 type PreviewParams = {
   itemId?: string;
+  nonConformityId?: string;
   photoUri?: string;
   width?: string;
   height?: string;
@@ -28,10 +29,16 @@ function toSize(value: string | undefined): number {
 
 export function EvidencePreviewScreen() {
   const inspectionId = useInspectionId();
-  const { itemId = '', photoUri, width, height } = useLocalSearchParams<PreviewParams>();
+  const {
+    itemId = '',
+    nonConformityId = '',
+    photoUri,
+    width,
+    height,
+  } = useLocalSearchParams<PreviewParams>();
   const router = useRouter();
   const attach = useAttachPhoto(inspectionId);
-  const returnToChecklist = useReturnToChecklist(inspectionId);
+  const returnFromEvidence = useReturnFromEvidence(inspectionId, nonConformityId);
   const [description, setDescription] = useState('');
 
   if (photoUri === undefined || photoUri === '' || itemId === '') {
@@ -41,7 +48,7 @@ export function EvidencePreviewScreen() {
           title="Nenhuma foto para conferir"
           description="Volte ao checklist e fotografe a evidência do item."
           retryLabel="Voltar ao checklist"
-          onRetry={returnToChecklist}
+          onRetry={returnFromEvidence}
         />
       </Screen>
     );
@@ -58,10 +65,11 @@ export function EvidencePreviewScreen() {
     attach.mutate(
       {
         inspectionItemId: itemId,
+        nonConformityId: nonConformityId === '' ? undefined : nonConformityId,
         photo: { uri: photoUri, width: photoWidth, height: photoHeight },
         description,
       },
-      { onSuccess: returnToChecklist }
+      { onSuccess: returnFromEvidence }
     );
   }
 
@@ -69,14 +77,20 @@ export function EvidencePreviewScreen() {
     if (photoUri !== undefined) {
       discardCapturedPhoto(photoUri);
     }
-    router.replace({ pathname: '/evidence/capture', params: { inspectionId, itemId } });
+    router.replace({
+      pathname: '/evidence/capture',
+      params:
+        nonConformityId === ''
+          ? { inspectionId, itemId }
+          : { inspectionId, itemId, nonConformityId },
+    });
   }
 
   function discard() {
     if (photoUri !== undefined) {
       discardCapturedPhoto(photoUri);
     }
-    returnToChecklist();
+    returnFromEvidence();
   }
 
   return (
