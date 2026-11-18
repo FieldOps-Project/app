@@ -254,7 +254,43 @@ operacional.
 | `npm run format`       | Aplica o Prettier                                      |
 | `npm run format:check` | Verifica formatação sem alterar arquivos               |
 | `npm run types:api`    | Gera os tipos TypeScript a partir do OpenAPI da API    |
-| `npm run verify`       | Tipos + lint + formatação. Rode antes de abrir um PR   |
+| `npm test`             | Jest com `jest-expo`, sem aparelho nem rede            |
+| `npm run verify`       | Tipos + lint + formatação + testes. Rode antes do PR   |
+
+## Testes
+
+A suíte roda com `npm test`, sem aparelho e sem rede, e reprova o CI quando falha. Cada teste
+parte de um banco limpo e não depende da ordem de execução.
+
+- **Banco e outbox contra SQLite real.** Os testes abrem um banco em memória com as migrações
+  de verdade ([`openTestDatabase`](src/infrastructure/database/testing/node-sqlite.ts)). Restrição
+  de unicidade, transação e migração só aparecem com o banco real, por isso não há duplo do
+  repositório nesses testes.
+- **Rede simulada.** [`fakeAdapter`](src/infrastructure/api/testing/fake-api.ts) responde no
+  lugar do servidor, com o cliente HTTP e o gateway reais: sem conexão, tempo limite, 401, 409
+  e erro 5xx.
+- **Fixtures compartilhadas** da inspeção baixada e da resposta ficam em
+  [`inspection-fixtures.ts`](src/infrastructure/repositories/testing/inspection-fixtures.ts), e o
+  helper de renderização dos testes de tela em [`src/testing/render.ts`](src/testing/render.ts).
+
+Cobertura dos doze testes prioritários do documento
+[13 - Aplicativo Mobile](https://github.com/FieldOps-Project/docs/blob/main/notion/13-aplicativo-mobile.md)
+(13.11):
+
+| #   | Fluxo                                 | Onde está                                                                                                       |
+| --- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 1   | Proteção de rota                      | `features/auth/route-protection.test.tsx`                                                                       |
+| 2   | Validação de login                    | `features/auth/screens/login-screen.test.tsx`                                                                   |
+| 3   | Renderização de cada tipo de item     | `response-fields.test.tsx`, `checklist-screen.test.tsx`                                                         |
+| 4   | Validação de obrigatoriedade          | `domain/checklist-progress.test.ts`, `schemas/checklist-response.test.ts`                                       |
+| 5   | Cálculo de progresso                  | `domain/checklist-progress.test.ts`                                                                             |
+| 6   | Persistência local de resposta        | `inspection-repository.test.ts` (fechar e reabrir o aplicativo)                                                 |
+| 7   | Criação de operação na outbox         | `inspection-repository.test.ts`                                                                                 |
+| 8   | Comportamento offline                 | `application/sync/synchronize-offline.test.ts`                                                                  |
+| 9   | Redução de operações duplicadas       | `application/sync/synchronize-offline.test.ts` (conta os registros após repetir a mesma operação)               |
+| 10  | Permissão negada                      | `evidence-screens.test.tsx`, `scanner-screen.test.tsx`, `location-consent.test.tsx`, `capture-location.test.ts` |
+| 11  | Conclusão bloqueada por pendências    | `execution-screens.test.tsx`, `domain/checklist-progress.test.ts`                                               |
+| 12  | Apresentação de erro de sincronização | `sync-now-button.test.tsx`, `download-status.test.tsx`, `application/sync/synchronize.test.ts`                  |
 
 ## Estrutura
 

@@ -130,6 +130,18 @@ describe('capture', () => {
     expect(mockReturn).toHaveBeenCalled();
   });
 
+  it('lets the technician ask again while the system still allows it', () => {
+    mockPermission.current = { granted: false, status: 'denied', canAskAgain: true };
+
+    const screen = render(<EvidenceCaptureScreen />);
+    press(screen, 'Pedir permissão de novo');
+    press(screen, 'Voltar ao checklist');
+
+    expect(texts(screen)).toContain('A inspeção continua');
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+    expect(mockReturn).toHaveBeenCalled();
+  });
+
   it('shows the camera once allowed', () => {
     mockPermission.current = { granted: true, status: 'granted', canAskAgain: true };
 
