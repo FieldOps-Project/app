@@ -5,7 +5,6 @@ export * from './chip';
 export * from './empty-state';
 export * from './error-state';
 export * from './input';
-export * from './list';
 export * from './loading';
 export * from './offline-notice';
 export * from './option-button';
