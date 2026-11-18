@@ -6,7 +6,6 @@ import { join } from 'node:path';
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { ChecklistResponse } from '@/domain/checklist';
 import type { LocationCapture } from '@/domain/field-location';
 import { getDatabase, migrate, readSchemaVersion } from '@/infrastructure/database/database';
 import { MIGRATIONS } from '@/infrastructure/database/migrations';
@@ -33,7 +32,11 @@ import {
   reopenAfterRefusedSubmit,
   sanitizeSyncError,
 } from '@/infrastructure/repositories/outbox-repository';
-import type { MobileInspection } from '@/schemas/mobile-inspection';
+import {
+  checklistAnswer,
+  FIXTURE_TIME,
+  remoteInspection,
+} from '@/infrastructure/repositories/testing/inspection-fixtures';
 
 jest.mock('@/infrastructure/database/database', () => ({
   ...jest.requireActual('@/infrastructure/database/database'),
@@ -41,71 +44,12 @@ jest.mock('@/infrastructure/database/database', () => ({
 }));
 
 const OWNER = 'tech-1';
-const NOW = '2026-08-12T13:00:00.000Z';
+const NOW = FIXTURE_TIME;
 const DENIED: LocationCapture = { status: 'missing', reason: 'PERMISSION_DENIED' };
 const AT_GATE: LocationCapture = {
   status: 'captured',
   position: { latitude: -23.5012, longitude: -47.4531, accuracy: 18, capturedAt: NOW },
 };
-
-function remote(overrides: Partial<MobileInspection> = {}): MobileInspection {
-  return {
-    id: 'insp-1',
-    title: 'Inspeção do gerador',
-    status: 'ASSIGNED',
-    priority: 'HIGH',
-    scheduledFor: '2026-08-12T13:00:00Z',
-    instructions: 'Desligar antes.',
-    version: 3,
-    updatedAt: 'v3',
-    startedAtDevice: null,
-    completedAtDevice: null,
-    startLocation: null,
-    completionLocation: null,
-    client: { id: 'c-1', name: 'Indústria ABC' },
-    site: { id: 's-1', name: 'Fábrica', addressLine: null, latitude: -23.5, longitude: -47.4 },
-    equipment: null,
-    items: [
-      {
-        id: 'item-1',
-        sectionTitle: 'Geral',
-        sectionDescription: null,
-        sectionOrder: 1,
-        itemCode: null,
-        itemTitle: 'Proteção lateral',
-        itemDescription: null,
-        responseType: 'CONFORMITY',
-        required: true,
-        rules: {
-          observationRequiredOnFailure: true,
-          evidenceRequiredOnFailure: false,
-          min: null,
-          max: null,
-        },
-        options: [],
-        itemOrder: 1,
-      },
-    ],
-    responses: [],
-    review: null,
-    ...overrides,
-  };
-}
-
-function answer(overrides: Partial<ChecklistResponse> = {}): ChecklistResponse {
-  return {
-    id: 'resp-1',
-    inspectionItemId: 'item-1',
-    valueText: null,
-    valueNumber: null,
-    valueBoolean: null,
-    valueDate: null,
-    conformity: 'CONFORMING',
-    observation: null,
-    answeredAtDevice: NOW,
-    ...overrides,
-  };
-}
 
 let database: SQLiteDatabase;
 
@@ -115,7 +59,7 @@ beforeEach(async () => {
 });
 
 async function started(location: LocationCapture = DENIED) {
-  await saveDownloadedInspection(OWNER, remote(), NOW);
+  await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
   await startInspection({
     ownerUserId: OWNER,
     inspectionId: 'insp-1',
@@ -127,7 +71,7 @@ async function started(location: LocationCapture = DENIED) {
 
 describe('download', () => {
   it('stores the inspection, its snapshot and its answers for the technician only', async () => {
-    await saveDownloadedInspection(OWNER, remote(), NOW);
+    await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
 
     const stored = await findInspection(OWNER, 'insp-1');
     expect(stored?.detail.version).toBe(3);
@@ -140,7 +84,11 @@ describe('download', () => {
   it('never overwrites local work not yet sent', async () => {
     await started();
 
-    await saveDownloadedInspection(OWNER, remote({ status: 'ASSIGNED', title: 'Outro' }), NOW);
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({ status: 'ASSIGNED', title: 'Outro' }),
+      NOW
+    );
 
     const stored = await findInspection(OWNER, 'insp-1');
     expect(stored?.detail.status).toBe('IN_PROGRESS');
@@ -153,10 +101,10 @@ describe('download', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer(),
+      response: checklistAnswer(),
     });
 
-    await saveDownloadedInspection(OWNER, remote({ status: 'CANCELED' }), NOW);
+    await saveDownloadedInspection(OWNER, remoteInspection({ status: 'CANCELED' }), NOW);
 
     const stored = await findInspection(OWNER, 'insp-1');
     expect(stored?.detail.status).toBe('CANCELED');
@@ -171,13 +119,16 @@ describe('download', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer({ conformity: 'NON_CONFORMING', observation: 'Trinca.' }),
+      response: checklistAnswer({ conformity: 'NON_CONFORMING', observation: 'Trinca.' }),
     });
     await database.runAsync('UPDATE inspections SET is_dirty = 0 WHERE id = ?', 'insp-1');
 
     await saveDownloadedInspection(
       OWNER,
-      remote({ status: 'IN_PROGRESS', responses: [{ ...answer(), id: 'server-resp' }] }),
+      remoteInspection({
+        status: 'IN_PROGRESS',
+        responses: [{ ...checklistAnswer(), id: 'server-resp' }],
+      }),
       NOW
     );
 
@@ -204,7 +155,7 @@ describe('start', () => {
   });
 
   it('refuses a canceled inspection and leaves nothing behind', async () => {
-    await saveDownloadedInspection(OWNER, remote({ status: 'CANCELED' }), NOW);
+    await saveDownloadedInspection(OWNER, remoteInspection({ status: 'CANCELED' }), NOW);
 
     await expect(
       startInspection({
@@ -228,7 +179,7 @@ describe('answers', () => {
         ownerUserId: OWNER,
         inspectionId: 'insp-1',
         operationId: `op-${conformity}`,
-        response: answer({ conformity }),
+        response: checklistAnswer({ conformity }),
       });
     }
 
@@ -245,7 +196,7 @@ describe('answers', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-1',
-      response: answer(),
+      response: checklistAnswer(),
     });
     await database.runAsync(
       "UPDATE sync_operations SET status = 'PROCESSING' WHERE operation_id = 'op-1'"
@@ -255,7 +206,7 @@ describe('answers', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-2',
-      response: answer({ conformity: 'NON_CONFORMING' }),
+      response: checklistAnswer({ conformity: 'NON_CONFORMING' }),
     });
 
     const ids = (await listOpenOperations(OWNER)).map((operation) => operation.operationId);
@@ -263,14 +214,14 @@ describe('answers', () => {
   });
 
   it('refuses an answer before the start', async () => {
-    await saveDownloadedInspection(OWNER, remote(), NOW);
+    await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
 
     await expect(
       saveResponse({
         ownerUserId: OWNER,
         inspectionId: 'insp-1',
         operationId: 'op',
-        response: answer(),
+        response: checklistAnswer(),
       })
     ).rejects.toBeInstanceOf(InspectionStateError);
   });
@@ -319,7 +270,7 @@ describe('completion', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer(),
+      response: checklistAnswer(),
     });
 
     await completeInspection({
@@ -340,7 +291,7 @@ describe('completion', () => {
         ownerUserId: OWNER,
         inspectionId: 'insp-1',
         operationId: 'x',
-        response: answer(),
+        response: checklistAnswer(),
       })
     ).rejects.toBeInstanceOf(InspectionStateError);
   });
@@ -377,14 +328,14 @@ describe('claiming', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer({ conformity: 'CONFORMING' }),
+      response: checklistAnswer({ conformity: 'CONFORMING' }),
     });
     await listOpenOperations(OWNER);
     await saveResponse({
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-ignored',
-      response: answer({ conformity: 'NON_CONFORMING', observation: 'Trinca.' }),
+      response: checklistAnswer({ conformity: 'NON_CONFORMING', observation: 'Trinca.' }),
     });
 
     const claimed = await claimOperation('op-r', NOW);
@@ -399,14 +350,14 @@ describe('claiming', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer(),
+      response: checklistAnswer(),
     });
     const claimed = await claimOperation('op-r', NOW);
     await saveResponse({
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r2',
-      response: answer({ conformity: 'NOT_APPLICABLE' }),
+      response: checklistAnswer({ conformity: 'NOT_APPLICABLE' }),
     });
 
     await markCompleted(claimed!, NOW);
@@ -470,7 +421,7 @@ describe('location (card #19)', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer(),
+      response: checklistAnswer(),
     });
     await completeInspection({
       ownerUserId: OWNER,
@@ -492,7 +443,7 @@ describe('location (card #19)', () => {
 
     await saveDownloadedInspection(
       OWNER,
-      remote({ status: 'IN_PROGRESS', startedAtDevice: NOW, startLocation: null }),
+      remoteInspection({ status: 'IN_PROGRESS', startedAtDevice: NOW, startLocation: null }),
       NOW
     );
 
@@ -502,7 +453,7 @@ describe('location (card #19)', () => {
   it('takes the position the server reports as a whole', async () => {
     await saveDownloadedInspection(
       OWNER,
-      remote({
+      remoteInspection({
         status: 'IN_PROGRESS',
         startedAtDevice: NOW,
         startLocation: { latitude: -23.4, longitude: -47.3, accuracy: null, capturedAt: NOW },
@@ -517,7 +468,7 @@ describe('location (card #19)', () => {
   });
 
   it('reads an inspection never started as having no position yet', async () => {
-    await saveDownloadedInspection(OWNER, remote(), NOW);
+    await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
 
     const stored = await findInspection(OWNER, 'insp-1');
     expect(stored?.detail.startLocation).toEqual({ status: 'not-recorded' });
@@ -645,10 +596,10 @@ describe('local queries (card #21)', () => {
       const day = String((index % 28) + 1).padStart(2, '0');
       await saveDownloadedInspection(
         OWNER,
-        remote({
+        remoteInspection({
           id: `insp-${index}`,
           scheduledFor: `2026-08-${day}T13:00:00Z`,
-          items: [{ ...remote().items[0]!, id: `item-${index}` }],
+          items: [{ ...remoteInspection().items[0]!, id: `item-${index}` }],
         }),
         NOW
       );
@@ -708,7 +659,7 @@ describe('outbox (card #23)', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer(),
+      response: checklistAnswer(),
     });
     const before = (await listOpenOperations(OWNER)).find((op) => op.operationId === 'op-r');
     const start = await claimOperation('op-start', NOW);
@@ -766,7 +717,7 @@ describe('outbox (card #23)', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer(),
+      response: checklistAnswer(),
     });
     const start = await claimOperation('op-start', NOW);
     const response = await claimOperation('op-r', NOW);
@@ -807,7 +758,7 @@ describe('evidence operations (card #23)', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer({ conformity: 'NON_CONFORMING' }),
+      response: checklistAnswer({ conformity: 'NON_CONFORMING' }),
     });
 
     await withPhoto();
@@ -831,7 +782,7 @@ describe('evidence operations (card #23)', () => {
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
       operationId: 'op-r',
-      response: answer({ conformity: 'NON_CONFORMING' }),
+      response: checklistAnswer({ conformity: 'NON_CONFORMING' }),
     });
 
     expect(await upload()).toMatchObject({
