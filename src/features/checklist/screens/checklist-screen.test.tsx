@@ -71,6 +71,7 @@ const ITEMS: ChecklistItem[] = TYPES.map((responseType, index) => ({
 const DETAIL = {
   id: 'insp-1',
   status: 'IN_PROGRESS',
+  syncState: 'salvo-no-dispositivo',
   review: null,
 } as unknown as InspectionDetail;
 

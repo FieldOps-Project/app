@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
+import { useScreenBanner } from '@/design-system/components/screen-banner';
+
 export const BELOW_HEADER_EDGES = ['bottom', 'left', 'right'] as const;
 
 export interface ScreenProps {
@@ -19,6 +21,8 @@ export function Screen({
   padded = true,
   className,
 }: ScreenProps) {
+  const banner = useScreenBanner();
+
   const content = (
     <View className={`flex-1 gap-4 ${padded ? 'px-screen py-4' : ''} ${className ?? ''}`}>
       {children}
@@ -27,6 +31,7 @@ export function Screen({
 
   return (
     <SafeAreaView edges={edges} className="flex-1 bg-neutral-50 dark:bg-neutral-950">
+      {banner}
       {scrollable ? (
         <ScrollView
           contentContainerClassName="grow"

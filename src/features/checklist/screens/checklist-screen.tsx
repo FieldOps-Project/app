@@ -12,6 +12,7 @@ import {
   type InspectionWork,
 } from '@/application/inspections/use-inspection-detail';
 import { NavigationDepthBadge } from '@/components/navigation-depth-badge';
+import { SyncStateBadge } from '@/components/sync-state-badge';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
 import { EmptyState } from '@/design-system/components/empty-state';
@@ -209,6 +210,12 @@ function Checklist({ work }: { work: InspectionWork }) {
       >
         <View className="gap-3 border-b border-neutral-200 bg-neutral-50 px-screen py-3 dark:border-neutral-800 dark:bg-neutral-950">
           <ProgressSummary progress={progress} />
+          <View className="flex-row flex-wrap items-center gap-2">
+            <SyncStateBadge state={detail.syncState} />
+            <Text variant="caption" tone="muted" accessibilityLiveRegion="polite">
+              Cada resposta é salva neste aparelho na hora.
+            </Text>
+          </View>
           {editable ? (
             <View className="flex-row gap-2">
               <Button
