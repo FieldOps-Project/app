@@ -33,6 +33,10 @@ import {
   sanitizeSyncError,
 } from '@/infrastructure/repositories/outbox-repository';
 import {
+  InspectionIncompleteError,
+  InvalidResponseError,
+} from '@/infrastructure/repositories/inspection-errors';
+import {
   checklistAnswer,
   FIXTURE_TIME,
   remoteInspection,
@@ -368,9 +372,174 @@ describe('claiming', () => {
   });
 });
 
+describe('completion guards (RN-037, RN-038, RN-039)', () => {
+  const complete = () =>
+    completeInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-submit',
+      completedAtDevice: NOW,
+      location: DENIED,
+    });
+
+  async function expectRefusedAndUntouched() {
+    await expect(complete()).rejects.toBeInstanceOf(InspectionIncompleteError);
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.status).toBe('IN_PROGRESS');
+    expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).not.toContain(
+      'op-submit'
+    );
+  }
+
+  it('refuses while a required item has no answer, whoever calls it', async () => {
+    await started();
+
+    await expectRefusedAndUntouched();
+  });
+
+  it('refuses a non-conforming answer that lacks the observation the item asks for', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer({ conformity: 'NON_CONFORMING', observation: null }),
+    });
+
+    await expectRefusedAndUntouched();
+  });
+
+  it('refuses a non-conforming answer that lacks the evidence the item asks for', async () => {
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({
+        items: [
+          {
+            ...remoteInspection().items[0]!,
+            rules: {
+              observationRequiredOnFailure: false,
+              evidenceRequiredOnFailure: true,
+              min: null,
+              max: null,
+            },
+          },
+        ],
+      }),
+      NOW
+    );
+    await startInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-start',
+      startedAtDevice: NOW,
+      location: DENIED,
+    });
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer({ conformity: 'NON_CONFORMING' }),
+    });
+
+    await expectRefusedAndUntouched();
+  });
+
+  it('completes once everything required is answered', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer(),
+    });
+
+    await complete();
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.status).toBe('SUBMITTED');
+  });
+});
+
+describe('answer integrity (RN-035, RN-036)', () => {
+  it('refuses a value that does not fit the type of the item, and stores nothing', async () => {
+    await started();
+
+    await expect(
+      saveResponse({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        operationId: 'op-r',
+        response: checklistAnswer({ conformity: null, valueText: 'qualquer coisa' }),
+      })
+    ).rejects.toBeInstanceOf(InvalidResponseError);
+
+    expect((await findInspection(OWNER, 'insp-1'))?.responses).toEqual([]);
+    expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toEqual(['op-start']);
+  });
+
+  it('refuses an answer to an item that is not in this inspection', async () => {
+    await started();
+
+    await expect(
+      saveResponse({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        operationId: 'op-r',
+        response: checklistAnswer({ inspectionItemId: 'item-of-another-inspection' }),
+      })
+    ).rejects.toThrow('Este item não pertence a esta inspeção.');
+  });
+});
+
+describe('a server that already approved the inspection (RN-076)', () => {
+  it('keeps the unsent work, locks the inspection and says why', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer(),
+    });
+
+    await saveDownloadedInspection(OWNER, remoteInspection({ status: 'APPROVED' }), NOW);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.status).toBe('APPROVED');
+    expect(stored?.detail.syncState).toBe('conflito');
+    expect(stored?.detail.syncError).toContain('já foi aprovada no servidor');
+    expect(stored?.responses).toHaveLength(1);
+    expect(await countOpenOperations(OWNER)).toBe(2);
+  });
+});
+
+describe('a device shared by two technicians (RN-004)', () => {
+  it('never overwrites the unsent work of the technician who started the inspection', async () => {
+    await started();
+
+    await saveDownloadedInspection('tech-2', remoteInspection({ title: 'Reatribuída' }), NOW);
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.status).toBe('IN_PROGRESS');
+    expect(await findInspection('tech-2', 'insp-1')).toBeNull();
+  });
+
+  it('hands a clean inspection over to the technician it was reassigned to', async () => {
+    await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
+
+    await saveDownloadedInspection('tech-2', remoteInspection({ title: 'Reatribuída' }), NOW);
+
+    expect((await findInspection('tech-2', 'insp-1'))?.detail.title).toBe('Reatribuída');
+    expect(await findInspection(OWNER, 'insp-1')).toBeNull();
+  });
+});
+
 describe('refused completion', () => {
   it('reopens the inspection for correction and drops the refused submit', async () => {
     await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer(),
+    });
     await completeInspection({
       ownerUserId: OWNER,
       inspectionId: 'insp-1',
@@ -387,7 +556,10 @@ describe('refused completion', () => {
     expect(stored?.detail.completedAtDevice).toBeNull();
     expect(stored?.detail.completionLocation).toEqual({ status: 'not-recorded' });
     expect(stored?.detail.syncState).toBe('falha');
-    expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toEqual(['op-start']);
+    expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toEqual([
+      'op-start',
+      'op-r',
+    ]);
   });
 });
 
