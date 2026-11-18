@@ -108,6 +108,10 @@ function toApiFailure(cause: unknown): ApiFailure {
       return { kind: 'forbidden' };
     case 404:
       return { kind: 'notFound' };
+    case 413:
+      return { kind: 'business', code: 'EVIDENCE_TOO_LARGE', message: '' };
+    case 415:
+      return { kind: 'business', code: 'EVIDENCE_UNSUPPORTED_TYPE', message: '' };
     case 409: {
       const body = parseApiErrorBody(data);
       return { kind: 'conflict', code: body?.code ?? 'CONFLICT' };

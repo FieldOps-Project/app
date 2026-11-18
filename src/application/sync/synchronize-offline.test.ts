@@ -6,8 +6,12 @@ import { httpMobileInspectionsGateway } from '@/infrastructure/api/mobile-inspec
 import { fakeAdapter, type Reply } from '@/infrastructure/api/testing/fake-api';
 import { getDatabase } from '@/infrastructure/database/database';
 import { openTestDatabase } from '@/infrastructure/database/testing/node-sqlite';
+import { discardEvidence } from '@/infrastructure/repositories/inspection-repository';
+import { createNonConformity } from '@/infrastructure/repositories/non-conformity-repository';
 import {
+  completeInspection,
   findInspection,
+  registerEvidence,
   readLastSync,
   saveDownloadedInspection,
   saveResponse,
@@ -24,6 +28,10 @@ import {
 } from '@/infrastructure/repositories/testing/inspection-fixtures';
 
 jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
+jest.mock('@/infrastructure/evidence/photo-storage', () => ({
+  evidenceUploadUri: jest.fn((path: string) => `file:///documents/evidences/${path}`),
+  deleteFile: jest.fn(),
+}));
 jest.mock('@/infrastructure/storage/token-storage', () => ({
   readTokens: jest.fn(async () => null),
 }));
@@ -40,6 +48,23 @@ const LISTING = { status: 200, data: { content: [], last: true } } as const;
 interface Call {
   readonly method: string | undefined;
   readonly url: string | undefined;
+}
+
+function recordFormData() {
+  const parts: [string, unknown][] = [];
+  const original = globalThis.FormData;
+  class FormData {
+    append(name: string, value: unknown) {
+      parts.push([name, value]);
+    }
+  }
+  globalThis.FormData = FormData as unknown as typeof globalThis.FormData;
+  return {
+    parts,
+    restore: () => {
+      globalThis.FormData = original;
+    },
+  };
 }
 
 let database: SQLiteDatabase;
@@ -255,5 +280,199 @@ describe('repeated operations (RN-068)', () => {
     );
     expect(answers).toHaveLength(1);
     expect(answers[0]?.operationId).toBe('op-answer');
+  });
+});
+
+describe('an inspection with a photo and a non-conformity', () => {
+  async function readyToSend() {
+    await queueStartAndAnswer();
+    await createNonConformity({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      inspectionItemId: 'item-1',
+      nonConformityId: 'nc-1',
+      operationId: 'op-nc',
+      createdAtDevice: FIXTURE_TIME,
+      title: 'Vazamento hidráulico',
+      description: 'Óleo escorrendo pela base.',
+      severity: 'CRITICAL',
+    });
+    await registerEvidence({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      inspectionItemId: 'item-1',
+      nonConformityId: 'nc-1',
+      evidenceId: 'ev-1',
+      createdAtDevice: FIXTURE_TIME,
+      file: {
+        operationId: 'op-ev',
+        photoPath: 'ev-1.jpg',
+        thumbnailPath: 'ev-1-t.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1000,
+      },
+    });
+    await completeInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-submit',
+      completedAtDevice: FIXTURE_TIME,
+      location: { status: 'missing', reason: 'PERMISSION_DENIED' },
+    });
+  }
+
+  function order(): string[] {
+    return calls
+      .filter((call) => call.method !== 'get')
+      .map((call) => `${call.method} ${call.url}`);
+  }
+
+  it('sends everything in dependency order, and the completion comes last', async () => {
+    await readyToSend();
+
+    const result = await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    expect(order()).toEqual([
+      `post ${START_URL}`,
+      `put ${ANSWER_URL}`,
+      'post /api/v1/inspections/insp-1/non-conformities',
+      'post /api/v1/inspections/insp-1/evidence',
+      'post /api/v1/inspections/insp-1/submit',
+    ]);
+    expect(result.ok && result.value.sent).toBe(5);
+    expect(await countOpenOperations(OWNER)).toBe(0);
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.syncState).toBe('enviado');
+  });
+
+  it('sends nothing twice when the queue runs again', async () => {
+    await readyToSend();
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    expect(order()).toHaveLength(5);
+  });
+
+  it('holds the completion while the photo is refused, and sends the rest', async () => {
+    await readyToSend();
+    reply = (call) =>
+      call.url?.endsWith('/evidence') === true
+        ? { status: 415, data: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'x' } }
+        : serverAnswers(call);
+
+    const result = await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    expect(order().some((entry) => entry.endsWith('/submit'))).toBe(false);
+    expect(order()).toContain('post /api/v1/inspections/insp-1/non-conformities');
+    expect(result.ok && result.value.refused).toBe(1);
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.syncState).toBe('falha');
+    expect(stored?.detail.syncError).toBe('O servidor não aceita este formato de imagem.');
+  });
+
+  it('keeps the photo and its place in the queue when the connection drops during the upload', async () => {
+    await readyToSend();
+    reply = (call) => (call.url?.endsWith('/evidence') === true ? 'timeout' : serverAnswers(call));
+
+    const result = await synchronize(OWNER, httpMobileInspectionsGateway);
+    reply = serverAnswers;
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    expect(result).toEqual({ ok: false, error: { kind: 'network' } });
+    expect(await countOpenOperations(OWNER)).toBe(0);
+    expect(order().filter((entry) => entry.endsWith('/evidence'))).toHaveLength(2);
+    expect(order().filter((entry) => entry.endsWith('/non-conformities'))).toHaveLength(1);
+  });
+
+  it('puts the photo and its metadata in the multipart body the way React Native sends them', async () => {
+    await readyToSend();
+    const sent = recordFormData();
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    sent.restore();
+    const appended = new Map(sent.parts as [string, Record<string, unknown>][]);
+    expect(appended.get('file')).toEqual({
+      uri: 'file:///documents/evidences/ev-1.jpg',
+      name: 'ev-1.jpg',
+      type: 'image/jpeg',
+    });
+    expect(appended.get('metadata')).toMatchObject({ type: 'application/json' });
+    expect(JSON.parse(String(appended.get('metadata')?.string))).toMatchObject({
+      id: 'ev-1',
+      nonConformityId: 'nc-1',
+      type: 'PHOTO',
+    });
+  });
+
+  it('can discard a photo the server refused, once the completion was reopened', async () => {
+    await readyToSend();
+    reply = (call) =>
+      call.url?.endsWith('/evidence') === true
+        ? { status: 413, data: { code: 'PAYLOAD_TOO_LARGE', message: 'x' } }
+        : serverAnswers(call);
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    const reopened = await findInspection(OWNER, 'insp-1');
+    expect(reopened?.detail.status).toBe('IN_PROGRESS');
+    expect(reopened?.detail.syncError).toBe(
+      'A foto é maior do que o servidor aceita. Fotografe de novo.'
+    );
+    const removed = await discardEvidence({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      evidenceId: 'ev-1',
+      operationId: 'op-discard',
+      discardedAtDevice: FIXTURE_TIME,
+    });
+    expect(removed.outcome).toBe('removed');
+    expect((await listOpenOperations(OWNER)).map((op) => op.entityType)).not.toContain('EVIDENCE');
+  });
+});
+
+describe('a photo taken before its item was answered', () => {
+  it('is sent after the answer instead of blocking the inspection', async () => {
+    await saveDownloadedInspection(OWNER, remoteInspection(), FIXTURE_TIME);
+    await startInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-start',
+      startedAtDevice: FIXTURE_TIME,
+      location: { status: 'missing', reason: 'PERMISSION_DENIED' },
+    });
+    await registerEvidence({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      inspectionItemId: 'item-1',
+      evidenceId: 'ev-early',
+      createdAtDevice: FIXTURE_TIME,
+      file: {
+        operationId: 'op-early',
+        photoPath: 'ev-early.jpg',
+        thumbnailPath: 'ev-early-t.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1000,
+      },
+    });
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-answer',
+      response: checklistAnswer(),
+    });
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    const sentInOrder = calls
+      .filter((call) => call.method !== 'get')
+      .map((call) => `${call.method} ${call.url}`);
+    expect(sentInOrder).toEqual([
+      `post ${START_URL}`,
+      `put ${ANSWER_URL}`,
+      'post /api/v1/inspections/insp-1/evidence',
+    ]);
+    expect(await countOpenOperations(OWNER)).toBe(0);
   });
 });

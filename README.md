@@ -148,8 +148,22 @@ API --(download)--> SQLite <--(leitura)-- telas
   fila depois dele e o arquivo fica no aparelho.
 - Uma falha marca só a própria operação. O `last_error` passa por `sanitizeSyncError`, que
   remove tokens e senhas e limita o tamanho.
-- Uploads e remoções de evidência ficam na fila até existir o envio de arquivos (card #25,
-  backend#27). As respostas da inspeção continuam sendo enviadas; só a conclusão espera.
+- **O que o motor envia.** Início, respostas, não conformidades, fotos, remoção de foto e
+  conclusão, nessa ordem de dependência, e a conclusão sempre por último. A foto vai como
+  `multipart/form-data` (`file` como `{ uri, name, type }` e `metadata` como `{ string, type:
+'application/json' }`, que é como o React Native serializa as partes, com o id gerado no
+  aparelho para o reenvio ser seguro) para `POST /inspections/{id}/evidence`; a não conformidade vai para
+  `POST /inspections/{id}/non-conformities`; a remoção, para `DELETE /evidence/{id}`. Esses
+  caminhos seguem o que as issues backend#22 e #23 descrevem, que ainda não existem no servidor,
+  e o formato exato do multipart é uma suposição a confirmar com o backend.
+- O motor processa em passadas: uma operação que espera outra (por exemplo, a foto tirada antes
+  de o item ser respondido) fica para a passada seguinte em vez de travar a inspeção.
+- Uma foto que o servidor recusa de forma definitiva (413, 415 ou arquivo ausente do aparelho)
+  falha só a própria operação, não trava as outras inspeções e **reabre a inspeção concluída**
+  para correção, com o motivo na tela, para o técnico poder descartar a foto e concluir de novo.
+  A remoção de uma foto que o servidor já não conhece (404) conta como feita. Os arquivos de uma foto só são
+  apagados do aparelho depois que o servidor confirma a remoção. Fotos têm 60 s de tempo limite
+  em vez de 15 s, e 413 e 415 viram mensagens próprias.
 
 ### Regras aplicadas no repositório, não só na tela
 
@@ -229,9 +243,8 @@ false` e vale como offline. Quando o NetInfo diz que há rede mas uma sincroniza
   remove as fotos do aparelho. Depois do envio não há exclusão (RN-056); a tela avisa.
 - Limites de texto (título 120, descrição 2000 caracteres) são do app; reconciliar com o contrato
   do backend#23 quando ele sair.
-- **Envio ainda não existe.** Como as operações de upload, a de não conformidade é ignorada pelo
-  motor de sincronização até o backend#23 e o #24 do app; enquanto houver uma pendente, o envio
-  da conclusão da inspeção espera por ela.
+- O envio segue a ordem do "Outbox": a não conformidade vai depois da resposta, a foto depois
+  dela, e a conclusão só depois de tudo.
 
 ### Leitura de QR Code
 

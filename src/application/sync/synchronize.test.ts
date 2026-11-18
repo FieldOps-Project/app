@@ -1,7 +1,9 @@
 import { synchronize } from '@/application/sync/synchronize';
 import { fail, ok } from '@/domain/result';
 import type { MobileInspectionsGateway } from '@/infrastructure/api';
+import { deleteFile, evidenceUploadUri } from '@/infrastructure/evidence/photo-storage';
 import {
+  findEvidenceFile,
   findServerUpdates,
   recordSyncRun,
   saveDownloadedInspection,
@@ -19,6 +21,7 @@ import {
 jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 jest.mock('@/infrastructure/repositories/inspection-repository');
 jest.mock('@/infrastructure/repositories/outbox-repository');
+jest.mock('@/infrastructure/evidence/photo-storage');
 
 const now = () => '2026-08-12T13:00:00.000Z';
 
@@ -46,12 +49,15 @@ function gateway(overrides: Partial<MobileInspectionsGateway> = {}): MobileInspe
     start: jest.fn(async () => ok(undefined)),
     submit: jest.fn(async () => ok(undefined)),
     putResponse: jest.fn(async () => ok(undefined)),
+    createNonConformity: jest.fn(async () => ok(undefined)),
+    uploadEvidence: jest.fn(async () => ok(undefined)),
+    deleteEvidence: jest.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  jest.resetAllMocks();
   jest.mocked(findServerUpdates).mockResolvedValue(new Map());
   jest.mocked(claimOperation).mockImplementation(async (operationId) => {
     const queued = await jest.mocked(listOpenOperations).getMockImplementation()?.('u-1');
@@ -203,35 +209,267 @@ describe('ordering', () => {
     expect(api.submit).not.toHaveBeenCalled();
   });
 
-  it('keeps evidence uploads queued until files can be sent, holding only their submit', async () => {
+  it('uploads a photo with its metadata and the file, before the submit that waits for it', async () => {
     const upload = operation({
       operationId: 'op-upload',
       entityType: 'EVIDENCE',
       entityId: 'ev-1',
       operationType: 'UPLOAD',
-      payload: { id: 'ev-1' },
+      payload: {
+        id: 'ev-1',
+        inspectionItemId: 'item-1',
+        responseId: 'resp-1',
+        nonConformityId: 'nc-1',
+        description: 'Trinca',
+        capturedAtDevice: '2026-08-12T10:00:00Z',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1000,
+      },
     });
-    const later = operation({
+    const submit = operation({
+      operationId: 'op-submit',
+      payload: { action: 'SUBMIT', completedAtDevice: 'x', location: null },
+      dependencyIds: ['op-upload'],
+    });
+    queue([upload, submit]);
+    jest
+      .mocked(findEvidenceFile)
+      .mockResolvedValue({ photoPath: 'p.jpg', thumbnailPath: 't.jpg', mimeType: 'image/jpeg' });
+    jest.mocked(evidenceUploadUri).mockReturnValue('file:///docs/evidences/p.jpg');
+    const api = gateway();
+
+    await synchronize('u-1', api, now);
+
+    expect(api.uploadEvidence).toHaveBeenCalledWith('insp-1', {
+      metadata: {
+        id: 'ev-1',
+        inspectionItemId: 'item-1',
+        responseId: 'resp-1',
+        nonConformityId: 'nc-1',
+        description: 'Trinca',
+        capturedAtDevice: '2026-08-12T10:00:00Z',
+        type: 'PHOTO',
+      },
+      fileUri: 'file:///docs/evidences/p.jpg',
+      mimeType: 'image/jpeg',
+    });
+    expect(api.submit).toHaveBeenCalledTimes(1);
+    expect(markCompleted).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails a photo whose file is gone without holding the rest of the queue', async () => {
+    const upload = operation({
+      operationId: 'op-upload',
+      entityType: 'EVIDENCE',
+      entityId: 'ev-1',
+      inspectionId: 'insp-2',
+      operationType: 'UPLOAD',
+      payload: {
+        id: 'ev-1',
+        inspectionItemId: 'item-1',
+        responseId: null,
+        description: null,
+        capturedAtDevice: 'x',
+      },
+    });
+    const other = operation({ operationId: 'op-other', inspectionId: 'insp-3' });
+    queue([upload, other]);
+    jest
+      .mocked(findEvidenceFile)
+      .mockResolvedValue({ photoPath: 'gone.jpg', thumbnailPath: null, mimeType: 'image/jpeg' });
+    jest.mocked(evidenceUploadUri).mockReturnValue(null);
+    const api = gateway();
+
+    const result = await synchronize('u-1', api, now);
+
+    expect(api.uploadEvidence).not.toHaveBeenCalled();
+    expect(markFailed).toHaveBeenCalledWith(
+      upload,
+      'FAILED',
+      'O arquivo da foto não está mais neste aparelho.',
+      expect.any(String)
+    );
+    expect(api.start).toHaveBeenCalledWith('insp-3', expect.anything());
+    expect(result.ok && result.value.refused).toBe(1);
+  });
+
+  it('sends a photo that was taken before its item was answered, after that answer', async () => {
+    const upload = operation({
+      operationId: 'op-upload',
+      entityType: 'EVIDENCE',
+      entityId: 'ev-1',
+      operationType: 'UPLOAD',
+      payload: {
+        id: 'ev-1',
+        inspectionItemId: 'item-1',
+        responseId: 'resp-1',
+        description: null,
+        capturedAtDevice: 'x',
+      },
+      dependencyIds: ['op-answer'],
+    });
+    const answer = operation({
       operationId: 'op-answer',
       entityType: 'RESPONSE',
       entityId: 'resp-1',
       operationType: 'CREATE',
       payload: { id: 'resp-1' },
     });
+    queue([upload, answer]);
+    jest
+      .mocked(findEvidenceFile)
+      .mockResolvedValue({ photoPath: 'p.jpg', thumbnailPath: null, mimeType: 'image/jpeg' });
+    jest.mocked(evidenceUploadUri).mockReturnValue('file:///docs/p.jpg');
+    const order: string[] = [];
+    const api = gateway({
+      putResponse: jest.fn(async () => {
+        order.push('answer');
+        return ok(undefined);
+      }),
+      uploadEvidence: jest.fn(async () => {
+        order.push('upload');
+        return ok(undefined);
+      }),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(order).toEqual(['answer', 'upload']);
+  });
+
+  it('treats a removal the server no longer knows as done', async () => {
+    const removal = operation({
+      operationId: 'op-remove',
+      entityType: 'EVIDENCE',
+      entityId: 'ev-1',
+      operationType: 'DELETE_LOGICAL',
+      payload: { id: 'ev-1' },
+    });
+    queue([removal]);
+    jest
+      .mocked(findEvidenceFile)
+      .mockResolvedValue({ photoPath: 'p.jpg', thumbnailPath: null, mimeType: 'image/jpeg' });
+    const api = gateway({
+      deleteEvidence: jest.fn(async () => fail({ kind: 'notFound' as const })),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(markCompleted).toHaveBeenCalledWith(removal, expect.any(String));
+    expect(markFailed).not.toHaveBeenCalled();
+    expect(deleteFile).toHaveBeenCalledWith('p.jpg');
+  });
+
+  it('reopens a completed inspection whose photo the server refuses, so the photo can be discarded', async () => {
+    const upload = operation({
+      operationId: 'op-upload',
+      entityType: 'EVIDENCE',
+      entityId: 'ev-1',
+      operationType: 'UPLOAD',
+      payload: {
+        id: 'ev-1',
+        inspectionItemId: 'item-1',
+        responseId: null,
+        description: null,
+        capturedAtDevice: 'x',
+      },
+    });
     const submit = operation({
       operationId: 'op-submit',
       payload: { action: 'SUBMIT', completedAtDevice: 'x', location: null },
-      dependencyIds: ['op-upload', 'op-answer'],
+      dependencyIds: ['op-upload'],
     });
-    queue([upload, later, submit]);
+    queue([upload, submit]);
+    jest
+      .mocked(findEvidenceFile)
+      .mockResolvedValue({ photoPath: 'p.jpg', thumbnailPath: null, mimeType: 'image/jpeg' });
+    jest.mocked(evidenceUploadUri).mockReturnValue('file:///docs/p.jpg');
+    const api = gateway({
+      uploadEvidence: jest.fn(async () =>
+        fail({ kind: 'business' as const, code: 'EVIDENCE_TOO_LARGE', message: '' })
+      ),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(markFailed).toHaveBeenCalledWith(
+      upload,
+      'FAILED',
+      expect.any(String),
+      expect.any(String)
+    );
+    expect(reopenAfterRefusedSubmit).toHaveBeenCalledWith(
+      submit,
+      'A foto é maior do que o servidor aceita. Fotografe de novo.',
+      expect.any(String)
+    );
+    expect(api.submit).not.toHaveBeenCalled();
+  });
+
+  it('creates a non-conformity with the id made on the device', async () => {
+    const created = operation({
+      operationId: 'op-nc',
+      entityType: 'NON_CONFORMITY',
+      entityId: 'nc-1',
+      operationType: 'CREATE',
+      payload: {
+        id: 'nc-1',
+        inspectionItemId: 'item-1',
+        responseId: 'resp-1',
+        title: 'Vazamento',
+        description: 'Óleo na base.',
+        severity: 'CRITICAL',
+        status: 'OPEN',
+        createdAtDevice: '2026-08-12T10:00:00Z',
+      },
+    });
+    queue([created]);
     const api = gateway();
 
     await synchronize('u-1', api, now);
 
-    expect(claimOperation).not.toHaveBeenCalledWith('op-upload', expect.anything());
-    expect(markFailed).not.toHaveBeenCalled();
-    expect(api.putResponse).toHaveBeenCalledWith('insp-1', later.payload);
-    expect(api.submit).not.toHaveBeenCalled();
+    expect(api.createNonConformity).toHaveBeenCalledWith('insp-1', created.payload);
+    expect(markCompleted).toHaveBeenCalledWith(created, expect.any(String));
+  });
+
+  it('asks the server to remove a sent photo and then frees its files on the device', async () => {
+    const removal = operation({
+      operationId: 'op-remove',
+      entityType: 'EVIDENCE',
+      entityId: 'ev-1',
+      operationType: 'DELETE_LOGICAL',
+      payload: { id: 'ev-1' },
+    });
+    queue([removal]);
+    jest
+      .mocked(findEvidenceFile)
+      .mockResolvedValue({ photoPath: 'p.jpg', thumbnailPath: 't.jpg', mimeType: 'image/jpeg' });
+    const api = gateway();
+
+    await synchronize('u-1', api, now);
+
+    expect(api.deleteEvidence).toHaveBeenCalledWith('ev-1');
+    expect(deleteFile).toHaveBeenCalledWith('p.jpg');
+    expect(deleteFile).toHaveBeenCalledWith('t.jpg');
+  });
+
+  it('keeps the files of a photo the server did not remove', async () => {
+    const removal = operation({
+      operationId: 'op-remove',
+      entityType: 'EVIDENCE',
+      entityId: 'ev-1',
+      operationType: 'DELETE_LOGICAL',
+      payload: { id: 'ev-1' },
+    });
+    queue([removal]);
+    jest
+      .mocked(findEvidenceFile)
+      .mockResolvedValue({ photoPath: 'p.jpg', thumbnailPath: 't.jpg', mimeType: 'image/jpeg' });
+    const api = gateway({ deleteEvidence: jest.fn(async () => fail({ kind: 'server' as const })) });
+
+    await synchronize('u-1', api, now);
+
+    expect(deleteFile).not.toHaveBeenCalled();
   });
 
   it('reopens the inspection when the server refuses the completion', async () => {

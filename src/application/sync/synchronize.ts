@@ -8,7 +8,11 @@ import {
   type MobileInspectionsGateway,
   type ResponsePayload,
 } from '@/infrastructure/api';
-import { recordSyncRun } from '@/infrastructure/repositories/inspection-repository';
+import { deleteFile, evidenceUploadUri } from '@/infrastructure/evidence/photo-storage';
+import {
+  findEvidenceFile,
+  recordSyncRun,
+} from '@/infrastructure/repositories/inspection-repository';
 import {
   claimOperation,
   listOpenOperations,
@@ -39,44 +43,118 @@ const transitionPayloadSchema = z.discriminatedUnion('action', [
   }),
 ]);
 
+const nonConformityPayloadSchema = z.object({
+  id: z.string(),
+  inspectionItemId: z.string().nullable(),
+  responseId: z.string().nullable(),
+  title: z.string(),
+  description: z.string(),
+  severity: z.string(),
+  status: z.string(),
+  createdAtDevice: z.string(),
+});
+
+const evidencePayloadSchema = z.object({
+  id: z.string(),
+  inspectionItemId: z.string().nullable(),
+  responseId: z.string().nullable(),
+  nonConformityId: z.string().nullable().default(null),
+  description: z.string().nullable(),
+  capturedAtDevice: z.string(),
+});
+
+const deletionPayloadSchema = z.object({ id: z.string() });
+
 export interface SyncOutcome {
   readonly sent: number;
   readonly refused: number;
   readonly refresh: RefreshOutcome;
 }
 
-function send(
+function invalidOperation(): Result<void, ApiFailure> {
+  return fail({
+    kind: 'business',
+    code: 'LOCAL_OPERATION_INVALID',
+    message: 'Operação local inválida.',
+  });
+}
+
+async function sendEvidence(
   gateway: MobileInspectionsGateway,
   operation: QueuedOperation
 ): Promise<Result<void, ApiFailure>> {
-  if (operation.entityType === 'RESPONSE') {
-    return gateway.putResponse(operation.inspectionId, operation.payload as ResponsePayload);
+  if (operation.operationType === 'DELETE_LOGICAL') {
+    const removal = deletionPayloadSchema.safeParse(operation.payload);
+    if (!removal.success) {
+      return invalidOperation();
+    }
+    const stored = await findEvidenceFile(removal.data.id);
+    const outcome = await gateway.deleteEvidence(removal.data.id);
+    const result: Result<void, ApiFailure> =
+      !outcome.ok && outcome.error.kind === 'notFound' ? ok(undefined) : outcome;
+    if (result.ok && stored !== null) {
+      deleteFile(stored.photoPath);
+      deleteFile(stored.thumbnailPath);
+    }
+    return result;
   }
 
-  const transition = transitionPayloadSchema.safeParse(operation.payload);
-  if (!transition.success) {
-    return Promise.resolve(
-      fail({
-        kind: 'business',
-        code: 'LOCAL_OPERATION_INVALID',
-        message: 'Operação local inválida.',
-      })
-    );
+  const upload = evidencePayloadSchema.safeParse(operation.payload);
+  if (!upload.success) {
+    return invalidOperation();
   }
-  const step = transition.data;
-  return step.action === 'START'
-    ? gateway.start(operation.inspectionId, {
-        startedAtDevice: step.startedAtDevice,
-        location: step.location,
-      })
-    : gateway.submit(operation.inspectionId, {
-        completedAtDevice: step.completedAtDevice,
-        location: step.location,
-      });
+  const stored = await findEvidenceFile(upload.data.id);
+  const fileUri = stored?.photoPath == null ? null : evidenceUploadUri(stored.photoPath);
+  if (fileUri === null) {
+    return fail({
+      kind: 'business',
+      code: 'LOCAL_FILE_MISSING',
+      message: 'O arquivo da foto não está mais neste aparelho.',
+    });
+  }
+  return gateway.uploadEvidence(operation.inspectionId, {
+    metadata: { ...upload.data, type: 'PHOTO' },
+    fileUri,
+    mimeType: stored?.mimeType ?? 'image/jpeg',
+  });
 }
 
-function canSendYet(operation: QueuedOperation): boolean {
-  return operation.entityType === 'INSPECTION' || operation.entityType === 'RESPONSE';
+async function send(
+  gateway: MobileInspectionsGateway,
+  operation: QueuedOperation
+): Promise<Result<void, ApiFailure>> {
+  switch (operation.entityType) {
+    case 'RESPONSE':
+      return gateway.putResponse(operation.inspectionId, operation.payload as ResponsePayload);
+    case 'NON_CONFORMITY': {
+      const created = nonConformityPayloadSchema.safeParse(operation.payload);
+      return created.success
+        ? gateway.createNonConformity(operation.inspectionId, created.data)
+        : invalidOperation();
+    }
+    case 'EVIDENCE':
+      return sendEvidence(gateway, operation);
+    case 'INSPECTION': {
+      const transition = transitionPayloadSchema.safeParse(operation.payload);
+      if (!transition.success) {
+        return invalidOperation();
+      }
+      const step = transition.data;
+      return step.action === 'START'
+        ? gateway.start(operation.inspectionId, {
+            startedAtDevice: step.startedAtDevice,
+            location: step.location,
+          })
+        : gateway.submit(operation.inspectionId, {
+            completedAtDevice: step.completedAtDevice,
+            location: step.location,
+          });
+    }
+  }
+}
+
+function isUpload(operation: QueuedOperation): boolean {
+  return operation.entityType === 'EVIDENCE' && operation.operationType === 'UPLOAD';
 }
 
 function isSubmit(operation: QueuedOperation): boolean {
@@ -113,52 +191,73 @@ async function run(
   let sent = 0;
   let refused = 0;
 
-  for (const listed of queue) {
-    if (!canSendYet(listed)) {
-      continue;
-    }
-    if (listed.status === 'CONFLICT') {
-      held.add(listed.inspectionId);
-      continue;
-    }
-    if (held.has(listed.inspectionId) || listed.dependencyIds.some((id) => open.has(id))) {
-      held.add(listed.inspectionId);
-      continue;
-    }
+  const waiting = new Map(queue.map((operation) => [operation.operationId, operation]));
+  let progressed = true;
 
-    const operation = await claimOperation(listed.operationId, now());
-    if (operation === null) {
-      continue;
-    }
-    const result = await send(gateway, operation);
+  while (progressed) {
+    progressed = false;
 
-    if (result.ok) {
-      await markCompleted(operation, now());
-      open.delete(operation.operationId);
-      sent += 1;
-      continue;
-    }
+    for (const listed of [...waiting.values()]) {
+      if (listed.status === 'CONFLICT') {
+        held.add(listed.inspectionId);
+        waiting.delete(listed.operationId);
+        continue;
+      }
+      if (held.has(listed.inspectionId)) {
+        waiting.delete(listed.operationId);
+        continue;
+      }
+      if (listed.dependencyIds.some((id) => open.has(id))) {
+        continue;
+      }
 
-    const failure = result.error;
-    if (isNetworkFailure(failure) || failure.kind === 'unauthorized') {
-      await releaseOperation(operation.operationId, now());
-      await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());
-      return fail(failure);
-    }
+      waiting.delete(listed.operationId);
+      progressed = true;
+      const operation = await claimOperation(listed.operationId, now());
+      if (operation === null) {
+        continue;
+      }
+      const result = await send(gateway, operation);
 
-    const reason = describeApiFailure(failure);
-    if (failure.kind === 'business' && isSubmit(operation)) {
-      await reopenAfterRefusedSubmit(operation, reason, now());
-    } else {
-      await markFailed(
-        operation,
-        failure.kind === 'conflict' ? 'CONFLICT' : 'FAILED',
-        reason,
-        now()
-      );
+      if (result.ok) {
+        await markCompleted(operation, now());
+        open.delete(operation.operationId);
+        sent += 1;
+        continue;
+      }
+
+      const failure = result.error;
+      if (isNetworkFailure(failure) || failure.kind === 'unauthorized') {
+        await releaseOperation(operation.operationId, now());
+        await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());
+        return fail(failure);
+      }
+
+      const reason = describeApiFailure(failure);
+      if (failure.kind === 'business' && isSubmit(operation)) {
+        await reopenAfterRefusedSubmit(operation, reason, now());
+      } else {
+        await markFailed(
+          operation,
+          failure.kind === 'conflict' ? 'CONFLICT' : 'FAILED',
+          reason,
+          now()
+        );
+        const completion = queue.find(
+          (candidate) =>
+            candidate.inspectionId === operation.inspectionId &&
+            isSubmit(candidate) &&
+            open.has(candidate.operationId)
+        );
+        if (failure.kind === 'business' && isUpload(operation) && completion !== undefined) {
+          await reopenAfterRefusedSubmit(completion, reason, now());
+          open.delete(completion.operationId);
+          waiting.delete(completion.operationId);
+        }
+      }
+      held.add(operation.inspectionId);
+      refused += 1;
     }
-    held.add(operation.inspectionId);
-    refused += 1;
   }
   const refresh = await refreshInspections(ownerUserId, gateway, now);
   if (!refresh.ok) {

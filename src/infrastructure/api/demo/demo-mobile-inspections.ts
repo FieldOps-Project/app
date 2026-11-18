@@ -323,4 +323,18 @@ export const demoMobileInspectionsGateway: MobileInspectionsGateway = {
     }));
     return ok(undefined);
   },
+  async createNonConformity() {
+    await settle();
+    return ok(undefined);
+  },
+
+  async uploadEvidence() {
+    await settle();
+    return ok(undefined);
+  },
+
+  async deleteEvidence() {
+    await settle();
+    return ok(undefined);
+  },
 };

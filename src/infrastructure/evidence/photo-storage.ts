@@ -54,6 +54,15 @@ async function render(photo: CapturedPhoto, maxEdge: number, quality: number) {
   }
 }
 
+export function evidenceUploadUri(path: string): string | null {
+  try {
+    const file = new File(evidenceFileUri(path));
+    return file.exists ? file.uri : null;
+  } catch {
+    return null;
+  }
+}
+
 export function deleteFile(path: string | null): void {
   if (path === null) {
     return;

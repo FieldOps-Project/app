@@ -11,6 +11,12 @@ import {
 export const MOBILE_INSPECTIONS_PATH = '/api/v1/mobile/inspections';
 
 const MAX_PAGES = 50;
+const UPLOAD_TIMEOUT_MS = 60_000;
+
+const FILE_EXTENSIONS: Readonly<Record<string, string>> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+};
 
 export interface LocationPayload {
   readonly latitude: number;
@@ -42,12 +48,45 @@ export interface ResponsePayload {
   readonly baseVersion: number;
 }
 
+export interface NonConformityPayload {
+  readonly id: string;
+  readonly inspectionItemId: string | null;
+  readonly responseId: string | null;
+  readonly title: string;
+  readonly description: string;
+  readonly severity: string;
+  readonly status: string;
+  readonly createdAtDevice: string;
+}
+
+export interface EvidenceMetadata {
+  readonly id: string;
+  readonly inspectionItemId: string | null;
+  readonly responseId: string | null;
+  readonly nonConformityId: string | null;
+  readonly type: 'PHOTO';
+  readonly capturedAtDevice: string;
+  readonly description: string | null;
+}
+
+export interface EvidenceUpload {
+  readonly metadata: EvidenceMetadata;
+  readonly fileUri: string;
+  readonly mimeType: string;
+}
+
 export interface MobileInspectionsGateway {
   list(): Promise<Result<readonly MobileInspectionEntry[], ApiFailure>>;
   detail(inspectionId: string): Promise<Result<MobileInspection, ApiFailure>>;
   start(inspectionId: string, payload: StartPayload): Promise<Result<void, ApiFailure>>;
   submit(inspectionId: string, payload: SubmitPayload): Promise<Result<void, ApiFailure>>;
   putResponse(inspectionId: string, payload: ResponsePayload): Promise<Result<void, ApiFailure>>;
+  createNonConformity(
+    inspectionId: string,
+    payload: NonConformityPayload
+  ): Promise<Result<void, ApiFailure>>;
+  uploadEvidence(inspectionId: string, upload: EvidenceUpload): Promise<Result<void, ApiFailure>>;
+  deleteEvidence(evidenceId: string): Promise<Result<void, ApiFailure>>;
 }
 
 function parseWith<TOutput>(
@@ -108,6 +147,41 @@ export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
       method: 'PUT',
       path: `/api/v1/inspections/${encodeURIComponent(inspectionId)}/responses/${encodeURIComponent(payload.id)}`,
       data: payload,
+    });
+  },
+
+  createNonConformity(inspectionId, payload) {
+    return request<void>({
+      method: 'POST',
+      path: `/api/v1/inspections/${encodeURIComponent(inspectionId)}/non-conformities`,
+      data: payload,
+    });
+  },
+
+  uploadEvidence(inspectionId, { metadata, fileUri, mimeType }) {
+    const form = new FormData();
+    form.append('file', {
+      uri: fileUri,
+      name: `${metadata.id}.${FILE_EXTENSIONS[mimeType] ?? 'jpg'}`,
+      type: mimeType,
+    } as unknown as Blob);
+    form.append('metadata', {
+      string: JSON.stringify(metadata),
+      type: 'application/json',
+    } as unknown as Blob);
+    return request<void>({
+      method: 'POST',
+      path: `/api/v1/inspections/${encodeURIComponent(inspectionId)}/evidence`,
+      data: form,
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_TIMEOUT_MS,
+    });
+  },
+
+  deleteEvidence(evidenceId) {
+    return request<void>({
+      method: 'DELETE',
+      path: `/api/v1/evidence/${encodeURIComponent(evidenceId)}`,
     });
   },
 };
