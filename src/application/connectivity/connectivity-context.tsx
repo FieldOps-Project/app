@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -31,12 +32,17 @@ const ConnectivityContext = createContext<ConnectivityValue>(ONLINE);
 export function ConnectivityProvider({ children }: { children: ReactNode }) {
   const [network, setNetwork] = useState<NetworkStatus>('online');
   const [apiReachable, setApiReachable] = useState(true);
+  const lastNetwork = useRef<NetworkStatus>('online');
 
   useEffect(
     () =>
       subscribeToNetwork((snapshot) => {
-        setNetwork(toNetworkStatus(snapshot));
-        setApiReachable(true);
+        const next = toNetworkStatus(snapshot);
+        setNetwork(next);
+        if (next !== lastNetwork.current) {
+          lastNetwork.current = next;
+          setApiReachable(true);
+        }
       }),
     []
   );

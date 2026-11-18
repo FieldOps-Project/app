@@ -73,13 +73,25 @@ describe('ConnectivityProvider', () => {
     expect(current.offline).toBe(false);
   });
 
-  it('gives the API a fresh chance when the network changes', () => {
+  it('gives the API a fresh chance when the network comes back', () => {
     mount();
+    act(() => emit(OFFLINE));
     act(() => current.reportApiReachable(false));
 
     act(() => emit(ONLINE));
 
     expect(current.offline).toBe(false);
+  });
+
+  it('does not forget a failing API on a network event that changes nothing', () => {
+    mount();
+    act(() => emit(ONLINE));
+    act(() => current.reportApiReachable(false));
+
+    act(() => emit({ isConnected: true, isInternetReachable: true }));
+    act(() => emit(ONLINE));
+
+    expect(current).toMatchObject({ offline: true, reason: 'server-unreachable' });
   });
 
   it('stops listening when it unmounts', () => {

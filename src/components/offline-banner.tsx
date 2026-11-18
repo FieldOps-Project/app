@@ -28,7 +28,7 @@ export function OfflineBanner() {
 
   return (
     <OfflineNotice
-      className="mx-screen mt-2"
+      className="mx-screen my-2"
       message={`${REASON_TEXT[reason]} Você pode continuar: tudo fica salvo neste aparelho e é enviado quando a conexão voltar.${pendingText}`}
     />
   );

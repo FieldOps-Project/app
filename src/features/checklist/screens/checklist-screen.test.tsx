@@ -6,9 +6,10 @@ import type { InspectionDetailState } from '@/application/inspections/use-inspec
 import { Button } from '@/design-system/components/button';
 import type { ChecklistItem } from '@/domain/checklist';
 import { computeProgress } from '@/domain/checklist-progress';
-import type { InspectionDetail } from '@/domain/inspection';
+import { syncStateLabel, type InspectionDetail } from '@/domain/inspection';
 import { ChecklistItemRow } from '@/features/checklist/components/checklist-item-row';
 import { UnsupportedField } from '@/features/checklist/components/response-fields/unsupported-field';
+import { renderedText } from '@/testing/render';
 import { ChecklistScreen } from '@/features/checklist/screens/checklist-screen';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -75,12 +76,15 @@ const DETAIL = {
   review: null,
 } as unknown as InspectionDetail;
 
-function ready(status: InspectionDetail['status'] = 'IN_PROGRESS'): InspectionDetailState {
+function ready(
+  status: InspectionDetail['status'] = 'IN_PROGRESS',
+  syncState: InspectionDetail['syncState'] = 'salvo-no-dispositivo'
+): InspectionDetailState {
   const responses = new Map();
   const evidenceCounts = new Map();
   return {
     state: 'ready',
-    detail: { ...DETAIL, status },
+    detail: { ...DETAIL, status, syncState },
     items: ITEMS,
     evidences: {},
     responses,
@@ -169,6 +173,22 @@ describe('suggesting a non-conformity', () => {
     expect(registerButtons(rowFor({ conformity: 'NON_CONFORMING', editable: false }))).toHaveLength(
       0
     );
+  });
+});
+
+describe('ChecklistScreen save status', () => {
+  it.each([
+    ['salvo-no-dispositivo', 'Cada resposta é salva neste aparelho na hora.'],
+    ['aguardando-envio', 'Tudo o que você respondeu está salvo neste aparelho.'],
+    ['falha', 'Tudo o que você respondeu está salvo neste aparelho.'],
+    ['enviado', 'Tudo o que você respondeu foi enviado e está salvo neste aparelho.'],
+  ] as const)('keeps saying where the work is while the inspection is %s', (syncState, caption) => {
+    mockState.current = ready('IN_PROGRESS', syncState);
+
+    const text = renderedText(render());
+
+    expect(text).toContain(caption);
+    expect(text).toContain(syncStateLabel(syncState));
   });
 });
 

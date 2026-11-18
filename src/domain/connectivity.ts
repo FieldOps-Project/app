@@ -14,6 +14,8 @@ export interface ConnectionState {
 
 export const RECONNECT_STABLE_MS = 3000;
 
+export const SERVER_RETRY_MS = 15000;
+
 export function toNetworkStatus(snapshot: NetworkSnapshot): NetworkStatus {
   return snapshot.isConnected === false || snapshot.isInternetReachable === false
     ? 'offline'

@@ -1,10 +1,13 @@
 import { act } from 'react';
 
 import { AutoSync } from '@/application/connectivity/auto-sync';
-import { RECONNECT_STABLE_MS } from '@/domain/connectivity';
+import { RECONNECT_STABLE_MS, SERVER_RETRY_MS } from '@/domain/connectivity';
 import { render } from '@/testing/render';
 
-const mockConnection = { offline: false };
+const mockConnection: { offline: boolean; reason: 'no-network' | 'server-unreachable' | null } = {
+  offline: false,
+  reason: null,
+};
 const mockOwner = { current: 'tech-1' };
 const mockMutate = jest.fn();
 
@@ -18,8 +21,13 @@ jest.mock('@/application/sync/use-synchronization', () => ({
   useSynchronize: () => ({ mutate: mockMutate }),
 }));
 
-function setOffline(offline: boolean, renderer: ReturnType<typeof render>) {
+function setOffline(
+  offline: boolean,
+  renderer: ReturnType<typeof render>,
+  reason: 'no-network' | 'server-unreachable' = 'no-network'
+) {
   mockConnection.offline = offline;
+  mockConnection.reason = offline ? reason : null;
   act(() => renderer.update(<AutoSync />));
 }
 
@@ -33,6 +41,7 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockConnection.offline = false;
+  mockConnection.reason = null;
   mockOwner.current = 'tech-1';
 });
 
@@ -85,6 +94,60 @@ describe('AutoSync', () => {
 
     setOffline(false, renderer);
     wait(RECONNECT_STABLE_MS * 2);
+
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it('forgets a loss of network when the person signs out, so the next sign-in does not sync', () => {
+    const renderer = render(<AutoSync />);
+    setOffline(true, renderer);
+    mockOwner.current = '';
+    act(() => renderer.update(<AutoSync />));
+
+    mockOwner.current = 'tech-2';
+    setOffline(false, renderer);
+    wait(RECONNECT_STABLE_MS * 2);
+
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it('does not repeat a synchronization that the recovery of the server already made', () => {
+    const renderer = render(<AutoSync />);
+    setOffline(true, renderer, 'server-unreachable');
+
+    setOffline(false, renderer);
+    wait(RECONNECT_STABLE_MS * 2);
+
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it('keeps probing an unreachable server until it answers, and stops after that', () => {
+    const renderer = render(<AutoSync />);
+    setOffline(true, renderer, 'server-unreachable');
+
+    wait(SERVER_RETRY_MS * 3);
+    expect(mockMutate).toHaveBeenCalledTimes(3);
+
+    setOffline(false, renderer);
+    wait(SERVER_RETRY_MS * 3);
+    expect(mockMutate).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not probe the server while there is no network at all', () => {
+    const renderer = render(<AutoSync />);
+    setOffline(true, renderer, 'no-network');
+
+    wait(SERVER_RETRY_MS * 3);
+
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it('does not probe the server when nobody is signed in', () => {
+    mockOwner.current = '';
+    const renderer = render(<AutoSync />);
+    setOffline(true, renderer, 'server-unreachable');
+
+    wait(SERVER_RETRY_MS * 3);
 
     expect(mockMutate).not.toHaveBeenCalled();
   });

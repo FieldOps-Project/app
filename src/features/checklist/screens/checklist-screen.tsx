@@ -213,7 +213,11 @@ function Checklist({ work }: { work: InspectionWork }) {
           <View className="flex-row flex-wrap items-center gap-2">
             <SyncStateBadge state={detail.syncState} />
             <Text variant="caption" tone="muted" accessibilityLiveRegion="polite">
-              Cada resposta é salva neste aparelho na hora.
+              {detail.syncState === 'salvo-no-dispositivo'
+                ? 'Cada resposta é salva neste aparelho na hora.'
+                : detail.syncState === 'enviado'
+                  ? 'Tudo o que você respondeu foi enviado e está salvo neste aparelho.'
+                  : 'Tudo o que você respondeu está salvo neste aparelho.'}
             </Text>
           </View>
           {editable ? (
