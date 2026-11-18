@@ -168,6 +168,28 @@ API --(download)--> SQLite <--(leitura)-- telas
 - Bibliotecas: `expo-camera`, `expo-image-manipulator` e `expo-file-system`. O plugin da
   câmera no `app.json` não pede microfone.
 
+### Não conformidades
+
+- O registro nasce de um item do checklist: quando a resposta é "Não conforme" (e a inspeção está
+  em andamento), a linha do item **sugere** "Registrar não conformidade", sem obrigar. O item, a
+  resposta e a inspeção ficam vinculados sozinhos (RN-052, RN-053); o técnico informa título,
+  descrição e criticidade (baixa, média, alta ou crítica, sempre com rótulo em texto).
+- O identificador é gerado no aparelho e o registro funciona por inteiro offline, fotos incluídas.
+  Gravar a não conformidade enfileira uma operação `CREATE` que espera a da resposta; a foto de
+  evidência enfileira um upload que espera a da resposta e a da não conformidade.
+- **Criticidade crítica exige descrição e ao menos uma evidência (RN-055).** O registro pode ser
+  salvo sem a foto, para o técnico fotografar em seguida, mas o resumo bloqueia a conclusão
+  enquanto houver uma não conformidade crítica sem evidência.
+- A foto de uma não conformidade usa a mesma captura da evidência do item (`nonConformityId` na
+  rota) e volta para a lista de não conformidades. Ela também conta como evidência do item.
+- Excluir só é possível enquanto nada foi enviado: a exclusão cancela as operações pendentes e
+  remove as fotos do aparelho. Depois do envio não há exclusão (RN-056); a tela avisa.
+- Limites de texto (título 120, descrição 2000 caracteres) são do app; reconciliar com o contrato
+  do backend#23 quando ele sair.
+- **Envio ainda não existe.** Como as operações de upload, a de não conformidade é ignorada pelo
+  motor de sincronização até o backend#23 e o #24 do app; enquanto houver uma pendente, o envio
+  da conclusão da inspeção espera por ela.
+
 ### Leitura de QR Code
 
 - Dá para ler o QR de dois lugares: a ação rápida da tela inicial, que mostra o equipamento e as
@@ -347,8 +369,8 @@ seção 11.4. O detalhamento de cada camada e das regras de dependência está e
 ```text
 src/
 ├── app/                      # Rotas do Expo Router
-├── features/                 # auth, home, inspections, checklist,
-│                             # evidence, scanner, location, synchronization
+├── features/                 # auth, home, inspections, checklist, evidence,
+│                             # non-conformities, scanner, location, synchronization
 ├── components/               # Componentes compartilhados
 ├── design-system/            # Tokens, tema e componentes visuais
 ├── application/              # Casos de uso e orquestração
