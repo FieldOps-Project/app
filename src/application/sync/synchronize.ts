@@ -8,7 +8,11 @@ import {
   type MobileInspectionsGateway,
   type ResponsePayload,
 } from '@/infrastructure/api';
-import { recordSyncRun } from '@/infrastructure/repositories/inspection-repository';
+import { readEvidenceFile, deleteFile } from '@/infrastructure/evidence/photo-storage';
+import {
+  findEvidenceFile,
+  recordSyncRun,
+} from '@/infrastructure/repositories/inspection-repository';
 import {
   claimOperation,
   listOpenOperations,
@@ -39,44 +43,112 @@ const transitionPayloadSchema = z.discriminatedUnion('action', [
   }),
 ]);
 
+const nonConformityPayloadSchema = z.object({
+  id: z.string(),
+  inspectionItemId: z.string().nullable(),
+  responseId: z.string().nullable(),
+  title: z.string(),
+  description: z.string(),
+  severity: z.string(),
+  status: z.string(),
+  createdAtDevice: z.string(),
+});
+
+const evidencePayloadSchema = z.object({
+  id: z.string(),
+  inspectionItemId: z.string().nullable(),
+  responseId: z.string().nullable(),
+  nonConformityId: z.string().nullable().default(null),
+  description: z.string().nullable(),
+  capturedAtDevice: z.string(),
+});
+
+const deletionPayloadSchema = z.object({ id: z.string() });
+
 export interface SyncOutcome {
   readonly sent: number;
   readonly refused: number;
   readonly refresh: RefreshOutcome;
 }
 
-function send(
+function invalidOperation(): Result<void, ApiFailure> {
+  return fail({
+    kind: 'business',
+    code: 'LOCAL_OPERATION_INVALID',
+    message: 'Operação local inválida.',
+  });
+}
+
+async function sendEvidence(
   gateway: MobileInspectionsGateway,
   operation: QueuedOperation
 ): Promise<Result<void, ApiFailure>> {
-  if (operation.entityType === 'RESPONSE') {
-    return gateway.putResponse(operation.inspectionId, operation.payload as ResponsePayload);
+  if (operation.operationType === 'DELETE_LOGICAL') {
+    const removal = deletionPayloadSchema.safeParse(operation.payload);
+    if (!removal.success) {
+      return invalidOperation();
+    }
+    const stored = await findEvidenceFile(removal.data.id);
+    const result = await gateway.deleteEvidence(removal.data.id);
+    if (result.ok && stored !== null) {
+      deleteFile(stored.photoPath);
+      deleteFile(stored.thumbnailPath);
+    }
+    return result;
   }
 
-  const transition = transitionPayloadSchema.safeParse(operation.payload);
-  if (!transition.success) {
-    return Promise.resolve(
-      fail({
-        kind: 'business',
-        code: 'LOCAL_OPERATION_INVALID',
-        message: 'Operação local inválida.',
-      })
-    );
+  const upload = evidencePayloadSchema.safeParse(operation.payload);
+  if (!upload.success) {
+    return invalidOperation();
   }
-  const step = transition.data;
-  return step.action === 'START'
-    ? gateway.start(operation.inspectionId, {
-        startedAtDevice: step.startedAtDevice,
-        location: step.location,
-      })
-    : gateway.submit(operation.inspectionId, {
-        completedAtDevice: step.completedAtDevice,
-        location: step.location,
-      });
+  const stored = await findEvidenceFile(upload.data.id);
+  const file = stored?.photoPath == null ? null : readEvidenceFile(stored.photoPath);
+  if (file === null) {
+    return fail({
+      kind: 'business',
+      code: 'LOCAL_FILE_MISSING',
+      message: 'O arquivo da foto não está mais neste aparelho.',
+    });
+  }
+  return gateway.uploadEvidence(operation.inspectionId, {
+    metadata: { ...upload.data, type: 'PHOTO' },
+    file,
+    mimeType: stored?.mimeType ?? 'image/jpeg',
+  });
 }
 
-function canSendYet(operation: QueuedOperation): boolean {
-  return operation.entityType === 'INSPECTION' || operation.entityType === 'RESPONSE';
+async function send(
+  gateway: MobileInspectionsGateway,
+  operation: QueuedOperation
+): Promise<Result<void, ApiFailure>> {
+  switch (operation.entityType) {
+    case 'RESPONSE':
+      return gateway.putResponse(operation.inspectionId, operation.payload as ResponsePayload);
+    case 'NON_CONFORMITY': {
+      const created = nonConformityPayloadSchema.safeParse(operation.payload);
+      return created.success
+        ? gateway.createNonConformity(operation.inspectionId, created.data)
+        : invalidOperation();
+    }
+    case 'EVIDENCE':
+      return sendEvidence(gateway, operation);
+    case 'INSPECTION': {
+      const transition = transitionPayloadSchema.safeParse(operation.payload);
+      if (!transition.success) {
+        return invalidOperation();
+      }
+      const step = transition.data;
+      return step.action === 'START'
+        ? gateway.start(operation.inspectionId, {
+            startedAtDevice: step.startedAtDevice,
+            location: step.location,
+          })
+        : gateway.submit(operation.inspectionId, {
+            completedAtDevice: step.completedAtDevice,
+            location: step.location,
+          });
+    }
+  }
 }
 
 function isSubmit(operation: QueuedOperation): boolean {
@@ -114,9 +186,6 @@ async function run(
   let refused = 0;
 
   for (const listed of queue) {
-    if (!canSendYet(listed)) {
-      continue;
-    }
     if (listed.status === 'CONFLICT') {
       held.add(listed.inspectionId);
       continue;

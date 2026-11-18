@@ -31,6 +31,9 @@ const BUSINESS_MESSAGES: Readonly<Record<string, string>> = {
   INSPECTION_REQUIRED_ITEMS_MISSING:
     'Há itens obrigatórios sem resposta. Volte ao checklist e complete as pendências.',
   TECHNICIAN_NOT_ELIGIBLE: 'Você não pode executar esta inspeção.',
+  EVIDENCE_TOO_LARGE: 'A foto é maior do que o servidor aceita. Fotografe de novo.',
+  EVIDENCE_UNSUPPORTED_TYPE: 'O servidor não aceita este formato de imagem.',
+  LOCAL_FILE_MISSING: 'O arquivo da foto não está mais neste aparelho.',
   LOCAL_OPERATION_INVALID: 'Um registro deste aparelho está inválido e não pôde ser enviado.',
 };
 

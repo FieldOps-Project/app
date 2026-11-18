@@ -26,7 +26,10 @@ export {
 } from '@/infrastructure/api/auth-api';
 export { onSessionRejected } from '@/infrastructure/api/token-refresh';
 export {
+  type EvidenceMetadata,
+  type EvidenceUpload,
   type LocationPayload,
+  type NonConformityPayload,
   type MobileInspectionsGateway,
   type ResponsePayload,
 } from '@/infrastructure/api/mobile-inspections-api';

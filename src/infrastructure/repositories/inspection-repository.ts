@@ -682,6 +682,24 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
   });
 }
 
+export interface StoredEvidenceFile {
+  readonly photoPath: string | null;
+  readonly thumbnailPath: string | null;
+  readonly mimeType: string | null;
+}
+
+export async function findEvidenceFile(evidenceId: string): Promise<StoredEvidenceFile | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{
+    local_uri: string | null;
+    thumbnail_uri: string | null;
+    mime_type: string | null;
+  }>('SELECT local_uri, thumbnail_uri, mime_type FROM evidences WHERE id = ?', evidenceId);
+  return row === null
+    ? null
+    : { photoPath: row.local_uri, thumbnailPath: row.thumbnail_uri, mimeType: row.mime_type };
+}
+
 export interface DiscardEvidenceCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;
