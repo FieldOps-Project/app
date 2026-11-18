@@ -54,10 +54,10 @@ async function render(photo: CapturedPhoto, maxEdge: number, quality: number) {
   }
 }
 
-export function readEvidenceFile(path: string): Blob | null {
+export function evidenceUploadUri(path: string): string | null {
   try {
     const file = new File(evidenceFileUri(path));
-    return file.exists ? file : null;
+    return file.exists ? file.uri : null;
   } catch {
     return null;
   }

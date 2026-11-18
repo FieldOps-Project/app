@@ -150,13 +150,18 @@ API --(download)--> SQLite <--(leitura)-- telas
   remove tokens e senhas e limita o tamanho.
 - **O que o motor envia.** Início, respostas, não conformidades, fotos, remoção de foto e
   conclusão, nessa ordem de dependência, e a conclusão sempre por último. A foto vai como
-  `multipart/form-data` (`file` e `metadata` em JSON, com o id gerado no aparelho, para o reenvio
-  ser seguro) para `POST /inspections/{id}/evidence`; a não conformidade vai para
+  `multipart/form-data` (`file` como `{ uri, name, type }` e `metadata` como `{ string, type:
+'application/json' }`, que é como o React Native serializa as partes, com o id gerado no
+  aparelho para o reenvio ser seguro) para `POST /inspections/{id}/evidence`; a não conformidade vai para
   `POST /inspections/{id}/non-conformities`; a remoção, para `DELETE /evidence/{id}`. Esses
   caminhos seguem o que as issues backend#22 e #23 descrevem, que ainda não existem no servidor,
   e o formato exato do multipart é uma suposição a confirmar com o backend.
-- Uma foto cujo arquivo sumiu do aparelho falha só a própria operação ("O arquivo da foto não
-  está mais neste aparelho") e não trava as outras inspeções. Os arquivos de uma foto só são
+- O motor processa em passadas: uma operação que espera outra (por exemplo, a foto tirada antes
+  de o item ser respondido) fica para a passada seguinte em vez de travar a inspeção.
+- Uma foto que o servidor recusa de forma definitiva (413, 415 ou arquivo ausente do aparelho)
+  falha só a própria operação, não trava as outras inspeções e **reabre a inspeção concluída**
+  para correção, com o motivo na tela, para o técnico poder descartar a foto e concluir de novo.
+  A remoção de uma foto que o servidor já não conhece (404) conta como feita. Os arquivos de uma foto só são
   apagados do aparelho depois que o servidor confirma a remoção. Fotos têm 60 s de tempo limite
   em vez de 15 s, e 413 e 415 viram mensagens próprias.
 

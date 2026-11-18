@@ -71,7 +71,7 @@ export interface EvidenceMetadata {
 
 export interface EvidenceUpload {
   readonly metadata: EvidenceMetadata;
-  readonly file: Blob;
+  readonly fileUri: string;
   readonly mimeType: string;
 }
 
@@ -158,10 +158,17 @@ export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
     });
   },
 
-  uploadEvidence(inspectionId, { metadata, file, mimeType }) {
+  uploadEvidence(inspectionId, { metadata, fileUri, mimeType }) {
     const form = new FormData();
-    form.append('file', file, `${metadata.id}.${FILE_EXTENSIONS[mimeType] ?? 'jpg'}`);
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', {
+      uri: fileUri,
+      name: `${metadata.id}.${FILE_EXTENSIONS[mimeType] ?? 'jpg'}`,
+      type: mimeType,
+    } as unknown as Blob);
+    form.append('metadata', {
+      string: JSON.stringify(metadata),
+      type: 'application/json',
+    } as unknown as Blob);
     return request<void>({
       method: 'POST',
       path: `/api/v1/inspections/${encodeURIComponent(inspectionId)}/evidence`,

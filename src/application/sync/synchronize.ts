@@ -8,7 +8,7 @@ import {
   type MobileInspectionsGateway,
   type ResponsePayload,
 } from '@/infrastructure/api';
-import { readEvidenceFile, deleteFile } from '@/infrastructure/evidence/photo-storage';
+import { deleteFile, evidenceUploadUri } from '@/infrastructure/evidence/photo-storage';
 import {
   findEvidenceFile,
   recordSyncRun,
@@ -89,7 +89,9 @@ async function sendEvidence(
       return invalidOperation();
     }
     const stored = await findEvidenceFile(removal.data.id);
-    const result = await gateway.deleteEvidence(removal.data.id);
+    const outcome = await gateway.deleteEvidence(removal.data.id);
+    const result: Result<void, ApiFailure> =
+      !outcome.ok && outcome.error.kind === 'notFound' ? ok(undefined) : outcome;
     if (result.ok && stored !== null) {
       deleteFile(stored.photoPath);
       deleteFile(stored.thumbnailPath);
@@ -102,8 +104,8 @@ async function sendEvidence(
     return invalidOperation();
   }
   const stored = await findEvidenceFile(upload.data.id);
-  const file = stored?.photoPath == null ? null : readEvidenceFile(stored.photoPath);
-  if (file === null) {
+  const fileUri = stored?.photoPath == null ? null : evidenceUploadUri(stored.photoPath);
+  if (fileUri === null) {
     return fail({
       kind: 'business',
       code: 'LOCAL_FILE_MISSING',
@@ -112,7 +114,7 @@ async function sendEvidence(
   }
   return gateway.uploadEvidence(operation.inspectionId, {
     metadata: { ...upload.data, type: 'PHOTO' },
-    file,
+    fileUri,
     mimeType: stored?.mimeType ?? 'image/jpeg',
   });
 }
@@ -151,6 +153,10 @@ async function send(
   }
 }
 
+function isUpload(operation: QueuedOperation): boolean {
+  return operation.entityType === 'EVIDENCE' && operation.operationType === 'UPLOAD';
+}
+
 function isSubmit(operation: QueuedOperation): boolean {
   return (
     operation.entityType === 'INSPECTION' &&
@@ -185,49 +191,73 @@ async function run(
   let sent = 0;
   let refused = 0;
 
-  for (const listed of queue) {
-    if (listed.status === 'CONFLICT') {
-      held.add(listed.inspectionId);
-      continue;
-    }
-    if (held.has(listed.inspectionId) || listed.dependencyIds.some((id) => open.has(id))) {
-      held.add(listed.inspectionId);
-      continue;
-    }
+  const waiting = new Map(queue.map((operation) => [operation.operationId, operation]));
+  let progressed = true;
 
-    const operation = await claimOperation(listed.operationId, now());
-    if (operation === null) {
-      continue;
-    }
-    const result = await send(gateway, operation);
+  while (progressed) {
+    progressed = false;
 
-    if (result.ok) {
-      await markCompleted(operation, now());
-      open.delete(operation.operationId);
-      sent += 1;
-      continue;
-    }
+    for (const listed of [...waiting.values()]) {
+      if (listed.status === 'CONFLICT') {
+        held.add(listed.inspectionId);
+        waiting.delete(listed.operationId);
+        continue;
+      }
+      if (held.has(listed.inspectionId)) {
+        waiting.delete(listed.operationId);
+        continue;
+      }
+      if (listed.dependencyIds.some((id) => open.has(id))) {
+        continue;
+      }
 
-    const failure = result.error;
-    if (isNetworkFailure(failure) || failure.kind === 'unauthorized') {
-      await releaseOperation(operation.operationId, now());
-      await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());
-      return fail(failure);
-    }
+      waiting.delete(listed.operationId);
+      progressed = true;
+      const operation = await claimOperation(listed.operationId, now());
+      if (operation === null) {
+        continue;
+      }
+      const result = await send(gateway, operation);
 
-    const reason = describeApiFailure(failure);
-    if (failure.kind === 'business' && isSubmit(operation)) {
-      await reopenAfterRefusedSubmit(operation, reason, now());
-    } else {
-      await markFailed(
-        operation,
-        failure.kind === 'conflict' ? 'CONFLICT' : 'FAILED',
-        reason,
-        now()
-      );
+      if (result.ok) {
+        await markCompleted(operation, now());
+        open.delete(operation.operationId);
+        sent += 1;
+        continue;
+      }
+
+      const failure = result.error;
+      if (isNetworkFailure(failure) || failure.kind === 'unauthorized') {
+        await releaseOperation(operation.operationId, now());
+        await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());
+        return fail(failure);
+      }
+
+      const reason = describeApiFailure(failure);
+      if (failure.kind === 'business' && isSubmit(operation)) {
+        await reopenAfterRefusedSubmit(operation, reason, now());
+      } else {
+        await markFailed(
+          operation,
+          failure.kind === 'conflict' ? 'CONFLICT' : 'FAILED',
+          reason,
+          now()
+        );
+        const completion = queue.find(
+          (candidate) =>
+            candidate.inspectionId === operation.inspectionId &&
+            isSubmit(candidate) &&
+            open.has(candidate.operationId)
+        );
+        if (failure.kind === 'business' && isUpload(operation) && completion !== undefined) {
+          await reopenAfterRefusedSubmit(completion, reason, now());
+          open.delete(completion.operationId);
+          waiting.delete(completion.operationId);
+        }
+      }
+      held.add(operation.inspectionId);
+      refused += 1;
     }
-    held.add(operation.inspectionId);
-    refused += 1;
   }
   const refresh = await refreshInspections(ownerUserId, gateway, now);
   if (!refresh.ok) {
