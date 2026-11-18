@@ -5,10 +5,7 @@ import {
   useInspectionList,
   type ListedInspection,
 } from '@/application/inspections/use-inspection-list';
-import {
-  useLastSuccessfulSync,
-  usePendingOperationsCount,
-} from '@/application/inspections/use-inspections';
+import { useLastSync, usePendingOperationsCount } from '@/application/inspections/use-inspections';
 import { SyncStateBadge } from '@/components/sync-state-badge';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
@@ -17,16 +14,42 @@ import { ErrorState } from '@/design-system/components/error-state';
 import { Screen } from '@/design-system/components/screen';
 import { Text } from '@/design-system/components/text';
 import { filtersForView } from '@/domain/inspection-filters';
+import { SYNC_RESULT_LABELS } from '@/domain/last-sync';
+import type { LastSync } from '@/infrastructure/repositories/inspection-repository';
 import { SyncNowButton } from '@/features/synchronization/components/sync-now-button';
 import { formatDateTime } from '@/utils/format-date';
 import { plural } from '@/utils/plural';
 
 const UNSENT = filtersForView('pending-sync');
 
+function LastSyncLines({ lastSync }: { lastSync: LastSync | undefined }) {
+  if (lastSync === undefined || lastSync.startedAt === null || lastSync.result === null) {
+    return (
+      <Text variant="caption" tone="muted">
+        Nenhuma sincronização neste aparelho ainda.
+      </Text>
+    );
+  }
+  return (
+    <View className="gap-0.5">
+      <Text variant="caption" tone={lastSync.result === 'SUCCESS' ? 'muted' : 'warning'}>
+        {`Última tentativa: ${formatDateTime(lastSync.startedAt)} — ${SYNC_RESULT_LABELS[lastSync.result]}.`}
+      </Text>
+      {lastSync.result !== 'SUCCESS' ? (
+        <Text variant="caption" tone="muted">
+          {lastSync.lastSuccessfulAt === null
+            ? 'Nenhuma sincronização completa neste aparelho ainda.'
+            : `Última sincronização completa: ${formatDateTime(lastSync.lastSuccessfulAt)}`}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function SyncScreen() {
   const router = useRouter();
   const pending = usePendingOperationsCount();
-  const lastSync = useLastSuccessfulSync();
+  const lastSync = useLastSync();
   const unsent = useInspectionList(UNSENT);
 
   return (
@@ -61,11 +84,7 @@ export function SyncScreen() {
                           'registros aguardando envio'
                         )}
               </Text>
-              <Text variant="caption" tone="muted">
-                {lastSync.data == null
-                  ? 'Nenhuma sincronização completa neste aparelho ainda.'
-                  : `Última sincronização completa: ${formatDateTime(lastSync.data)}`}
-              </Text>
+              <LastSyncLines lastSync={lastSync.data} />
               <SyncNowButton />
             </Card>
 

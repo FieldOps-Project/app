@@ -860,11 +860,26 @@ export async function recordSyncRun(
   );
 }
 
-export async function readLastSuccessfulSync(ownerUserId: string): Promise<string | null> {
+export interface LastSync {
+  readonly startedAt: string | null;
+  readonly result: 'SUCCESS' | 'PARTIAL' | 'FAILED' | null;
+  readonly lastSuccessfulAt: string | null;
+}
+
+export async function readLastSync(ownerUserId: string): Promise<LastSync> {
   const database = await getDatabase();
-  const row = await database.getFirstAsync<{ last_successful_sync: string | null }>(
-    'SELECT last_successful_sync FROM sync_metadata WHERE owner_user_id = ?',
+  const row = await database.getFirstAsync<{
+    last_sync_started_at: string | null;
+    last_sync_result: LastSync['result'];
+    last_successful_sync: string | null;
+  }>(
+    `SELECT last_sync_started_at, last_sync_result, last_successful_sync
+       FROM sync_metadata WHERE owner_user_id = ?`,
     ownerUserId
   );
-  return row?.last_successful_sync ?? null;
+  return {
+    startedAt: row?.last_sync_started_at ?? null,
+    result: row?.last_sync_result ?? null,
+    lastSuccessfulAt: row?.last_successful_sync ?? null,
+  };
 }
