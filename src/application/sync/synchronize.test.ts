@@ -132,7 +132,11 @@ describe('synchronize', () => {
     queue([refused, submit, other]);
     const api = gateway({
       putResponse: jest.fn(async () =>
-        fail({ kind: 'business' as const, code: 'RESPONSE_INVALID', message: 'Valor inválido.' })
+        fail({
+          kind: 'business' as const,
+          code: 'VALIDATION_ERROR',
+          message: 'value must be a number',
+        })
       ),
     });
 
@@ -141,7 +145,7 @@ describe('synchronize', () => {
     expect(markFailed).toHaveBeenCalledWith(
       refused,
       'FAILED',
-      'Valor inválido.',
+      'Alguma informação enviada não é válida. Revise e tente novamente.',
       expect.any(String)
     );
     expect(api.submit).not.toHaveBeenCalled();
@@ -241,7 +245,7 @@ describe('ordering', () => {
         fail({
           kind: 'business' as const,
           code: 'INSPECTION_REQUIRED_ITEMS_MISSING',
-          message: 'Há itens obrigatórios sem resposta.',
+          message: 'required items are missing',
         })
       ),
     });
@@ -250,7 +254,7 @@ describe('ordering', () => {
 
     expect(reopenAfterRefusedSubmit).toHaveBeenCalledWith(
       submit,
-      'Há itens obrigatórios sem resposta.',
+      'Há itens obrigatórios sem resposta. Volte ao checklist e complete as pendências.',
       expect.any(String)
     );
     expect(markFailed).not.toHaveBeenCalled();

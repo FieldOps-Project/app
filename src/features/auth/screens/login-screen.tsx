@@ -82,7 +82,7 @@ export function LoginScreen() {
         />
 
         {failure === null ? null : isNetworkFailure(failure) ? (
-          <OfflineNotice message="Sem conexão com a API. Verifique a internet e tente novamente." />
+          <OfflineNotice message="Sem conexão com o servidor. Verifique a internet e tente novamente." />
         ) : (
           <Text variant="body" tone="danger">
             {describeLoginFailure(failure)}
