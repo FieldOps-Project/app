@@ -31,7 +31,7 @@ const SIGNED_IN = { session: { user: { id: 'u-1' } }, isRestoring: false };
 const SIGNED_OUT = { session: null, isRestoring: false };
 const RESTORING = { session: null, isRestoring: true };
 
-function kinds(element: React.ReactElement): { redirect: string | null; stack: boolean } {
+function outcomeOf(element: React.ReactElement): { redirect: string | null; stack: boolean } {
   const renderer = render(element);
   const redirect = renderer.root.findAllByType('Redirect' as never)[0];
   return {
@@ -44,13 +44,13 @@ describe('protected routes', () => {
   it('sends a visitor without a session to the login', () => {
     mockSession.current = SIGNED_OUT;
 
-    expect(kinds(createElement(ProtectedLayout))).toEqual({ redirect: '/login', stack: false });
+    expect(outcomeOf(createElement(ProtectedLayout))).toEqual({ redirect: '/login', stack: false });
   });
 
   it('opens the screens for a valid session', () => {
     mockSession.current = SIGNED_IN;
 
-    expect(kinds(createElement(ProtectedLayout))).toEqual({ redirect: null, stack: true });
+    expect(outcomeOf(createElement(ProtectedLayout))).toEqual({ redirect: null, stack: true });
   });
 
   it('waits for the stored session before deciding, never flashing the login', () => {
@@ -67,13 +67,13 @@ describe('public routes', () => {
   it('sends a signed-in person away from the login', () => {
     mockSession.current = SIGNED_IN;
 
-    expect(kinds(createElement(PublicLayout))).toEqual({ redirect: '/', stack: false });
+    expect(outcomeOf(createElement(PublicLayout))).toEqual({ redirect: '/', stack: false });
   });
 
   it('shows the login to a visitor', () => {
     mockSession.current = SIGNED_OUT;
 
-    expect(kinds(createElement(PublicLayout))).toEqual({ redirect: null, stack: true });
+    expect(outcomeOf(createElement(PublicLayout))).toEqual({ redirect: null, stack: true });
   });
 
   it('waits for the stored session before deciding', () => {

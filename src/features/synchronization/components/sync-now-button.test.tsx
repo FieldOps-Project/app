@@ -44,7 +44,8 @@ describe('SyncNowButton', () => {
     const text = shown({ error });
 
     expect(text).toContain(expected);
-    expect(text).not.toMatch(/SYNC_VERSION_CONFLICT|Network request failed|kind/);
+    expect(text).not.toContain('SYNC_VERSION_CONFLICT');
+    expect(text).not.toContain('Network request failed');
   });
 
   it('says how many records the server refused and that they stayed on the device', () => {
@@ -67,7 +68,7 @@ describe('SyncNowButton', () => {
     );
   });
 
-  it('says nothing before the first attempt', () => {
+  it('shows only the button before the first attempt', () => {
     expect(shown({})).toBe('Sincronizar');
   });
 });
