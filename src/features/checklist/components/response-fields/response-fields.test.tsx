@@ -1,14 +1,14 @@
 import { act } from 'react';
-import { create, type ReactTestRenderer } from 'react-test-renderer';
+import type { ReactTestRenderer } from 'react-test-renderer';
 
+import { Input } from '@/design-system/components/input';
 import { OptionButton } from '@/design-system/components/option-button';
 import { RESPONSE_TYPES, type ChecklistItem, type ResponseType } from '@/domain/checklist';
 import { responseFieldFor } from '@/features/checklist/components/response-fields';
 import { ConformityField } from '@/features/checklist/components/response-fields/choice-fields';
-import { TEXT_LONG_MAX, TEXT_SHORT_MAX } from '@/schemas/checklist-response';
 import { UnsupportedField } from '@/features/checklist/components/response-fields/unsupported-field';
-
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+import { TEXT_LONG_MAX, TEXT_SHORT_MAX } from '@/schemas/checklist-response';
+import { render } from '@/testing/render';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
@@ -32,14 +32,6 @@ const ITEM: ChecklistItem = {
   itemOrder: 1,
 };
 
-function render(element: React.ReactElement): ReactTestRenderer {
-  let renderer: ReactTestRenderer | undefined;
-  act(() => {
-    renderer = create(element);
-  });
-  return renderer!;
-}
-
 function options(renderer: ReactTestRenderer) {
   return renderer.root.findAllByType(OptionButton);
 }
@@ -60,10 +52,9 @@ describe('responseFieldFor', () => {
 function drawField(responseType: string, overrides: Partial<ChecklistItem> = {}) {
   const item = { ...ITEM, responseType, ...overrides };
   const Field = responseFieldFor(responseType);
-  const renderer = render(
+  return render(
     <Field item={item} value={null} onChange={jest.fn()} onCommit={jest.fn()} disabled={false} />
   );
-  return renderer;
 }
 
 function draw(responseType: string, overrides: Partial<ChecklistItem> = {}): string {
@@ -82,12 +73,22 @@ describe('rendering of each item type', () => {
   };
 
   it.each(RESPONSE_TYPES)('shows the answer controls of %s', (responseType) => {
-    const drawn = draw(responseType, { options: ['Aço', 'Alumínio'] });
+    const renderer = drawField(responseType, { options: ['Aço', 'Alumínio'] });
+    const drawn = JSON.stringify(renderer.toJSON());
 
     for (const text of EXPECTED[responseType]) {
       expect(drawn).toContain(text);
     }
-    expect(drawn).not.toContain('incompatível');
+    expect(renderer.root.findAllByType(UnsupportedField)).toHaveLength(0);
+  });
+
+  it('gives each text-like type its own kind of input', () => {
+    const inputOf = (responseType: ResponseType) =>
+      drawField(responseType).root.findByType(Input).props;
+
+    expect(inputOf('TEXT_SHORT').multiline).toBeUndefined();
+    expect(inputOf('TEXT_LONG').multiline).toBe(true);
+    expect(inputOf('NUMBER').keyboardType).toBe('decimal-pad');
   });
 
   it('shows the range of a number item', () => {

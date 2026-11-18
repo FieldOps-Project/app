@@ -1,3 +1,5 @@
+import { Linking } from 'react-native';
+
 import { Button } from '@/design-system/components/button';
 import { LocationConsent } from '@/features/location/components/location-consent';
 import type { LocationPermissionState } from '@/infrastructure/location/capture-location';
@@ -34,8 +36,13 @@ describe('LocationConsent', () => {
   });
 
   it('points to the settings only when the system will not ask again', () => {
+    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
     mockPermission.current = 'blocked';
-    expect(render(<LocationConsent moment="start" />).root.findAllByType(Button)).toHaveLength(1);
+    const blocked = render(<LocationConsent moment="start" />).root.findAllByType(Button);
+
+    expect(blocked.map((button) => button.props.label)).toEqual(['Permitir nas configurações']);
+    blocked[0]?.props.onPress();
+    expect(openSettings).toHaveBeenCalledTimes(1);
 
     mockPermission.current = 'denied';
     expect(render(<LocationConsent moment="start" />).root.findAllByType(Button)).toHaveLength(0);
