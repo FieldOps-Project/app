@@ -3,7 +3,7 @@ import type { ApiFailure } from '@/infrastructure/api';
 import { render, renderedText } from '@/testing/render';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
-jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'development' } }));
+jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 
 interface SyncState {
   isPending: boolean;

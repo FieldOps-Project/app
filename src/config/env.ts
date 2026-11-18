@@ -1,12 +1,23 @@
 import { z } from 'zod';
 
+export const APP_ENVIRONMENTS = ['local', 'integration', 'demo', 'production'] as const;
+
+export type AppEnvironment = (typeof APP_ENVIRONMENTS)[number];
+
+export const ENVIRONMENT_LABELS: Readonly<Record<AppEnvironment, string>> = {
+  local: 'Local',
+  integration: 'Integração',
+  demo: 'Demonstração',
+  production: 'Produção',
+};
+
 const environmentSchema = z.object({
   apiUrl: z
     .url({
       message: 'EXPO_PUBLIC_API_URL precisa ser uma URL absoluta, como http://192.168.0.10:8080',
     })
     .transform((url) => url.replace(/\/+$/, '')),
-  appEnv: z.enum(['development', 'staging', 'production']).default('development'),
+  appEnv: z.enum(APP_ENVIRONMENTS).default('local'),
   demoInspections: z
     .enum(['true', 'false'])
     .default('false')
@@ -38,4 +49,6 @@ if (!parsed.success) {
 
 export const env: Environment = parsed.data;
 
-export const isDevelopment = env.appEnv === 'development';
+export const isDevelopment = env.appEnv === 'local';
+
+export const isProduction = env.appEnv === 'production';

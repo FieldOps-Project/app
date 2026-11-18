@@ -16,7 +16,7 @@ import {
   type QueuedOperation,
 } from '@/infrastructure/repositories/outbox-repository';
 
-jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'development' } }));
+jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 jest.mock('@/infrastructure/repositories/inspection-repository');
 jest.mock('@/infrastructure/repositories/outbox-repository');
 

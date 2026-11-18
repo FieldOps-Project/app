@@ -1,3 +1,4 @@
+import { appVersion, buildNumber } from '@/config/app-info';
 import { httpClient, request } from '@/infrastructure/api/http-client';
 import {
   fakeAdapter,
@@ -7,7 +8,7 @@ import {
 import { onSessionRejected, refreshClient } from '@/infrastructure/api/token-refresh';
 import { clearTokens, readTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 
-jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'development' } }));
+jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 
 jest.mock('@/infrastructure/storage/token-storage', () => {
   let mockStored: unknown = null;
@@ -178,5 +179,21 @@ describe('httpClient token renewal', () => {
 
     expect(result.ok).toBe(true);
     expect(refreshCalls).toBe(1);
+  });
+});
+
+describe('httpClient app identification', () => {
+  it('tells the server which version and build is calling, for diagnosis', async () => {
+    const seen: Record<string, unknown> = {};
+    httpClient.defaults.adapter = fakeAdapter((config) => {
+      seen.version = config.headers.get('X-App-Version');
+      seen.build = config.headers.get('X-App-Build');
+      return { status: 200, data: {} };
+    });
+
+    await request({ path: '/api/v1/things' });
+
+    expect(seen).toEqual({ version: appVersion, build: buildNumber });
+    expect(appVersion).not.toBe('');
   });
 });

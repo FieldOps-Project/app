@@ -5,6 +5,7 @@ import { Pressable, View } from 'react-native';
 
 import { useHomeOverview } from '@/application/inspections/use-home-overview';
 import { useSession } from '@/application/session/session-context';
+import { EnvironmentBadge } from '@/components/environment-badge';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
 import { ErrorState } from '@/design-system/components/error-state';
@@ -31,6 +32,7 @@ export function HomeScreen() {
   return (
     <Screen scrollable>
       <View className="gap-1">
+        <EnvironmentBadge />
         <Text variant="title">Olá, {firstName}</Text>
         <Text variant="body" tone="muted">
           {new Date().toLocaleDateString('pt-BR', {

@@ -6,6 +6,7 @@ import {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
+import { appVersion, buildNumber } from '@/config/app-info';
 import { env } from '@/config/env';
 import { fail, ok, type Result } from '@/domain/result';
 import { parseApiErrorBody } from '@/infrastructure/api/api-error';
@@ -19,7 +20,11 @@ const REQUEST_TIMEOUT_MS = 15_000;
 export const httpClient: AxiosInstance = createAxiosInstance({
   baseURL: env.apiUrl,
   timeout: REQUEST_TIMEOUT_MS,
-  headers: { Accept: 'application/json' },
+  headers: {
+    Accept: 'application/json',
+    'X-App-Version': appVersion,
+    'X-App-Build': buildNumber,
+  },
 });
 
 httpClient.interceptors.request.use(async (config) => {
