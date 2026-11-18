@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { useSession } from '@/application/session/session-context';
+import { EnvironmentBadge } from '@/components/environment-badge';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
 import { Input } from '@/design-system/components/input';
@@ -47,6 +48,7 @@ export function LoginScreen() {
   return (
     <Screen scrollable className="justify-center">
       <View className="gap-1">
+        <EnvironmentBadge />
         <Text variant="title">FieldOps</Text>
         <Text variant="body" tone="muted">
           Entre para acessar suas inspeções.

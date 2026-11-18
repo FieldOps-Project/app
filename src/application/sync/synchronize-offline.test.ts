@@ -23,7 +23,7 @@ import {
   remoteInspection,
 } from '@/infrastructure/repositories/testing/inspection-fixtures';
 
-jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'development' } }));
+jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 jest.mock('@/infrastructure/storage/token-storage', () => ({
   readTokens: jest.fn(async () => null),
 }));

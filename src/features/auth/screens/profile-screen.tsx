@@ -1,6 +1,9 @@
 import { useState } from 'react';
 
+import { useDeviceId } from '@/application/device/use-device-id';
 import { useSession } from '@/application/session/session-context';
+import { ENVIRONMENT_LABELS, env } from '@/config/env';
+import { appVersionLabel } from '@/config/app-info';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
 import { Screen } from '@/design-system/components/screen';
@@ -11,6 +14,7 @@ export function ProfileScreen() {
   const { session, signOut } = useSession();
   const [isConfirming, setIsConfirming] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const deviceId = useDeviceId();
 
   async function leave() {
     setIsLeaving(true);
@@ -41,6 +45,24 @@ export function ProfileScreen() {
         </Text>
         <Text variant="caption" tone="muted">
           A sessão fica no armazenamento seguro do aparelho e sobrevive ao reinício do aplicativo.
+        </Text>
+      </Card>
+
+      <Card title="Este aparelho">
+        <Text variant="body">{`Versão ${appVersionLabel}`}</Text>
+        <Text variant="body" tone="muted">
+          {`Ambiente: ${ENVIRONMENT_LABELS[env.appEnv]}`}
+        </Text>
+        <Text variant="caption" tone="muted">
+          Identificador do aparelho
+        </Text>
+        <Text variant="code" selectable>
+          {deviceId.isError
+            ? 'Não foi possível ler o identificador'
+            : (deviceId.data ?? 'Lendo...')}
+        </Text>
+        <Text variant="caption" tone="muted">
+          Informe a versão e o identificador ao suporte se algo não funcionar.
         </Text>
       </Card>
 

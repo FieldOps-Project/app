@@ -10,7 +10,7 @@ import {
 } from '@/infrastructure/api/token-refresh';
 import { clearTokens, readTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 
-jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'development' } }));
+jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 
 jest.mock('@/infrastructure/storage/token-storage', () => {
   let mockStored: unknown = null;

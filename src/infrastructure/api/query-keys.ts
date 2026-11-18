@@ -1,6 +1,10 @@
 export const queryKeys = {
   health: () => ['api', 'health'] as const,
 
+  device: {
+    id: () => ['device', 'id'] as const,
+  },
+
   inspections: {
     all: () => ['inspections'] as const,
     list: (filters?: Record<string, unknown>) =>

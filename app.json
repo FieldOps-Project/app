@@ -2,24 +2,32 @@
   "expo": {
     "name": "FieldOps",
     "slug": "fieldops-app",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fieldops",
     "userInterfaceStyle": "automatic",
     "android": {
-      "package": "br.com.fieldops.app",
+      "package": "com.fieldops.app",
       "adaptiveIcon": {
         "backgroundColor": "#1D5FD0",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.VIBRATE"
+      ]
     },
     "ios": {
-      "bundleIdentifier": "br.com.fieldops.app",
-      "supportsTablet": false
+      "bundleIdentifier": "com.fieldops.app",
+      "supportsTablet": false,
+      "buildNumber": "1"
     },
     "web": {
       "output": "static",

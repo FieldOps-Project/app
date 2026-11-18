@@ -10,7 +10,7 @@ import { refreshClient, refreshSession } from '@/infrastructure/api/token-refres
 import { clearSession, readSession, writeSession } from '@/infrastructure/storage/session-storage';
 import { clearTokens, readTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 
-jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'development' } }));
+jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 
 jest.mock('@/infrastructure/api', () => ({
   ...jest.requireActual('@/infrastructure/api'),

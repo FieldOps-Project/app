@@ -1,5 +1,5 @@
 import { act } from 'react';
-import { type ReactTestRenderer } from 'react-test-renderer';
+import { create, type ReactTestRenderer } from 'react-test-renderer';
 
 import type { InspectionDetailState } from '@/application/inspections/use-inspection-detail';
 import { Input } from '@/design-system/components/input';
@@ -7,7 +7,7 @@ import type { ChecklistItem, ChecklistResponse } from '@/domain/checklist';
 import { computeProgress } from '@/domain/checklist-progress';
 import type { InspectionDetail } from '@/domain/inspection';
 import { ChecklistScreen } from '@/features/checklist/screens/checklist-screen';
-import { render } from '@/testing/render';
+import '@/testing/render';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
@@ -90,6 +90,20 @@ function ready(answered: ChecklistResponse[]): InspectionDetailState {
   };
 }
 
+let mounted: ReactTestRenderer | null = null;
+
+async function renderSettled(): Promise<ReactTestRenderer> {
+  let renderer: ReactTestRenderer | undefined;
+  await act(async () => {
+    renderer = create(<ChecklistScreen />);
+  });
+  if (renderer === undefined) {
+    throw new Error('A renderização não produziu uma árvore.');
+  }
+  mounted = renderer;
+  return renderer;
+}
+
 function renderedItems(): string[] {
   return Object.keys(mockFieldRenders).sort();
 }
@@ -110,6 +124,12 @@ function observationOf(renderer: ReactTestRenderer, itemId: string) {
   return found;
 }
 
+afterEach(async () => {
+  const screen = mounted;
+  mounted = null;
+  await act(async () => screen?.unmount());
+});
+
 beforeEach(() => {
   for (const key of Object.keys(mockFieldRenders)) {
     delete mockFieldRenders[key];
@@ -117,21 +137,21 @@ beforeEach(() => {
 });
 
 describe('checklist rendering cost', () => {
-  it('renders only a window of a 100-item checklist', () => {
+  it('renders only a window of a 100-item checklist', async () => {
     mockState.current = ready([]);
 
-    render(<ChecklistScreen />);
+    await renderSettled();
 
     expect(renderedItems().length).toBeGreaterThan(0);
     expect(renderedItems().length).toBeLessThan(ITEM_COUNT / 4);
   });
 
-  it('does not re-render the neighbours while typing in one item', () => {
+  it('does not re-render the neighbours while typing in one item', async () => {
     mockState.current = ready([]);
-    const renderer = render(<ChecklistScreen />);
+    const renderer = await renderSettled();
     const before = snapshotRenders();
 
-    act(() => {
+    await act(async () => {
       observationOf(renderer, 'item-1').props.onChangeText('Vazamento na junta');
     });
 
@@ -140,13 +160,13 @@ describe('checklist rendering cost', () => {
     expect(changed).toEqual(['item-1']);
   });
 
-  it('re-renders only the item whose answer changed once it is saved', () => {
+  it('re-renders only the item whose answer changed once it is saved', async () => {
     mockState.current = ready([]);
-    const renderer = render(<ChecklistScreen />);
+    const renderer = await renderSettled();
     const before = snapshotRenders();
 
     mockState.current = ready([answer('item-1')]);
-    act(() => {
+    await act(async () => {
       renderer.update(<ChecklistScreen />);
     });
 

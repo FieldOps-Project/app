@@ -7,7 +7,7 @@ import { openTestDatabase } from '@/infrastructure/database/testing/node-sqlite'
 import { saveDownloadedInspection } from '@/infrastructure/repositories/inspection-repository';
 import type { MobileInspection } from '@/schemas/mobile-inspection';
 
-jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'development' } }));
+jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 jest.mock('@/infrastructure/database/database', () => ({
   ...jest.requireActual('@/infrastructure/database/database'),
   getDatabase: jest.fn(),

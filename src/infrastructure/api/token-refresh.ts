@@ -3,6 +3,7 @@ import { create as createAxiosInstance, isAxiosError } from 'axios';
 import { env } from '@/config/env';
 import type { ApiFailure } from '@/infrastructure/api/api-failure';
 import { AUTH_PATHS } from '@/infrastructure/api/auth-paths';
+import { CLIENT_HEADERS } from '@/infrastructure/api/client-headers';
 import { clearTokens, readTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 import type { AuthTokens } from '@/infrastructure/storage/token-storage';
 
@@ -11,7 +12,7 @@ const REFRESH_TIMEOUT_MS = 15_000;
 export const refreshClient = createAxiosInstance({
   baseURL: env.apiUrl,
   timeout: REFRESH_TIMEOUT_MS,
-  headers: { Accept: 'application/json' },
+  headers: CLIENT_HEADERS,
 });
 
 export type UnreachableFailure = Extract<ApiFailure['kind'], 'network' | 'server'>;
