@@ -270,7 +270,8 @@ parte de um banco limpo e não depende da ordem de execução.
   lugar do servidor, com o cliente HTTP e o gateway reais: sem conexão, tempo limite, 401, 409
   e erro 5xx.
 - **Fixtures compartilhadas** da inspeção baixada e da resposta ficam em
-  [`inspection-fixtures.ts`](src/infrastructure/repositories/testing/inspection-fixtures.ts).
+  [`inspection-fixtures.ts`](src/infrastructure/repositories/testing/inspection-fixtures.ts), e o
+  helper de renderização dos testes de tela em [`src/testing/render.ts`](src/testing/render.ts).
 
 Cobertura dos doze testes prioritários do documento
 [13 - Aplicativo Mobile](https://github.com/FieldOps-Project/docs/blob/main/notion/13-aplicativo-mobile.md)
