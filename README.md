@@ -74,9 +74,9 @@ branco sobre o azul primário `#1d5fd0`. O Android recebe o ícone adaptativo (p
 fundo e monocromático) e o `expo prebuild` gera todas as densidades (`mipmap-mdpi` a
 `mipmap-xxxhdpi`).
 
-**Permissões.** Só câmera, localização (precisa e aproximada) e internet. O `app.json` bloqueia
+**Permissões.** Só câmera, localização (precisa e aproximada), internet e estado da rede (`ACCESS_NETWORK_STATE`, que o NetInfo acrescenta na montagem do Gradle e o aplicativo usa para saber se está offline). O `app.json` bloqueia
 `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `SYSTEM_ALERT_WINDOW` e `VIBRATE`, que o Expo
-acrescenta por padrão e o aplicativo não usa. O manifesto gerado por `expo prebuild --platform
+acrescenta por padrão, e `ACCESS_WIFI_STATE`, que o NetInfo traz e o aplicativo não usa. O manifesto gerado por `expo prebuild --platform
 android` ficou assim na verificação de 18/11/2026 (feita à mão, fora do CI):
 
 ```text
@@ -150,6 +150,26 @@ API --(download)--> SQLite <--(leitura)-- telas
   remove tokens e senhas e limita o tamanho.
 - Uploads e remoções de evidência ficam na fila até existir o envio de arquivos (card #25,
   backend#27). As respostas da inspeção continuam sendo enviadas; só a conclusão espera.
+
+### Conectividade e envio automático
+
+- **Offline é modo de operação, não erro.** O `ConnectivityProvider` escuta o NetInfo e um aviso
+  global ("Sem conexão com a internet" ou "Sem acesso ao servidor") aparece no topo de toda tela
+  pelo `Screen`, com ícone, texto e a quantidade de registros aguardando envio (RN-071). Ele só
+  informa: nada é bloqueado e o preenchimento segue, salvo no SQLite.
+- **Conexão não é internet.** Wi-fi sem saída (portal cativo) chega como `isInternetReachable:
+false` e vale como offline. Quando o NetInfo diz que há rede mas uma sincronização ou o download
+  da lista falha por falta de rede, o aplicativo marca o servidor como inacessível; a próxima
+  requisição que passar, ou qualquer mudança de rede, limpa a marca.
+- **Envio automático ao voltar a conexão**, sem repetir a cada oscilação: só dispara depois de 3 s
+  seguidos online, uma vez por retorno, e nunca na abertura do aplicativo nem sem sessão
+  (`AutoSync`, `RECONNECT_STABLE_MS`).
+- **Estado permanente por inspeção**: o selo com os cinco estados do documento 13.8 (salvo no
+  dispositivo, aguardando envio, enviado, falha e conflito, cada um com ícone e texto) fica no
+  cartão da lista, no detalhe, no resumo e agora também no topo do checklist, ao lado de "Cada
+  resposta é salva neste aparelho na hora".
+- O envio em si continua o descrito em "Outbox"; a data e o resultado da última sincronização
+  (RN-072) ficam na tela de sincronização.
 
 ### Evidências fotográficas
 

@@ -1,9 +1,15 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
+import { useConnectivity } from '@/application/connectivity/connectivity-context';
 import { useOwnerUserId } from '@/application/inspections/use-inspections';
 import { refreshInspections, type RefreshOutcome } from '@/application/sync/refresh-inspections';
 import { synchronize, type SyncOutcome } from '@/application/sync/synchronize';
-import { mobileInspectionsGateway, queryKeys, type ApiFailure } from '@/infrastructure/api';
+import {
+  isNetworkFailure,
+  mobileInspectionsGateway,
+  queryKeys,
+  type ApiFailure,
+} from '@/infrastructure/api';
 
 function invalidateLocalReads(queryClient: QueryClient, ownerUserId: string): Promise<void> {
   return Promise.all([
@@ -17,11 +23,13 @@ function invalidateLocalReads(queryClient: QueryClient, ownerUserId: string): Pr
 export function useInspectionsDownload() {
   const ownerUserId = useOwnerUserId();
   const queryClient = useQueryClient();
+  const { reportApiReachable } = useConnectivity();
 
   return useQuery<RefreshOutcome, ApiFailure>({
     queryKey: queryKeys.synchronization.download(ownerUserId),
     queryFn: async () => {
       const result = await refreshInspections(ownerUserId, mobileInspectionsGateway);
+      reportApiReachable(result.ok || !isNetworkFailure(result.error));
       if (!result.ok) {
         throw result.error;
       }
@@ -36,10 +44,12 @@ export function useInspectionsDownload() {
 export function useSynchronize() {
   const ownerUserId = useOwnerUserId();
   const queryClient = useQueryClient();
+  const { reportApiReachable } = useConnectivity();
 
   return useMutation<SyncOutcome, ApiFailure>({
     mutationFn: async () => {
       const result = await synchronize(ownerUserId, mobileInspectionsGateway);
+      reportApiReachable(result.ok || !isNetworkFailure(result.error));
       if (!result.ok) {
         throw result.error;
       }

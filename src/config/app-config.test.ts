@@ -59,6 +59,7 @@ describe('permissions', () => {
         'android.permission.WRITE_EXTERNAL_STORAGE',
         'android.permission.SYSTEM_ALERT_WINDOW',
         'android.permission.VIBRATE',
+        'android.permission.ACCESS_WIFI_STATE',
       ])
     );
   });

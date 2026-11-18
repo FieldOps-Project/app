@@ -63,7 +63,12 @@ const ITEMS: ChecklistItem[] = Array.from({ length: ITEM_COUNT }, (_, index) => 
   itemOrder: index + 1,
 }));
 
-const DETAIL = { id: 'insp-1', status: 'IN_PROGRESS', review: null } as unknown as InspectionDetail;
+const DETAIL = {
+  id: 'insp-1',
+  status: 'IN_PROGRESS',
+  syncState: 'salvo-no-dispositivo',
+  review: null,
+} as unknown as InspectionDetail;
 
 function answer(itemId: string): ChecklistResponse {
   return {
