@@ -49,7 +49,7 @@ arquivo `.env` **não é versionado**.
 | Variável                       | Obrigatória | Descrição                                                                               |
 | ------------------------------ | ----------- | --------------------------------------------------------------------------------------- |
 | `EXPO_PUBLIC_API_URL`          | Sim         | URL base da API REST, sem barra no final                                                |
-| `EXPO_PUBLIC_APP_ENV`          | Não         | `development` (padrão), `staging` ou `production`                                       |
+| `EXPO_PUBLIC_APP_ENV`          | Não         | `local` (padrão), `integration`, `demo` ou `production`                                 |
 | `EXPO_PUBLIC_DEMO_INSPECTIONS` | Não         | `true` serve as inspeções do técnico a partir de dados de demonstração (padrão `false`) |
 
 > **Tudo que começa com `EXPO_PUBLIC_` é embutido no bundle** e fica legível para qualquer
@@ -65,6 +65,51 @@ que corrigir, em vez de quebrar depois com um erro de rede confuso.
 Variáveis `EXPO_PUBLIC_` são resolvidas no momento do bundle. Depois de editar o `.env`,
 reinicie com `npx expo start --clear` — alterar o arquivo com o Metro em execução não tem
 efeito.
+
+## Identidade, versão e ambientes
+
+**Identidade.** Nome `FieldOps`, identificador `com.fieldops.app` (Android e iOS), orientação
+retrato. O ícone e a tela de abertura usam o braço robótico, a mesma marca do painel web, em
+branco sobre o azul primário `#1d5fd0`. O Android recebe o ícone adaptativo (primeiro plano,
+fundo e monocromático) e o `expo prebuild` gera todas as densidades (`mipmap-mdpi` a
+`mipmap-xxxhdpi`).
+
+**Permissões.** Só câmera, localização (precisa e aproximada) e internet. O `app.json` bloqueia
+`READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `SYSTEM_ALERT_WINDOW` e `VIBRATE`, que o Expo
+acrescenta por padrão e o aplicativo não usa. O manifesto gerado por `expo prebuild --platform
+android` fica assim:
+
+```text
+ACCESS_COARSE_LOCATION  ACCESS_FINE_LOCATION  CAMERA  INTERNET
+READ/WRITE_EXTERNAL_STORAGE, SYSTEM_ALERT_WINDOW, VIBRATE  -> tools:node="remove"
+```
+
+**Versão.** `version` (`1.0.0`) é a versão legível, definida no `app.json`. O número de build é
+incrementado pelo EAS a cada build distribuível (`appVersionSource: remote` e `autoIncrement` no
+[`eas.json`](eas.json)); `android.versionCode` e `ios.buildNumber` do `app.json` são só o ponto de
+partida. O aplicativo lê a versão e o build reais do binário (`expo-application`), mostra os dois
+na tela de perfil e os envia em todas as requisições, nos cabeçalhos `X-App-Version` e
+`X-App-Build`, para o suporte e a API saberem quem está chamando (documento 12.18).
+
+**Ambientes** (documento 11.12). Cada perfil de build do `eas.json` fixa o ambiente e a URL da
+API, então trocar de ambiente é escolher o perfil, sem alterar código:
+
+| Perfil        | `EXPO_PUBLIC_APP_ENV` | API                                                   |
+| ------------- | --------------------- | ----------------------------------------------------- |
+| `local`       | `local`               | `http://10.0.2.2:8080` (emulador Android)             |
+| `integration` | `integration`         | `https://api.integracao.fieldops.example` (a definir) |
+| `demo`        | `demo`                | `https://api.demo.fieldops.example` (a definir)       |
+| `production`  | `production`          | `https://api.fieldops.example` (a definir)            |
+
+As URLs de integração, demonstração e produção são endereços reservados (`.example`) até existir
+um servidor publicado; troque-as no `eas.json` quando o ambiente existir. Em desenvolvimento, o
+`.env` continua valendo. Fora de `production`, o início, o login e o perfil mostram o ambiente,
+para ninguém confundir dado de teste com dado real. A tela de perfil também mostra o
+identificador do aparelho, um UUID gerado na primeira abertura e guardado no `expo-secure-store`,
+que o suporte pode pedir.
+
+Nada sensível vai para o bundle: os perfis só definem variáveis `EXPO_PUBLIC_`, e um teste
+([`app-config.test.ts`](src/config/app-config.test.ts)) falha se aparecer outra coisa.
 
 ## Dados no aparelho (SQLite)
 
