@@ -490,6 +490,74 @@ describe('answer integrity (RN-035, RN-036)', () => {
   });
 });
 
+describe('evidence of a locked inspection (RN-049)', () => {
+  async function completed() {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer(),
+    });
+    await registerEvidence({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      inspectionItemId: 'item-1',
+      evidenceId: 'ev-1',
+      createdAtDevice: NOW,
+      file: {
+        operationId: 'op-ev',
+        photoPath: 'ev-1.jpg',
+        thumbnailPath: 'ev-1-t.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1000,
+      },
+    });
+    await completeInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-submit',
+      completedAtDevice: NOW,
+      location: DENIED,
+    });
+  }
+
+  it('refuses a new photo and the removal of an existing one once the inspection is completed', async () => {
+    await completed();
+
+    await expect(
+      registerEvidence({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        inspectionItemId: 'item-1',
+        evidenceId: 'ev-2',
+        createdAtDevice: NOW,
+        file: {
+          operationId: 'op-ev2',
+          photoPath: 'ev-2.jpg',
+          thumbnailPath: 'ev-2-t.jpg',
+          mimeType: 'image/jpeg',
+          sizeBytes: 1000,
+        },
+      })
+    ).rejects.toBeInstanceOf(InspectionStateError);
+    await expect(
+      discardEvidence({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        evidenceId: 'ev-1',
+        operationId: 'op-discard',
+        discardedAtDevice: NOW,
+      })
+    ).rejects.toBeInstanceOf(InspectionStateError);
+
+    const photos = await database.getFirstAsync<{ total: number }>(
+      'SELECT COUNT(*) AS total FROM evidences'
+    );
+    expect(photos?.total).toBe(1);
+  });
+});
+
 describe('a server that already approved the inspection (RN-076)', () => {
   it('keeps the unsent work, locks the inspection and says why', async () => {
     await started();

@@ -151,6 +151,29 @@ API --(download)--> SQLite <--(leitura)-- telas
 - Uploads e remoções de evidência ficam na fila até existir o envio de arquivos (card #25,
   backend#27). As respostas da inspeção continuam sendo enviadas; só a conclusão espera.
 
+### Regras aplicadas no repositório, não só na tela
+
+O repositório é a última barreira antes do SQLite, então as regras que protegem o dado não
+dependem de a tela estar certa:
+
+- **Conclusão (RN-037, RN-038, RN-039).** `completeInspection` recalcula o progresso dentro da
+  transação e recusa se houver item obrigatório sem resposta, observação exigida na não
+  conformidade ou evidência exigida pelo item. A regra das não conformidades críticas (RN-055)
+  continua ao lado.
+- **Resposta (RN-035, RN-036).** `saveResponse` recusa uma resposta a um item de outra inspeção,
+  um valor que não combina com o tipo do item, número fora do intervalo, opção que não existe,
+  data impossível e texto acima do limite (`schemas/response-integrity.ts`).
+- **Evidência (RN-049).** Incluir ou remover foto só é aceito com a inspeção em andamento.
+- **Servidor que já aprovou (RN-076).** Se o servidor aprovou uma inspeção que tem registro local
+  não enviado, o app trava a inspeção, marca conflito e explica; o dado local fica guardado.
+- **Aparelho compartilhado (RN-004).** O trabalho não enviado de um técnico nunca é sobrescrito
+  pelo download de outro. Uma inspeção sem pendência passa ao técnico para quem foi reatribuída.
+- **Usuário inativo (RN-001).** O 401 com `AUTH_USER_INACTIVE` vira "Seu acesso está desativado
+  ou bloqueado", e não "E-mail ou senha inválidos".
+- **Última sincronização (RN-072).** A tela de sincronização mostra data e resultado da última
+  tentativa (tudo sincronizado, parcial ou não concluída) e, se ela não foi completa, a data da
+  última que foi.
+
 ### Conectividade e envio automático
 
 - **Offline é modo de operação, não erro.** O `ConnectivityProvider` escuta o NetInfo e um aviso
