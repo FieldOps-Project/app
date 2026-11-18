@@ -5,6 +5,7 @@ import { FlatList, Keyboard, KeyboardAvoidingView, Platform, View } from 'react-
 
 import { useInspectionDraft } from '@/application/inspection-draft/inspection-draft-context';
 import { describeLocalFailure } from '@/application/inspections/describe-local-failure';
+import { useNonConformities } from '@/application/non-conformities/use-non-conformities';
 import { useSaveAnswer } from '@/application/inspections/use-checklist-actions';
 import {
   useInspectionDetail,
@@ -89,12 +90,22 @@ function Checklist({ work }: { work: InspectionWork }) {
   const listRef = useRef<FlatList<Row>>(null);
   const { focusedItemFor, focusItem } = useInspectionDraft();
   const saveAnswer = useSaveAnswer(detail.id);
+  const nonConformities = useNonConformities(detail.id);
   const [showPending, setShowPending] = useState(false);
   const headerHeight = useHeaderHeight();
 
   const editable = canEditAnswers(detail.status);
   const focusedItemId = focusedItemFor(detail.id);
   const rows = useMemo(() => toRows(items), [items]);
+  const nonConformityCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of nonConformities.data ?? []) {
+      if (entry.inspectionItemId !== null) {
+        counts.set(entry.inspectionItemId, (counts.get(entry.inspectionItemId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [nonConformities.data]);
   const toCorrect = useMemo(
     () => new Set(detail.status === 'REJECTED' ? (detail.review?.itemsToCorrect ?? []) : []),
     [detail.status, detail.review]
@@ -131,6 +142,16 @@ function Checklist({ work }: { work: InspectionWork }) {
     focusItem(detail.id, itemId);
     leaveTo(() =>
       router.push({ pathname: '/evidence/capture', params: { inspectionId: detail.id, itemId } })
+    );
+  });
+
+  const registerNonConformity = useStableCallback((itemId: string) => {
+    focusItem(detail.id, itemId);
+    leaveTo(() =>
+      router.push({
+        pathname: '/inspections/[inspectionId]/non-conformities',
+        params: { inspectionId: detail.id, itemId },
+      })
     );
   });
 
@@ -273,8 +294,10 @@ function Checklist({ work }: { work: InspectionWork }) {
                 toCorrect={toCorrect.has(row.item.id)}
                 editable={editable}
                 focused={row.item.id === focusedItemId}
+                nonConformityCount={nonConformityCounts.get(row.item.id) ?? 0}
                 onSave={save}
                 onCaptureEvidence={captureEvidence}
+                onRegisterNonConformity={registerNonConformity}
                 onOpenEvidence={openEvidence}
               />
             )

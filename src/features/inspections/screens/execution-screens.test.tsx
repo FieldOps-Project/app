@@ -39,6 +39,10 @@ jest.mock('@/application/inspections/use-execution-actions', () => ({
     error: null,
   }),
 }));
+const mockNonConformities: { current: { data: unknown[] } } = { current: { data: [] } };
+jest.mock('@/application/non-conformities/use-non-conformities', () => ({
+  useNonConformities: () => mockNonConformities.current,
+}));
 jest.mock('@/application/inspection-draft/inspection-draft-context', () => ({
   useInspectionDraft: () => ({ focusedItemFor: () => null, focusItem: jest.fn() }),
 }));
@@ -135,6 +139,7 @@ function texts(renderer: ReactTestRenderer): string {
 beforeEach(() => {
   jest.clearAllMocks();
   mockStartState.current = {};
+  mockNonConformities.current = { data: [] };
 });
 
 describe('InspectionStartScreen', () => {
@@ -180,6 +185,47 @@ describe('InspectionSummaryScreen', () => {
 
     expect(buttonLabels(renderer)).not.toContain('Concluir inspeção');
     expect(texts(renderer)).toContain('Conclusão bloqueada');
+  });
+
+  it('blocks the completion while a critical non-conformity has no evidence', () => {
+    mockState.current = ready({}, [ANSWER]);
+    mockNonConformities.current = {
+      data: [
+        {
+          id: 'nc-1',
+          title: 'Vazamento hidráulico',
+          severity: 'CRITICAL',
+          evidenceCount: 0,
+        },
+      ],
+    };
+    const renderer = render(<InspectionSummaryScreen />);
+
+    expect(buttonLabels(renderer)).not.toContain('Concluir inspeção');
+    expect(texts(renderer)).toContain('Vazamento hidráulico');
+    expect(texts(renderer)).toContain('criticidade crítica ainda não tem evidência');
+    expect(buttonLabels(renderer)).toContain('Fotografar as evidências');
+  });
+
+  it('lets the technician conclude once the critical non-conformity has its evidence', () => {
+    mockState.current = ready({}, [ANSWER]);
+    mockNonConformities.current = {
+      data: [{ id: 'nc-1', title: 'Vazamento hidráulico', severity: 'CRITICAL', evidenceCount: 1 }],
+    };
+    const renderer = render(<InspectionSummaryScreen />);
+
+    expect(buttonLabels(renderer)).toContain('Concluir inspeção');
+  });
+
+  it('never asks for evidence of a non-critical non-conformity', () => {
+    mockState.current = ready({}, [ANSWER]);
+    mockNonConformities.current = {
+      data: [{ id: 'nc-1', title: 'Pintura riscada', severity: 'HIGH', evidenceCount: 0 }],
+    };
+    const renderer = render(<InspectionSummaryScreen />);
+
+    expect(buttonLabels(renderer)).toContain('Concluir inspeção');
+    expect(texts(renderer)).not.toContain('sem evidência');
   });
 
   it('asks for confirmation and says that completing is not sending', () => {

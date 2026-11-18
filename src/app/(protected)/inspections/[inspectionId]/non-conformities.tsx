@@ -1,3 +1,3 @@
-import { NonConformitiesScreen } from '@/features/inspections/screens/non-conformities-screen';
+import { NonConformitiesScreen } from '@/features/non-conformities/screens/non-conformities-screen';
 
 export default NonConformitiesScreen;

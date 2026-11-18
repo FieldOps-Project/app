@@ -29,7 +29,13 @@ const mockDelete = jest.fn();
 const mockDetail: { current: InspectionDetailState } = { current: { state: 'loading' } };
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ replace: mockReplace, push: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({
+    replace: mockReplace,
+    push: jest.fn(),
+    back: jest.fn(),
+    canDismiss: () => false,
+    dismissTo: jest.fn(),
+  }),
   useLocalSearchParams: () => ({ inspectionId: 'insp-1', ...mockParams.current }),
 }));
 jest.mock('expo-camera', () => ({
@@ -179,8 +185,32 @@ describe('preview', () => {
         photo: { uri: 'file:///cache/camera/photo.jpg', width: 4032, height: 3024 },
         description: 'Trinca na base',
       },
-      { onSuccess: mockReturn }
+      { onSuccess: expect.any(Function) }
     );
+    mockAttach.mock.calls[0][1].onSuccess();
+    expect(mockReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches the photo to the non-conformity and goes back to it', () => {
+    mockParams.current = {
+      itemId: 'item-1',
+      photoUri: 'file:///cache/camera/photo.jpg',
+      nonConformityId: 'nc-1',
+    };
+
+    const screen = render(<EvidencePreviewScreen />);
+    press(screen, 'Usar esta foto');
+
+    expect(mockAttach).toHaveBeenCalledWith(
+      expect.objectContaining({ inspectionItemId: 'item-1', nonConformityId: 'nc-1' }),
+      { onSuccess: expect.any(Function) }
+    );
+    mockAttach.mock.calls[0][1].onSuccess();
+    expect(mockReturn).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/inspections/[inspectionId]/non-conformities',
+      params: { inspectionId: 'insp-1' },
+    });
   });
 
   it('throws the photo away and opens the camera again to retake it', () => {
@@ -245,8 +275,10 @@ describe('checklist row', () => {
         toCorrect={false}
         editable
         focused={false}
+        nonConformityCount={0}
         onSave={jest.fn()}
         onCaptureEvidence={jest.fn()}
+        onRegisterNonConformity={jest.fn()}
         onOpenEvidence={onOpenEvidence}
       />
     );
