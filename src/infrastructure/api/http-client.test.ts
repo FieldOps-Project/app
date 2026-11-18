@@ -1,13 +1,17 @@
-import { appVersion, buildNumber } from '@/config/app-info';
 import { httpClient, request } from '@/infrastructure/api/http-client';
 import {
   fakeAdapter,
   RENEWED_TOKENS_BODY,
   type Reply,
 } from '@/infrastructure/api/testing/fake-api';
-import { onSessionRejected, refreshClient } from '@/infrastructure/api/token-refresh';
+import {
+  onSessionRejected,
+  refreshClient,
+  refreshSession,
+} from '@/infrastructure/api/token-refresh';
 import { clearTokens, readTokens, writeTokens } from '@/infrastructure/storage/token-storage';
 
+jest.mock('@/config/app-info', () => ({ appVersion: '2.3.4', buildNumber: '42' }));
 jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'local' } }));
 
 jest.mock('@/infrastructure/storage/token-storage', () => {
@@ -193,7 +197,18 @@ describe('httpClient app identification', () => {
 
     await request({ path: '/api/v1/things' });
 
-    expect(seen).toEqual({ version: appVersion, build: buildNumber });
-    expect(appVersion).not.toBe('');
+    expect(seen).toEqual({ version: '2.3.4', build: '42' });
+  });
+
+  it('identifies the app on the token refresh too, which has its own client', async () => {
+    const seen: unknown[] = [];
+    refreshClient.defaults.adapter = fakeAdapter((config) => {
+      seen.push([config.headers.get('X-App-Version'), config.headers.get('X-App-Build')]);
+      return { status: 200, data: RENEWED_TOKENS_BODY };
+    });
+
+    await refreshSession();
+
+    expect(seen).toEqual([['2.3.4', '42']]);
   });
 });

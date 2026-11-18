@@ -28,7 +28,10 @@ const { expo } = readJson<{
   };
 }>('app.json');
 
-const { build } = readJson<{ build: Record<string, EasProfile> }>('eas.json');
+const { cli, build } = readJson<{
+  cli: { appVersionSource: string };
+  build: Record<string, EasProfile>;
+}>('eas.json');
 
 describe('app identity', () => {
   it('names the app and fixes the package identifier', () => {
@@ -91,7 +94,8 @@ describe('environments', () => {
     urls.forEach((url) => expect(() => new URL(url as string)).not.toThrow());
   });
 
-  it('increments the build number on every distributable build', () => {
+  it('lets EAS own the build number, so every distributable build increments it', () => {
+    expect(cli.appVersionSource).toBe('remote');
     profiles
       .filter(([name]) => name !== 'local')
       .forEach(([, profile]) => expect(profile.autoIncrement).toBe(true));

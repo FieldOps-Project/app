@@ -77,7 +77,7 @@ fundo e monocromático) e o `expo prebuild` gera todas as densidades (`mipmap-md
 **Permissões.** Só câmera, localização (precisa e aproximada) e internet. O `app.json` bloqueia
 `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `SYSTEM_ALERT_WINDOW` e `VIBRATE`, que o Expo
 acrescenta por padrão e o aplicativo não usa. O manifesto gerado por `expo prebuild --platform
-android` fica assim:
+android` ficou assim na verificação de 18/11/2026 (feita à mão, fora do CI):
 
 ```text
 ACCESS_COARSE_LOCATION  ACCESS_FINE_LOCATION  CAMERA  INTERNET
@@ -195,7 +195,7 @@ API --(download)--> SQLite <--(leitura)-- telas
 Os endpoints mobile da API (backend#19, #20 e #21) ainda não existem. Para exercitar as
 telas de ponta a ponta, defina `EXPO_PUBLIC_DEMO_INSPECTIONS=true` no `.env`: as inspeções
 passam a vir de dados em memória no próprio aplicativo, com os mesmos payloads do
-contrato. O login continua indo para a API real. Nunca habilite em staging ou produção.
+contrato. O login continua indo para a API real. Nunca habilite em integração, demonstração ou produção.
 
 ## Apontar para a API na rede local
 
