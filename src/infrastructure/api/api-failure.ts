@@ -17,6 +17,27 @@ export function isNetworkFailure(failure: ApiFailure): failure is { kind: 'netwo
   return failure.kind === 'network';
 }
 
+const GENERIC_BUSINESS_MESSAGE =
+  'O servidor não aceitou esta operação. Revise as informações e tente novamente.';
+
+const BUSINESS_MESSAGES: Readonly<Record<string, string>> = {
+  VALIDATION_ERROR: 'Alguma informação enviada não é válida. Revise e tente novamente.',
+  INVALID_REQUEST: 'Alguma informação enviada não é válida. Revise e tente novamente.',
+  INVALID_COORDINATES: 'A localização registrada não é válida.',
+  INVALID_QR_CODE: 'O código lido não é um QR Code de equipamento válido.',
+  INSPECTION_ALREADY_SUBMITTED: 'Esta inspeção já foi concluída no servidor.',
+  INSPECTION_CANCELED: 'Esta inspeção foi cancelada e não aceita mais registros.',
+  INSPECTION_INVALID_TRANSITION: 'O servidor não aceita esta etapa no estado atual da inspeção.',
+  INSPECTION_REQUIRED_ITEMS_MISSING:
+    'Há itens obrigatórios sem resposta. Volte ao checklist e complete as pendências.',
+  TECHNICIAN_NOT_ELIGIBLE: 'Você não pode executar esta inspeção.',
+  LOCAL_OPERATION_INVALID: 'Um registro deste aparelho está inválido e não pôde ser enviado.',
+};
+
+export function describeBusinessFailure(code: string): string {
+  return BUSINESS_MESSAGES[code] ?? GENERIC_BUSINESS_MESSAGE;
+}
+
 export function describeApiFailure(failure: PresentableApiFailure): string {
   switch (failure.kind) {
     case 'unauthorized':
@@ -28,7 +49,7 @@ export function describeApiFailure(failure: PresentableApiFailure): string {
     case 'conflict':
       return 'Este registro mudou em outro lugar. Recarregue e tente novamente.';
     case 'business':
-      return failure.message;
+      return describeBusinessFailure(failure.code);
     case 'server':
       return 'O servidor está com problemas no momento. Tente novamente em instantes.';
   }

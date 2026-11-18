@@ -103,7 +103,7 @@ describe('LoginScreen', () => {
 
     await submit(renderer);
 
-    expect(renderedText(renderer)).toContain('Sem conexão com a API');
+    expect(renderedText(renderer)).toContain('Sem conexão com o servidor');
   });
 
   it('shows a server fault in plain words, never a code', async () => {

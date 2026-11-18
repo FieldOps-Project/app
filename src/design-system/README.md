@@ -34,22 +34,21 @@ Importe pelo alias `@/`:
 import { Button, Input, Badge, EmptyState } from '@/design-system/components';
 ```
 
-| Componente      | Papel                                                                                                                               |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `Screen`        | Área segura + padding padrão; opção `scrollable`.                                                                                   |
-| `Text`          | Tipografia por `variant` e cor por `tone`.                                                                                          |
-| `Button`        | Ação primária/secundária/perigo; altura mínima de toque; estado `loading`.                                                          |
-| `Input`         | Campo de texto com rótulo, dica e **erro ao lado do campo**.                                                                        |
-| `Card`          | Superfície de conteúdo com título opcional.                                                                                         |
-| `Badge`         | Selo de estado: **cor + ícone + texto**.                                                                                            |
-| `Chip`          | Filtro alternável: seleção por preenchimento, ícone e estado anunciado.                                                             |
-| `List`          | Lista mapeada (compõe dentro do `Screen`) com estado vazio embutido. Para listas longas, use `FlatList` em um `Screen` não rolável. |
-| `Loading`       | Estado de carregamento em tela cheia.                                                                                               |
-| `EmptyState`    | Estado vazio com ícone, texto de negócio e ação opcional.                                                                           |
-| `ErrorState`    | Estado de erro com ícone, mensagem de negócio e tentar novamente.                                                                   |
-| `OfflineNotice` | Aviso de ausência de conexão, reutilizável em qualquer tela.                                                                        |
-| `OptionButton`  | Opção de escolha única, grande para uso com luva; marcada por borda, fundo e ícone.                                                 |
-| `ProgressBar`   | Barra de progresso sempre acompanhada do valor em texto.                                                                            |
+| Componente      | Papel                                                                               |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `Screen`        | Área segura + padding padrão; opção `scrollable`.                                   |
+| `Text`          | Tipografia por `variant` e cor por `tone`.                                          |
+| `Button`        | Ação primária/secundária/perigo; altura mínima de toque; estado `loading`.          |
+| `Input`         | Campo de texto com rótulo, dica e **erro ao lado do campo**.                        |
+| `Card`          | Superfície de conteúdo com título opcional.                                         |
+| `Badge`         | Selo de estado: **cor + ícone + texto**.                                            |
+| `Chip`          | Filtro alternável: seleção por preenchimento, ícone e estado anunciado.             |
+| `Loading`       | Estado de carregamento em tela cheia.                                               |
+| `EmptyState`    | Estado vazio com ícone, texto de negócio e ação opcional.                           |
+| `ErrorState`    | Estado de erro com ícone, mensagem de negócio e tentar novamente.                   |
+| `OfflineNotice` | Aviso de ausência de conexão, reutilizável em qualquer tela.                        |
+| `OptionButton`  | Opção de escolha única, grande para uso com luva; marcada por borda, fundo e ícone. |
+| `ProgressBar`   | Barra de progresso sempre acompanhada do valor em texto.                            |
 
 Os selos de **estado de negócio** e de **sincronização** ficam em
 [`src/components`](../components) (`InspectionStatusBadge`, `SyncStateBadge`),

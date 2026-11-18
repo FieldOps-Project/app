@@ -1,27 +1,20 @@
-import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 
-import { Card } from '@/design-system/components/card';
+import { EmptyState } from '@/design-system/components/empty-state';
 import { BELOW_HEADER_EDGES, Screen } from '@/design-system/components/screen';
-import { Text } from '@/design-system/components/text';
-import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 
 export function NonConformitiesScreen() {
-  const inspectionId = useInspectionId();
+  const router = useRouter();
 
   return (
-    <Screen scrollable edges={BELOW_HEADER_EDGES}>
-      <View className="gap-1">
-        <Text variant="title">Não conformidades</Text>
-        <Text variant="code" tone="muted">
-          {inspectionId}
-        </Text>
-      </View>
-
-      <Card title="Registros">
-        <Text variant="body" tone="muted">
-          O registro de não conformidades com gravidade e prazo entra em EP-06.
-        </Text>
-      </Card>
+    <Screen edges={BELOW_HEADER_EDGES}>
+      <EmptyState
+        icon="construct-outline"
+        title="Registro de não conformidades em breve"
+        description="Por enquanto, marque o item como não conforme e registre a observação e a evidência no próprio checklist."
+        actionLabel="Voltar"
+        onAction={() => router.back()}
+      />
     </Screen>
   );
 }

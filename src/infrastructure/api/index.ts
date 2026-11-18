@@ -6,6 +6,7 @@ import { httpMobileInspectionsGateway } from '@/infrastructure/api/mobile-inspec
 export { httpClient, request, type HttpRequest } from '@/infrastructure/api/http-client';
 export {
   describeApiFailure,
+  describeBusinessFailure,
   isNetworkFailure,
   type ApiFailure,
   type FieldError,
