@@ -13,6 +13,11 @@ export const queryKeys = {
       [...queryKeys.inspections.all(), 'detail', ownerUserId, inspectionId] as const,
   },
 
+  nonConformities: {
+    list: (ownerUserId: string, inspectionId: string) =>
+      ['non-conformities', ownerUserId, inspectionId] as const,
+  },
+
   synchronization: {
     all: () => ['synchronization'] as const,
     pending: (ownerUserId: string) =>

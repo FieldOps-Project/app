@@ -301,7 +301,7 @@ export class InspectionStateError extends Error {
   }
 }
 
-async function lockInspection(
+export async function lockInspection(
   transaction: SQLiteDatabase,
   ownerUserId: string,
   inspectionId: string,
@@ -318,7 +318,11 @@ async function lockInspection(
   return row;
 }
 
-async function markInspectionDirty(transaction: SQLiteDatabase, inspectionId: string, now: string) {
+export async function markInspectionDirty(
+  transaction: SQLiteDatabase,
+  inspectionId: string,
+  now: string
+) {
   await transaction.runAsync(
     `UPDATE inspections SET is_dirty = 1, local_sync_status = 'PENDING', local_updated_at = ?
       WHERE id = ?`,
@@ -530,6 +534,7 @@ export interface RegisterEvidenceCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;
   readonly inspectionItemId: string;
+  readonly nonConformityId?: string | null;
   readonly evidenceId: string;
   readonly createdAtDevice: string;
   readonly file: EvidenceFile;
@@ -551,18 +556,20 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
       command.inspectionId
     );
     const responseId = response?.id ?? null;
+    const nonConformityId = command.nonConformityId ?? null;
     const file = command.file;
 
     await transaction.runAsync(
       `INSERT INTO evidences (
-         id, inspection_id, inspection_item_id, response_id, local_uri, thumbnail_uri,
-         original_file_name, mime_type, size_bytes, description, created_at_device, base_version,
-         local_updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         id, inspection_id, inspection_item_id, response_id, non_conformity_id, local_uri,
+         thumbnail_uri, original_file_name, mime_type, size_bytes, description, created_at_device,
+         base_version, local_updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       command.evidenceId,
       command.inspectionId,
       command.inspectionItemId,
       responseId,
+      nonConformityId,
       file.photoPath,
       file.thumbnailPath,
       file.originalFileName ?? null,
@@ -574,8 +581,14 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
       now
     );
 
-    const dependencyIds =
-      responseId === null ? [] : await openOperationIdsFor(transaction, 'RESPONSE', responseId);
+    const dependencyIds = [
+      ...(responseId === null
+        ? []
+        : await openOperationIdsFor(transaction, 'RESPONSE', responseId)),
+      ...(nonConformityId === null
+        ? []
+        : await openOperationIdsFor(transaction, 'NON_CONFORMITY', nonConformityId)),
+    ];
     await markInspectionDirty(transaction, command.inspectionId, now);
     await enqueueOperation(
       transaction,
@@ -591,6 +604,7 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
           id: command.evidenceId,
           inspectionItemId: command.inspectionItemId,
           responseId,
+          nonConformityId,
           type: 'PHOTO',
           mimeType: file.mimeType,
           sizeBytes: file.sizeBytes,
