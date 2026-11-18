@@ -18,7 +18,12 @@ import {
 
 function describeLoginFailure(failure: PresentableApiFailure): string {
   if (failure.kind === 'unauthorized') {
-    return 'E-mail ou senha inválidos.';
+    return failure.inactive === true
+      ? 'Seu acesso está desativado ou bloqueado. Fale com o administrador.'
+      : 'E-mail ou senha inválidos.';
+  }
+  if (failure.kind === 'business') {
+    return 'Não foi possível entrar. Confira o e-mail e a senha e tente novamente.';
   }
   return describeApiFailure(failure);
 }

@@ -212,3 +212,29 @@ describe('httpClient app identification', () => {
     expect(seen).toEqual([['2.3.4', '42']]);
   });
 });
+
+describe('httpClient inactive user', () => {
+  it('tells an inactive or blocked user apart from a wrong password', async () => {
+    await clearTokens();
+    httpClient.defaults.adapter = fakeAdapter(() => ({
+      status: 401,
+      data: { code: 'AUTH_USER_INACTIVE', message: 'Your account is inactive or blocked' },
+    }));
+
+    const result = await request({ path: '/api/v1/auth/login', method: 'POST' });
+
+    expect(result).toEqual({ ok: false, error: { kind: 'unauthorized', inactive: true } });
+  });
+
+  it('keeps a plain unauthorized for any other 401', async () => {
+    await clearTokens();
+    httpClient.defaults.adapter = fakeAdapter(() => ({
+      status: 401,
+      data: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Invalid email or password' },
+    }));
+
+    const result = await request({ path: '/api/v1/auth/login', method: 'POST' });
+
+    expect(result).toEqual({ ok: false, error: { kind: 'unauthorized' } });
+  });
+});

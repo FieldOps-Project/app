@@ -4,7 +4,7 @@ export type FieldError = ApiFieldError;
 
 export type ApiFailure =
   | { kind: 'network' }
-  | { kind: 'unauthorized' }
+  | { kind: 'unauthorized'; inactive?: true }
   | { kind: 'forbidden' }
   | { kind: 'notFound' }
   | { kind: 'conflict'; code: string }
@@ -18,7 +18,7 @@ export function isNetworkFailure(failure: ApiFailure): failure is { kind: 'netwo
 }
 
 const GENERIC_BUSINESS_MESSAGE =
-  'O servidor não aceitou esta operação. Revise as informações e tente novamente.';
+  'O servidor recusou este registro. Se o problema persistir, fale com o supervisor.';
 
 const BUSINESS_MESSAGES: Readonly<Record<string, string>> = {
   VALIDATION_ERROR: 'Alguma informação enviada não é válida. Revise e tente novamente.',
