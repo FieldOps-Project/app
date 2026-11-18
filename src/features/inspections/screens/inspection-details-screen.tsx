@@ -121,6 +121,9 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
           <Line icon="alert-circle-outline" tone="warning">
             {detail.syncError}
           </Line>
+          <Text variant="caption" tone="muted">
+            Seus dados continuam salvos neste aparelho.
+          </Text>
         </Card>
       ) : null}
 

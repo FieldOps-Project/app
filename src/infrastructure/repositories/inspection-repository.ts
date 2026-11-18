@@ -1,11 +1,16 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ChecklistItem, ChecklistResponse } from '@/domain/checklist';
+import { computeProgress } from '@/domain/checklist-progress';
 import type { EvidenceSummary } from '@/domain/evidence';
 import type { LocationCapture } from '@/domain/field-location';
 import type { InspectionDetail, InspectionStatus, InspectionSummary } from '@/domain/inspection';
 import { getDatabase } from '@/infrastructure/database/database';
 import { writeTransaction } from '@/infrastructure/database/write-transaction';
+import {
+  InspectionIncompleteError,
+  InvalidResponseError,
+} from '@/infrastructure/repositories/inspection-errors';
 import {
   NonConformityEvidenceError,
   NonConformityItemError,
@@ -28,6 +33,7 @@ import {
   type ResponseRow,
 } from '@/infrastructure/repositories/inspection-rows';
 import type { LocationPayload } from '@/infrastructure/api/mobile-inspections-api';
+import { responseIssue } from '@/schemas/response-integrity';
 import type { MobileInspection } from '@/schemas/mobile-inspection';
 
 export interface StoredInspection {
@@ -61,6 +67,25 @@ export async function findInspection(
     return null;
   }
 
+  const checklist = await readChecklist(database, inspectionId);
+
+  return {
+    detail: toDetail(row),
+    items: checklist.items,
+    responses: [...checklist.responses.values()],
+    evidenceCounts: checklist.evidenceCounts,
+    evidences: checklist.evidences,
+  };
+}
+
+interface Checklist {
+  readonly items: ChecklistItem[];
+  readonly responses: Map<string, ChecklistResponse>;
+  readonly evidenceCounts: Map<string, number>;
+  readonly evidences: Record<string, EvidenceSummary[]>;
+}
+
+async function readChecklist(database: SQLiteDatabase, inspectionId: string): Promise<Checklist> {
   const [items, responses, evidences] = await Promise.all([
     database.getAllAsync<ItemRow>(
       `SELECT * FROM inspection_items WHERE inspection_id = ?
@@ -85,10 +110,10 @@ export async function findInspection(
     (byItem[key] ??= []).push(evidence);
   }
 
+  const answers = responses.map(toChecklistResponse);
   return {
-    detail: toDetail(row),
     items: items.map(toChecklistItem),
-    responses: responses.map(toChecklistResponse),
+    responses: new Map(answers.map((answer) => [answer.inspectionItemId, answer])),
     evidenceCounts: new Map(Object.entries(byItem).map(([itemId, list]) => [itemId, list.length])),
     evidences: byItem,
   };
@@ -120,6 +145,15 @@ export async function saveDownloadedInspection(
           `UPDATE inspections SET status = 'CANCELED', local_sync_status = 'CONFLICT',
                   sync_error = ?, server_updated_at = ? WHERE id = ?`,
           'A inspeção foi cancelada no servidor. Os dados registrados continuam no aparelho.',
+          remote.updatedAt,
+          remote.id
+        );
+      }
+      if (remote.status === 'APPROVED') {
+        await transaction.runAsync(
+          `UPDATE inspections SET status = 'APPROVED', local_sync_status = 'CONFLICT',
+                  sync_error = ?, server_updated_at = ? WHERE id = ?`,
+          'A inspeção já foi aprovada no servidor. Os registros pendentes deste aparelho não serão aplicados e continuam salvos para consulta.',
           remote.updatedAt,
           remote.id
         );
@@ -420,6 +454,19 @@ export async function saveResponse({
     const { base_version } = await lockInspection(transaction, ownerUserId, inspectionId, [
       'IN_PROGRESS',
     ]);
+
+    const itemRow = await transaction.getFirstAsync<ItemRow>(
+      'SELECT * FROM inspection_items WHERE id = ? AND inspection_id = ?',
+      response.inspectionItemId,
+      inspectionId
+    );
+    if (itemRow === null) {
+      throw new InvalidResponseError('Este item não pertence a esta inspeção.');
+    }
+    const issue = responseIssue(toChecklistItem(itemRow), response);
+    if (issue !== null) {
+      throw new InvalidResponseError(issue);
+    }
 
     const existing = await transaction.getFirstAsync<{ id: string; last_synced_at: string | null }>(
       'SELECT id, last_synced_at FROM inspection_responses WHERE inspection_item_id = ?',
@@ -737,6 +784,15 @@ export async function completeInspection(command: CompleteCommand): Promise<void
       command.inspectionId,
       ['IN_PROGRESS']
     );
+    const checklist = await readChecklist(transaction, command.inspectionId);
+    const progress = computeProgress({
+      items: checklist.items,
+      responses: checklist.responses,
+      evidenceCounts: checklist.evidenceCounts,
+    });
+    if (progress.pending.length > 0) {
+      throw new InspectionIncompleteError();
+    }
     const withoutEvidence = await transaction.getFirstAsync<{ total: number }>(
       `SELECT COUNT(*) AS total FROM non_conformities nc
         WHERE nc.inspection_id = ? AND nc.severity = 'CRITICAL' AND nc.deleted_locally = 0
@@ -804,11 +860,26 @@ export async function recordSyncRun(
   );
 }
 
-export async function readLastSuccessfulSync(ownerUserId: string): Promise<string | null> {
+export interface LastSync {
+  readonly startedAt: string | null;
+  readonly result: 'SUCCESS' | 'PARTIAL' | 'FAILED' | null;
+  readonly lastSuccessfulAt: string | null;
+}
+
+export async function readLastSync(ownerUserId: string): Promise<LastSync> {
   const database = await getDatabase();
-  const row = await database.getFirstAsync<{ last_successful_sync: string | null }>(
-    'SELECT last_successful_sync FROM sync_metadata WHERE owner_user_id = ?',
+  const row = await database.getFirstAsync<{
+    last_sync_started_at: string | null;
+    last_sync_result: LastSync['result'];
+    last_successful_sync: string | null;
+  }>(
+    `SELECT last_sync_started_at, last_sync_result, last_successful_sync
+       FROM sync_metadata WHERE owner_user_id = ?`,
     ownerUserId
   );
-  return row?.last_successful_sync ?? null;
+  return {
+    startedAt: row?.last_sync_started_at ?? null,
+    result: row?.last_sync_result ?? null,
+    lastSuccessfulAt: row?.last_successful_sync ?? null,
+  };
 }

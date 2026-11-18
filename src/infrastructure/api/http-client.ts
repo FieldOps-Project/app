@@ -101,7 +101,9 @@ function toApiFailure(cause: unknown): ApiFailure {
 
   switch (status) {
     case 401:
-      return { kind: 'unauthorized' };
+      return parseApiErrorBody(data)?.code === 'AUTH_USER_INACTIVE'
+        ? { kind: 'unauthorized', inactive: true }
+        : { kind: 'unauthorized' };
     case 403:
       return { kind: 'forbidden' };
     case 404:

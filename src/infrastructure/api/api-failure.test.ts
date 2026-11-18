@@ -20,6 +20,9 @@ describe('describeApiFailure', () => {
     });
 
     expect(text).toBe(describeBusinessFailure('UNKNOWN'));
+    expect(text).toBe(
+      'O servidor recusou este registro. Se o problema persistir, fale com o supervisor.'
+    );
     expect(text).not.toContain('NullPointer');
   });
 

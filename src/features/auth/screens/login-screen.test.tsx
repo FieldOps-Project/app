@@ -101,6 +101,28 @@ describe('LoginScreen', () => {
     expect(renderedText(renderer)).toContain('E-mail ou senha inválidos.');
   });
 
+  it('says the access is disabled, not that the password is wrong, for an inactive user (RN-001)', async () => {
+    answer(fail({ kind: 'unauthorized', inactive: true }));
+    const renderer = filled();
+
+    await submit(renderer);
+
+    const text = renderedText(renderer);
+    expect(text).toContain('Seu acesso está desativado ou bloqueado');
+    expect(text).not.toContain('E-mail ou senha inválidos.');
+  });
+
+  it('does not hand the technician an instruction to revise what cannot be revised', async () => {
+    answer(fail({ kind: 'business', code: 'SOMETHING_NEW', message: 'internal detail' }));
+    const renderer = filled();
+
+    await submit(renderer);
+
+    const text = renderedText(renderer);
+    expect(text).toContain('Não foi possível entrar');
+    expect(text).not.toContain('internal detail');
+  });
+
   it('tells the person to check the internet when the API cannot be reached', async () => {
     answer(fail({ kind: 'network' }));
     const renderer = filled();

@@ -1,11 +1,19 @@
 import { InspectionStateError } from '@/infrastructure/repositories/inspection-repository';
+import {
+  InspectionIncompleteError,
+  InvalidResponseError,
+} from '@/infrastructure/repositories/inspection-errors';
 import { NON_CONFORMITY_ERRORS } from '@/infrastructure/repositories/non-conformity-errors';
 
+const BUSINESS_ERRORS = [
+  InspectionStateError,
+  InspectionIncompleteError,
+  InvalidResponseError,
+  ...NON_CONFORMITY_ERRORS,
+] as const;
+
 export function describeLocalFailure(error: Error): string {
-  if (
-    error instanceof InspectionStateError ||
-    NON_CONFORMITY_ERRORS.some((kind) => error instanceof kind)
-  ) {
+  if (BUSINESS_ERRORS.some((kind) => error instanceof kind)) {
     return error.message;
   }
   return 'Não foi possível gravar no aparelho. Tente novamente.';

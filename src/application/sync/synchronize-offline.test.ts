@@ -8,7 +8,7 @@ import { getDatabase } from '@/infrastructure/database/database';
 import { openTestDatabase } from '@/infrastructure/database/testing/node-sqlite';
 import {
   findInspection,
-  readLastSuccessfulSync,
+  readLastSync,
   saveDownloadedInspection,
   saveResponse,
   startInspection,
@@ -114,7 +114,7 @@ describe('without a connection', () => {
     const stored = await findInspection(OWNER, 'insp-1');
     expect(stored?.detail.syncState).toBe('aguardando-envio');
     expect(stored?.responses).toHaveLength(1);
-    expect(await readLastSuccessfulSync(OWNER)).toBeNull();
+    expect(await readLastSync(OWNER)).toMatchObject({ result: 'FAILED', lastSuccessfulAt: null });
   });
 
   it('sends everything once the connection comes back, and nothing again afterwards', async () => {
@@ -176,11 +176,16 @@ describe('when the server refuses', () => {
     expect(failed).toMatchObject({ operationId: 'op-start', status: 'FAILED', attemptCount: 1 });
     expect((await findInspection(OWNER, 'insp-1'))?.detail.syncState).toBe('falha');
 
+    expect(await readLastSync(OWNER)).toMatchObject({ result: 'PARTIAL', lastSuccessfulAt: null });
+
     reply = serverAnswers;
     await synchronize(OWNER, httpMobileInspectionsGateway);
 
     expect(await countOpenOperations(OWNER)).toBe(0);
     expect(await count('sync_operations')).toBe(2);
+    const settled = await readLastSync(OWNER);
+    expect(settled).toMatchObject({ result: 'SUCCESS' });
+    expect(settled.lastSuccessfulAt).not.toBeNull();
   });
 });
 

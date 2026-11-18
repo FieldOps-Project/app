@@ -6,7 +6,8 @@ import { queryKeys } from '@/infrastructure/api';
 import {
   findInspection,
   listInspectionSummaries,
-  readLastSuccessfulSync,
+  readLastSync,
+  type LastSync,
   type StoredInspection,
 } from '@/infrastructure/repositories/inspection-repository';
 import { countOpenOperations } from '@/infrastructure/repositories/outbox-repository';
@@ -46,11 +47,11 @@ export function usePendingOperationsCount() {
   });
 }
 
-export function useLastSuccessfulSync() {
+export function useLastSync() {
   const ownerUserId = useOwnerUserId();
-  return useQuery<string | null, Error>({
+  return useQuery<LastSync, Error>({
     queryKey: queryKeys.synchronization.lastRun(ownerUserId),
-    queryFn: () => readLastSuccessfulSync(ownerUserId),
+    queryFn: () => readLastSync(ownerUserId),
     enabled: ownerUserId !== '',
     staleTime: Infinity,
   });
