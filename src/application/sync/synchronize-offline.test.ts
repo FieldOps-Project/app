@@ -48,6 +48,7 @@ const LISTING = { status: 200, data: { content: [], last: true } } as const;
 interface Call {
   readonly method: string | undefined;
   readonly url: string | undefined;
+  readonly data?: unknown;
 }
 
 function recordFormData() {
@@ -112,7 +113,7 @@ beforeEach(async () => {
   calls = [];
   reply = serverAnswers;
   httpClient.defaults.adapter = fakeAdapter((config) => {
-    const call = { method: config.method, url: config.url };
+    const call = { method: config.method, url: config.url, data: config.data };
     calls.push(call);
     return reply(call);
   });
@@ -229,6 +230,29 @@ describe('repeated operations (RN-068)', () => {
 
     expect(await count('inspection_responses')).toBe(1);
     expect(await count('sync_operations')).toBe(2);
+  });
+
+  it('edits an answer with the version the server returned for it, not the inspection version', async () => {
+    await queueStartAndAnswer();
+    let version = 0;
+    reply = (call) =>
+      call.method === 'put' ? { status: 200, data: { version: version++ } } : serverAnswers(call);
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+    for (const note of ['segunda', 'terceira']) {
+      await saveResponse({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        operationId: `op-${note}`,
+        response: checklistAnswer({ observation: note }),
+      });
+      await synchronize(OWNER, httpMobileInspectionsGateway);
+    }
+
+    const sent = calls
+      .filter((call) => call.method === 'put' && call.url?.endsWith(ANSWER_URL))
+      .map((call) => (JSON.parse(call.data as string) as { baseVersion: number }).baseVersion);
+    expect(sent).toEqual([0, 0, 1]);
   });
 
   it('sends an answer once, however many times the queue is run', async () => {

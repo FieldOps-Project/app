@@ -700,6 +700,30 @@ export async function findEvidenceFile(evidenceId: string): Promise<StoredEviden
     : { photoPath: row.local_uri, thumbnailPath: row.thumbnail_uri, mimeType: row.mime_type };
 }
 
+export async function findResponseBaseVersion(responseId: string): Promise<number> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ base_version: number; acknowledged: number }>(
+    `SELECT r.base_version,
+            EXISTS (
+              SELECT 1 FROM sync_operations o
+               WHERE o.entity_type = 'RESPONSE' AND o.entity_id = r.id AND o.status = 'COMPLETED'
+            ) AS acknowledged
+       FROM inspection_responses r
+      WHERE r.id = ?`,
+    responseId
+  );
+  return row !== null && row.acknowledged === 1 ? row.base_version : 0;
+}
+
+export async function recordResponseVersion(responseId: string, version: number): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE inspection_responses SET base_version = ? WHERE id = ?',
+    version,
+    responseId
+  );
+}
+
 export interface DiscardEvidenceCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;

@@ -11,6 +11,8 @@ import {
 import { deleteFile, evidenceUploadUri } from '@/infrastructure/evidence/photo-storage';
 import {
   findEvidenceFile,
+  findResponseBaseVersion,
+  recordResponseVersion,
   recordSyncRun,
 } from '@/infrastructure/repositories/inspection-repository';
 import {
@@ -130,8 +132,18 @@ async function send(
   operation: QueuedOperation
 ): Promise<Result<void, ApiFailure>> {
   switch (operation.entityType) {
-    case 'RESPONSE':
-      return gateway.putResponse(operation.inspectionId, operation.payload as ResponsePayload);
+    case 'RESPONSE': {
+      const payload = operation.payload as ResponsePayload;
+      const baseVersion = await findResponseBaseVersion(operation.entityId);
+      const saved = await gateway.putResponse(operation.inspectionId, { ...payload, baseVersion });
+      if (!saved.ok) {
+        return saved;
+      }
+      if (saved.value !== null) {
+        await recordResponseVersion(operation.entityId, saved.value);
+      }
+      return ok(undefined);
+    }
     case 'NON_CONFORMITY': {
       const created = nonConformityPayloadSchema.safeParse(operation.payload);
       return created.success
