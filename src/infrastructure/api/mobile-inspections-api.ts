@@ -55,13 +55,11 @@ export interface NonConformityPayload {
   readonly title: string;
   readonly description: string;
   readonly severity: string;
-  readonly status: string;
   readonly createdAtDevice: string;
 }
 
 export interface EvidenceMetadata {
   readonly id: string;
-  readonly inspectionItemId: string | null;
   readonly responseId: string | null;
   readonly nonConformityId: string | null;
   readonly type: 'PHOTO';
@@ -95,6 +93,10 @@ function parseWith<TOutput>(
 ): Result<TOutput, ApiFailure> {
   const parsed = schema.safeParse(data);
   return parsed.success ? ok(parsed.data) : fail({ kind: 'server' });
+}
+
+function toResponseBody(payload: ResponsePayload): ResponsePayload {
+  return payload.valueBoolean === null ? payload : { ...payload, conformity: null };
 }
 
 export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
@@ -146,7 +148,7 @@ export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
     return request<void>({
       method: 'PUT',
       path: `/api/v1/inspections/${encodeURIComponent(inspectionId)}/responses/${encodeURIComponent(payload.id)}`,
-      data: payload,
+      data: toResponseBody(payload),
     });
   },
 

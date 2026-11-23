@@ -46,11 +46,10 @@ módulos nativos incluídos no Expo Go, então não é necessário gerar build n
 As variáveis ficam em um arquivo `.env` na raiz, criado a partir de `.env.example`. O
 arquivo `.env` **não é versionado**.
 
-| Variável                       | Obrigatória | Descrição                                                                               |
-| ------------------------------ | ----------- | --------------------------------------------------------------------------------------- |
-| `EXPO_PUBLIC_API_URL`          | Sim         | URL base da API REST, sem barra no final                                                |
-| `EXPO_PUBLIC_APP_ENV`          | Não         | `local` (padrão), `integration`, `demo` ou `production`                                 |
-| `EXPO_PUBLIC_DEMO_INSPECTIONS` | Não         | `true` serve as inspeções do técnico a partir de dados de demonstração (padrão `false`) |
+| Variável              | Obrigatória | Descrição                                               |
+| --------------------- | ----------- | ------------------------------------------------------- |
+| `EXPO_PUBLIC_API_URL` | Sim         | URL base da API REST, sem barra no final                |
+| `EXPO_PUBLIC_APP_ENV` | Não         | `local` (padrão), `integration`, `demo` ou `production` |
 
 > **Tudo que começa com `EXPO_PUBLIC_` é embutido no bundle** e fica legível para qualquer
 > pessoa que tenha o aplicativo instalado. Nunca coloque senha, chave de API, token ou
@@ -267,13 +266,6 @@ false` e vale como offline. Quando o NetInfo diz que há rede mas uma sincroniza
   explícita. Abrir uma inspeção do equipamento lido não pede essa confirmação. A leitura é opcional
   no fluxo da inspeção, e a confirmação não é gravada, porque o backend ainda não tem onde guardá-la.
 - Com a permissão da câmera negada, o técnico pode digitar o código ou o número de patrimônio.
-
-### Inspeções de demonstração
-
-Os endpoints mobile da API (backend#19, #20 e #21) ainda não existem. Para exercitar as
-telas de ponta a ponta, defina `EXPO_PUBLIC_DEMO_INSPECTIONS=true` no `.env`: as inspeções
-passam a vir de dados em memória no próprio aplicativo, com os mesmos payloads do
-contrato. O login continua indo para a API real. Nunca habilite em integração, demonstração ou produção.
 
 ## Apontar para a API na rede local
 

@@ -50,7 +50,6 @@ const nonConformityPayloadSchema = z.object({
   title: z.string(),
   description: z.string(),
   severity: z.string(),
-  status: z.string(),
   createdAtDevice: z.string(),
 });
 
@@ -113,7 +112,14 @@ async function sendEvidence(
     });
   }
   return gateway.uploadEvidence(operation.inspectionId, {
-    metadata: { ...upload.data, type: 'PHOTO' },
+    metadata: {
+      id: upload.data.id,
+      responseId: upload.data.responseId,
+      nonConformityId: upload.data.nonConformityId,
+      type: 'PHOTO',
+      capturedAtDevice: upload.data.capturedAtDevice,
+      description: upload.data.description,
+    },
     fileUri,
     mimeType: stored?.mimeType ?? 'image/jpeg',
   });

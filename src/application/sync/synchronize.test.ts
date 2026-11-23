@@ -243,7 +243,6 @@ describe('ordering', () => {
     expect(api.uploadEvidence).toHaveBeenCalledWith('insp-1', {
       metadata: {
         id: 'ev-1',
-        inspectionItemId: 'item-1',
         responseId: 'resp-1',
         nonConformityId: 'nc-1',
         description: 'Trinca',
@@ -428,7 +427,15 @@ describe('ordering', () => {
 
     await synchronize('u-1', api, now);
 
-    expect(api.createNonConformity).toHaveBeenCalledWith('insp-1', created.payload);
+    expect(api.createNonConformity).toHaveBeenCalledWith('insp-1', {
+      id: 'nc-1',
+      inspectionItemId: 'item-1',
+      responseId: 'resp-1',
+      title: 'Vazamento',
+      description: 'Óleo na base.',
+      severity: 'CRITICAL',
+      createdAtDevice: '2026-08-12T10:00:00Z',
+    });
     expect(markCompleted).toHaveBeenCalledWith(created, expect.any(String));
   });
 
