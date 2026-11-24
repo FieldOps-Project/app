@@ -52,6 +52,23 @@ describe('putResponse', () => {
   });
 });
 
+describe('putResponse version', () => {
+  it('returns the version the server saved the answer at', async () => {
+    jest.mocked(request).mockResolvedValue(ok({ version: 3 }));
+
+    expect(await httpMobileInspectionsGateway.putResponse('insp-1', answer)).toEqual(ok(3));
+  });
+
+  it('fails as a server error when the reply carries no version, so the next edit never reuses a stale one', async () => {
+    jest.mocked(request).mockResolvedValue(ok({}));
+
+    expect(await httpMobileInspectionsGateway.putResponse('insp-1', answer)).toEqual({
+      ok: false,
+      error: { kind: 'server' },
+    });
+  });
+});
+
 describe('uploadEvidence', () => {
   it('posts the metadata and the file as the two multipart parts the API reads', async () => {
     const append = jest.spyOn(FormData.prototype, 'append');

@@ -82,10 +82,7 @@ export interface MobileInspectionsGateway {
   detail(inspectionId: string): Promise<Result<MobileInspection, ApiFailure>>;
   start(inspectionId: string, payload: StartPayload): Promise<Result<void, ApiFailure>>;
   submit(inspectionId: string, payload: SubmitPayload): Promise<Result<void, ApiFailure>>;
-  putResponse(
-    inspectionId: string,
-    payload: ResponsePayload
-  ): Promise<Result<number | null, ApiFailure>>;
+  putResponse(inspectionId: string, payload: ResponsePayload): Promise<Result<number, ApiFailure>>;
   createNonConformity(
     inspectionId: string,
     payload: NonConformityPayload
@@ -161,7 +158,7 @@ export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
       return result;
     }
     const version = savedResponseSchema.safeParse(result.value);
-    return ok(version.success ? version.data.version : null);
+    return version.success ? ok(version.data.version) : fail({ kind: 'server' });
   },
 
   createNonConformity(inspectionId, payload) {

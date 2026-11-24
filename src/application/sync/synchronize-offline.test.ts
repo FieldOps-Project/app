@@ -104,6 +104,9 @@ function serverAnswers(config: Call): Reply {
   if (config.method === 'get') {
     return LISTING;
   }
+  if (config.method === 'put') {
+    return { status: 200, data: { version: 0 } };
+  }
   return { status: 204 };
 }
 

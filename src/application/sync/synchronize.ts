@@ -139,9 +139,7 @@ async function send(
       if (!saved.ok) {
         return saved;
       }
-      if (saved.value !== null) {
-        await recordResponseVersion(operation.entityId, saved.value);
-      }
+      await recordResponseVersion(operation.entityId, saved.value);
       return ok(undefined);
     }
     case 'NON_CONFORMITY': {

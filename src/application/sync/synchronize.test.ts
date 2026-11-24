@@ -50,7 +50,7 @@ function gateway(overrides: Partial<MobileInspectionsGateway> = {}): MobileInspe
     detail: jest.fn(async () => fail({ kind: 'notFound' as const })),
     start: jest.fn(async () => ok(undefined)),
     submit: jest.fn(async () => ok(undefined)),
-    putResponse: jest.fn(async () => ok(null)),
+    putResponse: jest.fn(async () => ok(0)),
     createNonConformity: jest.fn(async () => ok(undefined)),
     uploadEvidence: jest.fn(async () => ok(undefined)),
     deleteEvidence: jest.fn(async () => ok(undefined)),
@@ -329,7 +329,7 @@ describe('ordering', () => {
     const api = gateway({
       putResponse: jest.fn(async () => {
         order.push('answer');
-        return ok(null);
+        return ok(0);
       }),
       uploadEvidence: jest.fn(async () => {
         order.push('upload');
