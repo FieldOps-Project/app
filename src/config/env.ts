@@ -18,10 +18,6 @@ const environmentSchema = z.object({
     })
     .transform((url) => url.replace(/\/+$/, '')),
   appEnv: z.enum(APP_ENVIRONMENTS).default('local'),
-  demoInspections: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((value) => value === 'true'),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;
@@ -29,7 +25,6 @@ export type Environment = z.infer<typeof environmentSchema>;
 const parsed = environmentSchema.safeParse({
   apiUrl: process.env.EXPO_PUBLIC_API_URL,
   appEnv: process.env.EXPO_PUBLIC_APP_ENV,
-  demoInspections: process.env.EXPO_PUBLIC_DEMO_INSPECTIONS,
 });
 
 if (!parsed.success) {

@@ -1,6 +1,4 @@
-import { env } from '@/config/env';
-import { demoMobileInspectionsGateway } from '@/infrastructure/api/demo/demo-mobile-inspections';
-import { demoEquipmentGateway, httpEquipmentGateway } from '@/infrastructure/api/equipment-api';
+import { httpEquipmentGateway } from '@/infrastructure/api/equipment-api';
 import { httpMobileInspectionsGateway } from '@/infrastructure/api/mobile-inspections-api';
 
 export { httpClient, request, type HttpRequest } from '@/infrastructure/api/http-client';
@@ -36,8 +34,6 @@ export {
 
 export { type EquipmentGateway } from '@/infrastructure/api/equipment-api';
 
-export const equipmentGateway = env.demoInspections ? demoEquipmentGateway : httpEquipmentGateway;
+export const equipmentGateway = httpEquipmentGateway;
 
-export const mobileInspectionsGateway = env.demoInspections
-  ? demoMobileInspectionsGateway
-  : httpMobileInspectionsGateway;
+export const mobileInspectionsGateway = httpMobileInspectionsGateway;

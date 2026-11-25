@@ -24,7 +24,3 @@ export const httpEquipmentGateway: EquipmentGateway = {
     return parsed.success ? ok(parsed.data.id) : fail({ kind: 'server' });
   },
 };
-
-export const demoEquipmentGateway: EquipmentGateway = {
-  findIdByQrCode: async () => ok(null),
-};

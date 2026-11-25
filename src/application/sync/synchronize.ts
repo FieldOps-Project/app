@@ -11,6 +11,8 @@ import {
 import { deleteFile, evidenceUploadUri } from '@/infrastructure/evidence/photo-storage';
 import {
   findEvidenceFile,
+  findResponseBaseVersion,
+  recordResponseVersion,
   recordSyncRun,
 } from '@/infrastructure/repositories/inspection-repository';
 import {
@@ -50,7 +52,6 @@ const nonConformityPayloadSchema = z.object({
   title: z.string(),
   description: z.string(),
   severity: z.string(),
-  status: z.string(),
   createdAtDevice: z.string(),
 });
 
@@ -113,7 +114,14 @@ async function sendEvidence(
     });
   }
   return gateway.uploadEvidence(operation.inspectionId, {
-    metadata: { ...upload.data, type: 'PHOTO' },
+    metadata: {
+      id: upload.data.id,
+      responseId: upload.data.responseId,
+      nonConformityId: upload.data.nonConformityId,
+      type: 'PHOTO',
+      capturedAtDevice: upload.data.capturedAtDevice,
+      description: upload.data.description,
+    },
     fileUri,
     mimeType: stored?.mimeType ?? 'image/jpeg',
   });
@@ -124,8 +132,16 @@ async function send(
   operation: QueuedOperation
 ): Promise<Result<void, ApiFailure>> {
   switch (operation.entityType) {
-    case 'RESPONSE':
-      return gateway.putResponse(operation.inspectionId, operation.payload as ResponsePayload);
+    case 'RESPONSE': {
+      const payload = operation.payload as ResponsePayload;
+      const baseVersion = await findResponseBaseVersion(operation.entityId);
+      const saved = await gateway.putResponse(operation.inspectionId, { ...payload, baseVersion });
+      if (!saved.ok) {
+        return saved;
+      }
+      await recordResponseVersion(operation.entityId, saved.value);
+      return ok(undefined);
+    }
     case 'NON_CONFORMITY': {
       const created = nonConformityPayloadSchema.safeParse(operation.payload);
       return created.success

@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import { fail, ok, type Result } from '@/domain/result';
 import type { ApiFailure } from '@/infrastructure/api/api-failure';
 import { request } from '@/infrastructure/api/http-client';
@@ -9,6 +11,8 @@ import {
 } from '@/schemas/mobile-inspection';
 
 export const MOBILE_INSPECTIONS_PATH = '/api/v1/mobile/inspections';
+
+const savedResponseSchema = z.object({ version: z.number().int().min(0) });
 
 const MAX_PAGES = 50;
 const UPLOAD_TIMEOUT_MS = 60_000;
@@ -55,13 +59,11 @@ export interface NonConformityPayload {
   readonly title: string;
   readonly description: string;
   readonly severity: string;
-  readonly status: string;
   readonly createdAtDevice: string;
 }
 
 export interface EvidenceMetadata {
   readonly id: string;
-  readonly inspectionItemId: string | null;
   readonly responseId: string | null;
   readonly nonConformityId: string | null;
   readonly type: 'PHOTO';
@@ -80,7 +82,7 @@ export interface MobileInspectionsGateway {
   detail(inspectionId: string): Promise<Result<MobileInspection, ApiFailure>>;
   start(inspectionId: string, payload: StartPayload): Promise<Result<void, ApiFailure>>;
   submit(inspectionId: string, payload: SubmitPayload): Promise<Result<void, ApiFailure>>;
-  putResponse(inspectionId: string, payload: ResponsePayload): Promise<Result<void, ApiFailure>>;
+  putResponse(inspectionId: string, payload: ResponsePayload): Promise<Result<number, ApiFailure>>;
   createNonConformity(
     inspectionId: string,
     payload: NonConformityPayload
@@ -95,6 +97,10 @@ function parseWith<TOutput>(
 ): Result<TOutput, ApiFailure> {
   const parsed = schema.safeParse(data);
   return parsed.success ? ok(parsed.data) : fail({ kind: 'server' });
+}
+
+function toResponseBody(payload: ResponsePayload): ResponsePayload {
+  return payload.valueBoolean === null ? payload : { ...payload, conformity: null };
 }
 
 export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
@@ -142,12 +148,17 @@ export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
     });
   },
 
-  putResponse(inspectionId, payload) {
-    return request<void>({
+  async putResponse(inspectionId, payload) {
+    const result = await request<unknown>({
       method: 'PUT',
       path: `/api/v1/inspections/${encodeURIComponent(inspectionId)}/responses/${encodeURIComponent(payload.id)}`,
-      data: payload,
+      data: toResponseBody(payload),
     });
+    if (!result.ok) {
+      return result;
+    }
+    const version = savedResponseSchema.safeParse(result.value);
+    return version.success ? ok(version.data.version) : fail({ kind: 'server' });
   },
 
   createNonConformity(inspectionId, payload) {

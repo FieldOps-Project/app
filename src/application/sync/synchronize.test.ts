@@ -4,7 +4,9 @@ import type { MobileInspectionsGateway } from '@/infrastructure/api';
 import { deleteFile, evidenceUploadUri } from '@/infrastructure/evidence/photo-storage';
 import {
   findEvidenceFile,
+  findResponseBaseVersion,
   findServerUpdates,
+  recordResponseVersion,
   recordSyncRun,
   saveDownloadedInspection,
 } from '@/infrastructure/repositories/inspection-repository';
@@ -48,7 +50,7 @@ function gateway(overrides: Partial<MobileInspectionsGateway> = {}): MobileInspe
     detail: jest.fn(async () => fail({ kind: 'notFound' as const })),
     start: jest.fn(async () => ok(undefined)),
     submit: jest.fn(async () => ok(undefined)),
-    putResponse: jest.fn(async () => ok(undefined)),
+    putResponse: jest.fn(async () => ok(0)),
     createNonConformity: jest.fn(async () => ok(undefined)),
     uploadEvidence: jest.fn(async () => ok(undefined)),
     deleteEvidence: jest.fn(async () => ok(undefined)),
@@ -59,6 +61,7 @@ function gateway(overrides: Partial<MobileInspectionsGateway> = {}): MobileInspe
 beforeEach(() => {
   jest.resetAllMocks();
   jest.mocked(findServerUpdates).mockResolvedValue(new Map());
+  jest.mocked(findResponseBaseVersion).mockResolvedValue(0);
   jest.mocked(claimOperation).mockImplementation(async (operationId) => {
     const queued = await jest.mocked(listOpenOperations).getMockImplementation()?.('u-1');
     return queued?.find((op) => op.operationId === operationId) ?? null;
@@ -88,7 +91,10 @@ describe('synchronize', () => {
       startedAtDevice: '2026-08-12T10:00:00-03:00',
       location: null,
     });
-    expect(api.putResponse).toHaveBeenCalledWith('insp-1', answer.payload);
+    expect(api.putResponse).toHaveBeenCalledWith('insp-1', {
+      ...(answer.payload as object),
+      baseVersion: 0,
+    });
     expect(markCompleted).toHaveBeenCalledTimes(2);
     expect(api.list).toHaveBeenCalled();
     expect(result).toEqual({
@@ -243,7 +249,6 @@ describe('ordering', () => {
     expect(api.uploadEvidence).toHaveBeenCalledWith('insp-1', {
       metadata: {
         id: 'ev-1',
-        inspectionItemId: 'item-1',
         responseId: 'resp-1',
         nonConformityId: 'nc-1',
         description: 'Trinca',
@@ -324,7 +329,7 @@ describe('ordering', () => {
     const api = gateway({
       putResponse: jest.fn(async () => {
         order.push('answer');
-        return ok(undefined);
+        return ok(0);
       }),
       uploadEvidence: jest.fn(async () => {
         order.push('upload');
@@ -428,7 +433,15 @@ describe('ordering', () => {
 
     await synchronize('u-1', api, now);
 
-    expect(api.createNonConformity).toHaveBeenCalledWith('insp-1', created.payload);
+    expect(api.createNonConformity).toHaveBeenCalledWith('insp-1', {
+      id: 'nc-1',
+      inspectionItemId: 'item-1',
+      responseId: 'resp-1',
+      title: 'Vazamento',
+      description: 'Óleo na base.',
+      severity: 'CRITICAL',
+      createdAtDevice: '2026-08-12T10:00:00Z',
+    });
     expect(markCompleted).toHaveBeenCalledWith(created, expect.any(String));
   });
 
@@ -517,7 +530,30 @@ describe('ordering', () => {
     expect(api.putResponse).toHaveBeenCalledWith('insp-1', {
       id: 'resp-1',
       conformity: 'NON_CONFORMING',
+      baseVersion: 0,
     });
+  });
+
+  it('sends the version the server last returned for the answer, and stores the new one', async () => {
+    const edit = operation({
+      operationId: 'op-edit',
+      entityType: 'RESPONSE',
+      entityId: 'resp-1',
+      operationType: 'UPDATE',
+      payload: { id: 'resp-1', conformity: 'CONFORMING', baseVersion: 7 },
+    });
+    queue([edit]);
+    jest.mocked(findResponseBaseVersion).mockResolvedValue(2);
+    const api = gateway({ putResponse: jest.fn(async () => ok(3)) });
+
+    await synchronize('u-1', api, now);
+
+    expect(api.putResponse).toHaveBeenCalledWith('insp-1', {
+      id: 'resp-1',
+      conformity: 'CONFORMING',
+      baseVersion: 2,
+    });
+    expect(recordResponseVersion).toHaveBeenCalledWith('resp-1', 3);
   });
 
   it('shares one run between concurrent calls', async () => {

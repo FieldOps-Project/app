@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ChecklistItem, ChecklistResponse, Conformity } from '@/domain/checklist';
 
 export const TEXT_SHORT_MAX = 255;
-export const TEXT_LONG_MAX = 4000;
+export const TEXT_LONG_MAX = 2000;
 export const OBSERVATION_MAX = 2000;
 
 export interface ResponseFormInput {

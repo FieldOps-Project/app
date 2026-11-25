@@ -93,6 +93,12 @@ describe('responseFormSchema', () => {
     expect(messages(parse(item(), 'x'.repeat(256)))).toEqual(['Use no máximo 255 caracteres.']);
   });
 
+  it('accepts a long text up to the 2000 characters the API takes and refuses 2001', () => {
+    const longText = item({ responseType: 'TEXT_LONG' });
+    expect(parse(longText, 'x'.repeat(2000)).success).toBe(true);
+    expect(parse(longText, 'x'.repeat(2001)).success).toBe(false);
+  });
+
   it('reads an empty value as "no answer", not as an error', () => {
     const result = parse(item({ responseType: 'CONFORMITY' }), null, '  ');
 

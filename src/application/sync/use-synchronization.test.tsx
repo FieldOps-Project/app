@@ -12,7 +12,7 @@ import { useInspectionsDownload, useSynchronize } from '@/application/sync/use-s
 import { fail, ok } from '@/domain/result';
 import { render } from '@/testing/render';
 
-jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', demoInspections: false } }));
+jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test' } }));
 jest.mock('@/application/sync/synchronize');
 jest.mock('@/application/sync/refresh-inspections');
 jest.mock('@/application/inspections/use-inspections', () => ({ useOwnerUserId: () => 'tech-1' }));
