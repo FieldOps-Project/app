@@ -8,6 +8,7 @@ import { Card } from '@/design-system/components/card';
 import { Text } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
 import { isUrgentPriority, priorityLabel, type InspectionSummary } from '@/domain/inspection';
+import { requiresCorrection } from '@/domain/inspection-actions';
 import { formatDateTime } from '@/utils/format-date';
 
 export interface InspectionCardProps {
@@ -16,8 +17,10 @@ export interface InspectionCardProps {
 }
 
 export function InspectionCard({ inspection, overdue }: InspectionCardProps) {
+  const needsCorrection = requiresCorrection(inspection.status);
+
   return (
-    <Card>
+    <Card className={needsCorrection ? 'border-2 border-danger' : undefined}>
       <View className="gap-0.5">
         <Text variant="subtitle">{inspection.clientName}</Text>
         <Text variant="body" tone="muted">
@@ -38,6 +41,9 @@ export function InspectionCard({ inspection, overdue }: InspectionCardProps) {
       </View>
 
       <View className="flex-row flex-wrap items-center gap-2">
+        {needsCorrection ? (
+          <Badge tone="danger" icon="alert-circle-outline" label="Requer correção" />
+        ) : null}
         <InspectionStatusBadge status={inspection.status} />
         <SyncStateBadge state={inspection.syncState} />
         {overdue ? <Badge tone="danger" icon="alarm-outline" label="Atrasada" /> : null}

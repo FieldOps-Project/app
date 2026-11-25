@@ -8,6 +8,7 @@ import { newId } from '@/infrastructure/ids';
 import { captureLocation } from '@/infrastructure/location/capture-location';
 import {
   completeInspection,
+  reopenInspection,
   startInspection,
 } from '@/infrastructure/repositories/inspection-repository';
 
@@ -53,4 +54,26 @@ export function useCompleteInspection(inspectionId: string) {
   return useTransition((ownerUserId, operationId, completedAtDevice, location) =>
     completeInspection({ ownerUserId, inspectionId, operationId, completedAtDevice, location })
   );
+}
+
+export function useReopenInspection(inspectionId: string) {
+  const ownerUserId = useOwnerUserId();
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error>({
+    mutationFn: () =>
+      reopenInspection({
+        ownerUserId,
+        inspectionId,
+        operationId: newId(),
+        reopenedAtDevice: new Date().toISOString(),
+      }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all() }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.synchronization.pending(ownerUserId),
+        }),
+      ]),
+  });
 }

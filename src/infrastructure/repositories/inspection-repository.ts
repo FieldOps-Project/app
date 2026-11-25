@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ChecklistItem, ChecklistResponse } from '@/domain/checklist';
 import { computeProgress } from '@/domain/checklist-progress';
+import { canEditItem } from '@/domain/inspection-actions';
 import type { EvidenceSummary } from '@/domain/evidence';
 import type { LocationCapture } from '@/domain/field-location';
 import type { InspectionDetail, InspectionStatus, InspectionSummary } from '@/domain/inspection';
@@ -10,6 +11,7 @@ import { writeTransaction } from '@/infrastructure/database/write-transaction';
 import {
   InspectionIncompleteError,
   InvalidResponseError,
+  ItemNotCorrectableError,
 } from '@/infrastructure/repositories/inspection-errors';
 import {
   NonConformityEvidenceError,
@@ -435,6 +437,56 @@ export async function startInspection(command: StartCommand): Promise<void> {
   });
 }
 
+export interface ReopenCommand {
+  readonly ownerUserId: string;
+  readonly inspectionId: string;
+  readonly operationId: string;
+  readonly reopenedAtDevice: string;
+}
+
+export async function reopenInspection(command: ReopenCommand): Promise<void> {
+  const now = command.reopenedAtDevice;
+
+  await writeTransaction(async (transaction) => {
+    const { base_version } = await lockInspection(
+      transaction,
+      command.ownerUserId,
+      command.inspectionId,
+      ['REJECTED']
+    );
+    const row = await transaction.getFirstAsync<InspectionRow>(
+      'SELECT * FROM inspections WHERE id = ?',
+      command.inspectionId
+    );
+    const { review, reviewHistory } = toDetail(row as InspectionRow);
+    const history =
+      review === null || review.decision !== 'REJECTED'
+        ? reviewHistory
+        : [...reviewHistory, { ...review, reopenedAt: now }];
+
+    await transaction.runAsync(
+      `UPDATE inspections SET status = 'IN_PROGRESS', review_history_json = ? WHERE id = ?`,
+      JSON.stringify(history),
+      command.inspectionId
+    );
+    await markInspectionDirty(transaction, command.inspectionId, now);
+    await enqueueOperation(
+      transaction,
+      {
+        operationId: command.operationId,
+        ownerUserId: command.ownerUserId,
+        entityType: 'INSPECTION',
+        entityId: command.inspectionId,
+        inspectionId: command.inspectionId,
+        operationType: 'TRANSITION',
+        baseVersion: base_version,
+        payload: { action: 'REOPEN', reopenedAtDevice: command.reopenedAtDevice },
+      },
+      now
+    );
+  });
+}
+
 export interface SaveResponseCommand {
   readonly ownerUserId: string;
   readonly inspectionId: string;
@@ -454,6 +506,14 @@ export async function saveResponse({
     const { base_version } = await lockInspection(transaction, ownerUserId, inspectionId, [
       'IN_PROGRESS',
     ]);
+    const inspectionRow = await transaction.getFirstAsync<InspectionRow>(
+      'SELECT * FROM inspections WHERE id = ?',
+      inspectionId
+    );
+    const { status, review } = toDetail(inspectionRow as InspectionRow);
+    if (!canEditItem(status, review, response.inspectionItemId)) {
+      throw new ItemNotCorrectableError();
+    }
 
     const itemRow = await transaction.getFirstAsync<ItemRow>(
       'SELECT * FROM inspection_items WHERE id = ? AND inspection_id = ?',

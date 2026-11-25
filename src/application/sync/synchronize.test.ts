@@ -50,6 +50,7 @@ function gateway(overrides: Partial<MobileInspectionsGateway> = {}): MobileInspe
     detail: jest.fn(async () => fail({ kind: 'notFound' as const })),
     start: jest.fn(async () => ok(undefined)),
     submit: jest.fn(async () => ok(undefined)),
+    reopen: jest.fn(async () => ok(undefined)),
     putResponse: jest.fn(async () => ok(0)),
     createNonConformity: jest.fn(async () => ok(undefined)),
     uploadEvidence: jest.fn(async () => ok(undefined)),
@@ -563,6 +564,59 @@ describe('ordering', () => {
     await Promise.all([synchronize('u-1', api, now), synchronize('u-1', api, now)]);
 
     expect(api.start).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('reopening after a rejection', () => {
+  it('reopens on the server before the corrected answers and the new submit', async () => {
+    const calls: string[] = [];
+    queue([
+      operation({
+        operationId: 'op-reopen',
+        entityType: 'INSPECTION',
+        entityId: 'insp-1',
+        operationType: 'TRANSITION',
+        payload: { action: 'REOPEN', reopenedAtDevice: '2026-08-12T10:00:00Z' },
+      }),
+      operation({ operationId: 'op-resp', entityType: 'RESPONSE', entityId: 'resp-1' }),
+    ]);
+    const api = gateway({
+      reopen: jest.fn(async () => {
+        calls.push('reopen');
+        return ok(undefined);
+      }),
+      putResponse: jest.fn(async () => {
+        calls.push('put');
+        return ok(1);
+      }),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(calls).toEqual(['reopen', 'put']);
+    expect(api.reopen).toHaveBeenCalledWith('insp-1');
+  });
+
+  it('holds the corrected answers back when the server refuses the reopening', async () => {
+    queue([
+      operation({
+        operationId: 'op-reopen',
+        entityType: 'INSPECTION',
+        entityId: 'insp-1',
+        operationType: 'TRANSITION',
+        payload: { action: 'REOPEN', reopenedAtDevice: '2026-08-12T10:00:00Z' },
+      }),
+      operation({ operationId: 'op-resp', entityType: 'RESPONSE', entityId: 'resp-1' }),
+    ]);
+    const api = gateway({
+      reopen: jest.fn(async () =>
+        fail({ kind: 'conflict' as const, code: 'INSPECTION_VERSION_CONFLICT' })
+      ),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(api.putResponse).not.toHaveBeenCalled();
   });
 });
 

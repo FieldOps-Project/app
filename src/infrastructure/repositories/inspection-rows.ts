@@ -9,6 +9,7 @@ import {
   type InspectionReview,
   type InspectionStatus,
   type InspectionSummary,
+  type PastReview,
   type SyncState,
 } from '@/domain/inspection';
 
@@ -37,6 +38,7 @@ export interface InspectionRow {
   started_at_device: string | null;
   completed_at_device: string | null;
   review_json: string | null;
+  review_history_json: string | null;
   start_latitude: number | null;
   start_longitude: number | null;
   start_accuracy: number | null;
@@ -194,6 +196,7 @@ export function toDetail(row: InspectionRow): InspectionDetail {
       row.completion_location_missing
     ),
     review: parseJson<InspectionReview | null>(row.review_json, null),
+    reviewHistory: parseJson<PastReview[]>(row.review_history_json, []),
     syncError: row.sync_error,
   };
 }

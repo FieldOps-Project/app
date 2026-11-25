@@ -43,6 +43,7 @@ const transitionPayloadSchema = z.discriminatedUnion('action', [
     completedAtDevice: z.string(),
     location: locationSchema,
   }),
+  z.object({ action: z.literal('REOPEN'), reopenedAtDevice: z.string() }),
 ]);
 
 const nonConformityPayloadSchema = z.object({
@@ -156,15 +157,20 @@ async function send(
         return invalidOperation();
       }
       const step = transition.data;
-      return step.action === 'START'
-        ? gateway.start(operation.inspectionId, {
+      switch (step.action) {
+        case 'START':
+          return gateway.start(operation.inspectionId, {
             startedAtDevice: step.startedAtDevice,
             location: step.location,
-          })
-        : gateway.submit(operation.inspectionId, {
+          });
+        case 'SUBMIT':
+          return gateway.submit(operation.inspectionId, {
             completedAtDevice: step.completedAtDevice,
             location: step.location,
           });
+        case 'REOPEN':
+          return gateway.reopen(operation.inspectionId);
+      }
     }
   }
 }

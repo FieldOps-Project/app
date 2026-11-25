@@ -202,4 +202,7 @@ export const MIGRATIONS: readonly string[] = [
   `
   ALTER TABLE evidences ADD COLUMN thumbnail_uri TEXT;
   `,
+  `
+  ALTER TABLE inspections ADD COLUMN review_history_json TEXT;
+  `,
 ];
