@@ -273,6 +273,13 @@ false` e vale como offline. Quando o NetInfo diz que há rede mas uma sincroniza
 - **Envio automático ao voltar a conexão**, sem repetir a cada oscilação: só dispara depois de 3 s
   seguidos online, uma vez por retorno, e nunca na abertura do aplicativo nem sem sessão
   (`AutoSync`, `RECONNECT_STABLE_MS`).
+- **Envio automático ao enfileirar com conexão** (documento 7.3: "envia imediatamente ou mantém o
+  envio pendente"; 13.7: "de forma controlada"): quando a fila de pendências **aumenta** com o
+  aparelho online, o `AutoSync` espera 3 s sem novas operações (`ENQUEUE_SYNC_DELAY_MS`, que
+  agrupa uma rajada de fotos num único envio, 13.10) e sincroniza. Só um aumento dispara: se um
+  envio falha e a fila fica igual, o aplicativo não entra em laço de retentativa. Sem rede, deixa
+  para o envio ao voltar a conexão; com um envio em andamento, espera ele terminar. O botão
+  "Sincronizar" continua valendo.
 - **Estado permanente por inspeção**: o selo com os cinco estados do documento 13.8 (salvo no
   dispositivo, aguardando envio, enviado, falha e conflito, cada um com ícone e texto) fica no
   cartão da lista, no detalhe, no resumo e agora também no topo do checklist, ao lado de "Cada
