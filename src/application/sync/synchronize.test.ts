@@ -29,6 +29,21 @@ jest.mock('@/application/sync/pull-changes');
 
 const now = () => '2026-08-12T13:00:00.000Z';
 
+function answerPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'resp-1',
+    inspectionItemId: 'item-1',
+    valueText: null,
+    valueNumber: null,
+    valueBoolean: null,
+    valueDate: null,
+    conformity: 'CONFORMING',
+    observation: null,
+    answeredAtDevice: '2026-08-12T10:00:00-03:00',
+    ...overrides,
+  };
+}
+
 function operation(overrides: Partial<QueuedOperation>): QueuedOperation {
   return {
     operationId: 'op-1',
@@ -85,7 +100,7 @@ describe('synchronize', () => {
       entityType: 'RESPONSE',
       entityId: 'resp-1',
       operationType: 'CREATE',
-      payload: { id: 'resp-1', inspectionItemId: 'item-1', conformity: 'CONFORMING' },
+      payload: answerPayload(),
     });
     queue([start, answer]);
     const api = gateway();
@@ -140,7 +155,7 @@ describe('synchronize', () => {
       entityType: 'RESPONSE',
       entityId: 'resp-1',
       operationType: 'CREATE',
-      payload: { id: 'resp-1' },
+      payload: answerPayload(),
     });
     const submit = operation({
       operationId: 'op-submit',
@@ -209,7 +224,7 @@ describe('ordering', () => {
       entityId: 'resp-1',
       operationType: 'CREATE',
       status: 'CONFLICT',
-      payload: { id: 'resp-1' },
+      payload: answerPayload(),
     });
     const submit = operation({
       operationId: 'op-submit',
@@ -328,7 +343,7 @@ describe('ordering', () => {
       entityType: 'RESPONSE',
       entityId: 'resp-1',
       operationType: 'CREATE',
-      payload: { id: 'resp-1' },
+      payload: answerPayload(),
     });
     queue([upload, answer]);
     jest
@@ -527,21 +542,20 @@ describe('ordering', () => {
       entityType: 'RESPONSE',
       entityId: 'resp-1',
       operationType: 'CREATE',
-      payload: { id: 'resp-1', conformity: 'CONFORMING' },
+      payload: answerPayload(),
     });
     queue([listed]);
     jest
       .mocked(claimOperation)
-      .mockResolvedValue({ ...listed, payload: { id: 'resp-1', conformity: 'NON_CONFORMING' } });
+      .mockResolvedValue({ ...listed, payload: answerPayload({ conformity: 'NON_CONFORMING' }) });
     const api = gateway();
 
     await synchronize('u-1', api, now);
 
-    expect(api.putResponse).toHaveBeenCalledWith('insp-1', {
-      id: 'resp-1',
-      conformity: 'NON_CONFORMING',
-      baseVersion: 0,
-    });
+    expect(api.putResponse).toHaveBeenCalledWith(
+      'insp-1',
+      answerPayload({ conformity: 'NON_CONFORMING', baseVersion: 0 })
+    );
   });
 
   it('sends the version the server last returned for the answer, and stores the new one', async () => {
@@ -550,7 +564,7 @@ describe('ordering', () => {
       entityType: 'RESPONSE',
       entityId: 'resp-1',
       operationType: 'UPDATE',
-      payload: { id: 'resp-1', conformity: 'CONFORMING', baseVersion: 7 },
+      payload: answerPayload({ baseVersion: 7 }),
     });
     queue([edit]);
     jest.mocked(findResponseBaseVersion).mockResolvedValue(2);
@@ -558,11 +572,7 @@ describe('ordering', () => {
 
     await synchronize('u-1', api, now);
 
-    expect(api.putResponse).toHaveBeenCalledWith('insp-1', {
-      id: 'resp-1',
-      conformity: 'CONFORMING',
-      baseVersion: 2,
-    });
+    expect(api.putResponse).toHaveBeenCalledWith('insp-1', answerPayload({ baseVersion: 2 }));
     expect(recordResponseVersion).toHaveBeenCalledWith('resp-1', 3);
   });
 
@@ -587,7 +597,12 @@ describe('reopening after a rejection', () => {
         operationType: 'TRANSITION',
         payload: { action: 'REOPEN', reopenedAtDevice: '2026-08-12T10:00:00Z' },
       }),
-      operation({ operationId: 'op-resp', entityType: 'RESPONSE', entityId: 'resp-1' }),
+      operation({
+        operationId: 'op-resp',
+        entityType: 'RESPONSE',
+        entityId: 'resp-1',
+        payload: answerPayload(),
+      }),
     ]);
     const api = gateway({
       reopen: jest.fn(async () => {
@@ -615,7 +630,12 @@ describe('reopening after a rejection', () => {
         operationType: 'TRANSITION',
         payload: { action: 'REOPEN', reopenedAtDevice: '2026-08-12T10:00:00Z' },
       }),
-      operation({ operationId: 'op-resp', entityType: 'RESPONSE', entityId: 'resp-1' }),
+      operation({
+        operationId: 'op-resp',
+        entityType: 'RESPONSE',
+        entityId: 'resp-1',
+        payload: answerPayload(),
+      }),
     ]);
     const api = gateway({
       reopen: jest.fn(async () =>
@@ -733,6 +753,158 @@ describe('pulling server changes after sending', () => {
     expect(recordSyncRun).toHaveBeenLastCalledWith(
       'u-1',
       'FAILED',
+      expect.any(String),
+      expect.any(String)
+    );
+  });
+});
+
+describe('a refusal that means the server already applied the step', () => {
+  const refusal = {
+    kind: 'business' as const,
+    code: 'INSPECTION_INVALID_TRANSITION',
+    message: 'invalid transition',
+  };
+
+  function serverShows(status: string) {
+    return jest.fn(async () => ok({ status } as never));
+  }
+
+  it('completes a submit the server already holds instead of reopening the inspection', async () => {
+    const submit = operation({
+      operationId: 'op-submit',
+      payload: { action: 'SUBMIT', completedAtDevice: 'x', location: null },
+    });
+    queue([submit]);
+    const api = gateway({
+      submit: jest.fn(async () => fail(refusal)),
+      detail: serverShows('SUBMITTED'),
+    });
+
+    const result = await synchronize('u-1', api, now);
+
+    expect(markCompleted).toHaveBeenCalledWith(submit, expect.any(String));
+    expect(reopenAfterRefusedSubmit).not.toHaveBeenCalled();
+    expect(markFailed).not.toHaveBeenCalled();
+    expect(result.ok && result.value.sent).toBe(1);
+  });
+
+  it('still reopens a submit the server did not apply', async () => {
+    const submit = operation({
+      operationId: 'op-submit',
+      payload: { action: 'SUBMIT', completedAtDevice: 'x', location: null },
+    });
+    queue([submit]);
+    const api = gateway({
+      submit: jest.fn(async () => fail(refusal)),
+      detail: serverShows('IN_PROGRESS'),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(reopenAfterRefusedSubmit).toHaveBeenCalled();
+    expect(markCompleted).not.toHaveBeenCalled();
+  });
+
+  it('completes a start the server already holds', async () => {
+    const start = operation({});
+    queue([start]);
+    const api = gateway({
+      start: jest.fn(async () => fail(refusal)),
+      detail: serverShows('IN_PROGRESS'),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(markCompleted).toHaveBeenCalledWith(start, expect.any(String));
+    expect(markFailed).not.toHaveBeenCalled();
+  });
+
+  it('completes a reopening the server already holds', async () => {
+    const reopen = operation({
+      operationId: 'op-reopen',
+      payload: { action: 'REOPEN', reopenedAtDevice: 'x' },
+    });
+    queue([reopen]);
+    const api = gateway({
+      reopen: jest.fn(async () => fail(refusal)),
+      detail: serverShows('IN_PROGRESS'),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(markCompleted).toHaveBeenCalledWith(reopen, expect.any(String));
+  });
+
+  it('does not treat a refused answer as applied just because the inspection moved on', async () => {
+    const answer = operation({
+      operationId: 'op-answer',
+      entityType: 'RESPONSE',
+      entityId: 'resp-1',
+      operationType: 'CREATE',
+      payload: answerPayload(),
+    });
+    queue([answer]);
+    const api = gateway({
+      putResponse: jest.fn(async () => fail(refusal)),
+      detail: serverShows('SUBMITTED'),
+    });
+
+    await synchronize('u-1', api, now);
+
+    expect(markFailed).toHaveBeenCalled();
+    expect(markCompleted).not.toHaveBeenCalled();
+  });
+});
+
+describe('an outage on the server', () => {
+  it('stops the run after two server failures instead of retrying the whole queue', async () => {
+    queue([
+      operation({ operationId: 'op-1', inspectionId: 'a' }),
+      operation({ operationId: 'op-2', inspectionId: 'b' }),
+      operation({ operationId: 'op-3', inspectionId: 'c' }),
+    ]);
+    const api = gateway({ start: jest.fn(async () => fail({ kind: 'server' as const })) });
+
+    const result = await synchronize('u-1', api, now);
+
+    expect(api.start).toHaveBeenCalledTimes(2);
+    expect(markFailed).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ ok: false, error: { kind: 'server' } });
+    expect(recordSyncRun).toHaveBeenLastCalledWith(
+      'u-1',
+      'FAILED',
+      expect.any(String),
+      expect.any(String)
+    );
+  });
+
+  it('keeps going after a single server failure', async () => {
+    queue([
+      operation({ operationId: 'op-1', inspectionId: 'a' }),
+      operation({ operationId: 'op-2', inspectionId: 'b' }),
+    ]);
+    const start = jest
+      .fn()
+      .mockResolvedValueOnce(fail({ kind: 'server' as const }))
+      .mockResolvedValueOnce(ok(undefined));
+
+    const result = await synchronize('u-1', gateway({ start }), now);
+
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(result.ok && result.value.refused).toBe(1);
+  });
+});
+
+describe('conflicts that were already open', () => {
+  it('keeps the run partial while an inspection stays held by a conflict', async () => {
+    queue([operation({ status: 'CONFLICT' })]);
+
+    await synchronize('u-1', gateway(), now);
+
+    expect(recordSyncRun).toHaveBeenLastCalledWith(
+      'u-1',
+      'PARTIAL',
       expect.any(String),
       expect.any(String)
     );

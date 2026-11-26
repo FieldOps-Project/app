@@ -11,18 +11,27 @@ export const ENVIRONMENT_LABELS: Readonly<Record<AppEnvironment, string>> = {
   production: 'Produção',
 };
 
-const environmentSchema = z.object({
-  apiUrl: z
-    .url({
-      message: 'EXPO_PUBLIC_API_URL precisa ser uma URL absoluta, como http://192.168.0.10:8080',
-    })
-    .transform((url) => url.replace(/\/+$/, '')),
-  appEnv: z.enum(APP_ENVIRONMENTS).default('local'),
-});
+const environmentSchema = z
+  .object({
+    apiUrl: z
+      .url({
+        message: 'EXPO_PUBLIC_API_URL precisa ser uma URL absoluta, como http://192.168.0.10:8080',
+      })
+      .transform((url) => url.replace(/\/+$/, '')),
+    appEnv: z.enum(APP_ENVIRONMENTS).default('local'),
+  })
+  .refine((value) => value.appEnv === 'local' || value.apiUrl.startsWith('https://'), {
+    path: ['apiUrl'],
+    message: 'Fora do ambiente local, EXPO_PUBLIC_API_URL precisa usar https://.',
+  });
 
 export type Environment = z.infer<typeof environmentSchema>;
 
-const parsed = environmentSchema.safeParse({
+export function parseEnvironment(input: { apiUrl: unknown; appEnv: unknown }) {
+  return environmentSchema.safeParse(input);
+}
+
+const parsed = parseEnvironment({
   apiUrl: process.env.EXPO_PUBLIC_API_URL,
   appEnv: process.env.EXPO_PUBLIC_APP_ENV,
 });

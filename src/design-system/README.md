@@ -82,8 +82,19 @@ inspector do React Native — o valor não deve ficar abaixo de 48.
 
 Todos passam em AA. Recalcule a partir dos tokens sempre que alterar a paleta.
 
+No tema escuro, texto e ícone de selo usam a variante `light` de cada tom (`success`,
+`warning`, `danger`, `info`), porque o tom médio da paleta não chega a 4.5:1 sobre as
+superfícies escuras. Medido sobre tela (`neutral-950`), cartão (`neutral-900`) e selo
+(`neutral-800`):
+
+| Tom     | Antes (tela / cartão / selo) | Agora (tela / cartão / selo) |
+| ------- | ---------------------------- | ---------------------------- |
+| perigo  | 3.0 / 2.8 / 2.4              | 7.1 / 6.6 / 5.6              |
+| info    | 3.3 / 3.1 / 2.6              | 9.1 / 8.5 / 7.2              |
+| sucesso | 3.9 / 3.6 / 3.1              | 11.2 / 10.5 / 8.8            |
+| alerta  | 3.9 / 3.6 / 3.1              | 11.7 / 11.0 / 9.2            |
+
 ## Tema
 
-MVP em **tema claro**. O tema escuro é P1: os componentes já trazem variantes
-`dark:`, e os tokens viabilizam a troca sem reescrever componente. Os ícones de
-selo usam o tom médio da paleta, legível tanto no fundo claro quanto no escuro.
+Os componentes trazem variantes `dark:` e os tokens permitem a troca sem reescrever
+componente. Os ícones de selo escolhem o tom pelo esquema de cor ativo.

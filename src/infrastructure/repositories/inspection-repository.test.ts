@@ -11,11 +11,14 @@ import { getDatabase, migrate, readSchemaVersion } from '@/infrastructure/databa
 import { MIGRATIONS } from '@/infrastructure/database/migrations';
 import { openTestDatabase } from '@/infrastructure/database/testing/node-sqlite';
 import {
+  checkCompletable,
   completeInspection,
   discardEvidence,
   findInspection,
   InspectionStateError,
   listInspectionSummaries,
+  recordEquipmentDivergence,
+  recordResponseVersion,
   registerEvidence,
   reopenInspection,
   saveDownloadedInspection,
@@ -38,6 +41,10 @@ import {
   InvalidResponseError,
   ItemNotCorrectableError,
 } from '@/infrastructure/repositories/inspection-errors';
+import {
+  createNonConformity,
+  deleteNonConformity,
+} from '@/infrastructure/repositories/non-conformity-repository';
 import {
   checklistAnswer,
   FIXTURE_TIME,
@@ -371,6 +378,36 @@ describe('claiming', () => {
     const stored = await findInspection(OWNER, 'insp-1');
     expect(stored?.responses[0]?.conformity).toBe('NOT_APPLICABLE');
     expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toContain('op-r2');
+  });
+});
+
+describe('checking completion before the GPS wait', () => {
+  it('refuses an incomplete checklist without writing anything', async () => {
+    await started();
+
+    await expect(checkCompletable(OWNER, 'insp-1')).rejects.toBeInstanceOf(
+      InspectionIncompleteError
+    );
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.status).toBe('IN_PROGRESS');
+  });
+
+  it('lets a complete checklist through and leaves completing to the real command', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer(),
+    });
+
+    await expect(checkCompletable(OWNER, 'insp-1')).resolves.toBeUndefined();
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.status).toBe('IN_PROGRESS');
+  });
+
+  it('refuses an inspection that is not in progress', async () => {
+    await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
+
+    await expect(checkCompletable(OWNER, 'insp-1')).rejects.toBeInstanceOf(InspectionStateError);
   });
 });
 
@@ -1288,5 +1325,217 @@ describe('sanitizeSyncError', () => {
     expect(sanitizeSyncError('Item obrigatório sem resposta.')).toBe(
       'Item obrigatório sem resposta.'
     );
+  });
+});
+
+describe('review findings', () => {
+  const REOPENED_AT = '2026-08-12T16:00:00.000Z';
+
+  async function reopenedWithOneItemToCorrect() {
+    const base = remoteInspection();
+    const second = { ...base.items[0]!, id: 'item-2', itemOrder: 2, itemTitle: 'Extintor' };
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({
+        status: 'REJECTED',
+        items: [...base.items, second],
+        review: { decision: 'REJECTED', reason: 'Refazer.', itemsToCorrect: ['item-1'] },
+      }),
+      NOW
+    );
+    await reopenInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-reopen',
+      reopenedAtDevice: REOPENED_AT,
+    });
+  }
+
+  function photoFor(itemId: string) {
+    return {
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      inspectionItemId: itemId,
+      evidenceId: `ev-${itemId}`,
+      createdAtDevice: REOPENED_AT,
+      file: {
+        operationId: `op-ev-${itemId}`,
+        photoPath: `evidences/insp-1/${itemId}.jpg`,
+        thumbnailPath: `evidences/insp-1/${itemId}-thumb.jpg`,
+        mimeType: 'image/jpeg',
+        sizeBytes: 1000,
+      },
+    };
+  }
+
+  describe('the correction scope reaches photos and non-conformities (RN-083)', () => {
+    it('takes a photo only for an item the supervisor pointed out', async () => {
+      await reopenedWithOneItemToCorrect();
+
+      await expect(registerEvidence(photoFor('item-2'))).rejects.toBeInstanceOf(
+        ItemNotCorrectableError
+      );
+      await registerEvidence(photoFor('item-1'));
+
+      expect((await findInspection(OWNER, 'insp-1'))?.evidenceCounts.get('item-1')).toBe(1);
+    });
+
+    it('removes a photo only from an item the supervisor pointed out', async () => {
+      await reopenedWithOneItemToCorrect();
+      await database.runAsync(
+        `INSERT INTO evidences (id, inspection_id, inspection_item_id, created_at_device)
+         VALUES ('ev-old', 'insp-1', 'item-2', ?)`,
+        NOW
+      );
+
+      await expect(
+        discardEvidence({
+          ownerUserId: OWNER,
+          inspectionId: 'insp-1',
+          evidenceId: 'ev-old',
+          operationId: 'op-discard',
+          discardedAtDevice: REOPENED_AT,
+        })
+      ).rejects.toBeInstanceOf(ItemNotCorrectableError);
+    });
+
+    it('registers a non-conformity only on an item the supervisor pointed out', async () => {
+      await reopenedWithOneItemToCorrect();
+
+      await expect(
+        createNonConformity({
+          ownerUserId: OWNER,
+          inspectionId: 'insp-1',
+          inspectionItemId: 'item-2',
+          nonConformityId: 'nc-1',
+          operationId: 'op-nc',
+          createdAtDevice: REOPENED_AT,
+          title: 'Trinca',
+          description: 'Trinca na base.',
+          severity: 'HIGH',
+        })
+      ).rejects.toBeInstanceOf(ItemNotCorrectableError);
+    });
+
+    it('removes a non-conformity only from an item the supervisor pointed out', async () => {
+      await reopenedWithOneItemToCorrect();
+      await database.runAsync(
+        `INSERT INTO non_conformities (
+           id, inspection_id, inspection_item_id, title, description, severity, created_at_device
+         ) VALUES ('nc-old', 'insp-1', 'item-2', 'Trinca', 'Trinca na base.', 'HIGH', ?)`,
+        NOW
+      );
+
+      await expect(
+        deleteNonConformity({
+          ownerUserId: OWNER,
+          inspectionId: 'insp-1',
+          nonConformityId: 'nc-old',
+          deletedAtDevice: REOPENED_AT,
+        })
+      ).rejects.toBeInstanceOf(ItemNotCorrectableError);
+    });
+  });
+
+  it('clears the completion data when the inspection is reopened for correction', async () => {
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({
+        status: 'REJECTED',
+        completedAtDevice: NOW,
+        completionLocation: { latitude: -23.5, longitude: -47.4, accuracy: 10, capturedAt: NOW },
+        review: { decision: 'REJECTED', reason: 'Refazer.', itemsToCorrect: [] },
+      }),
+      NOW
+    );
+
+    await reopenInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-reopen',
+      reopenedAtDevice: REOPENED_AT,
+    });
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.completedAtDevice).toBeNull();
+    expect(stored?.detail.completionLocation).toEqual({ status: 'not-recorded' });
+  });
+
+  it('keeps the conflict visible when the technician saves another answer', async () => {
+    await started();
+    const [start] = await listOpenOperations(OWNER);
+    const claimed = await claimOperation(start!.operationId, NOW);
+    await markFailed(claimed!, 'CONFLICT', 'Alterada no servidor.', NOW);
+
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer(),
+    });
+
+    expect((await findInspection(OWNER, 'insp-1'))?.detail.syncState).toBe('conflito');
+  });
+
+  it('records the version the server returned for an answer', async () => {
+    await started();
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-r',
+      response: checklistAnswer(),
+    });
+
+    await recordResponseVersion('resp-1', 4);
+
+    const row = await database.getFirstAsync<{ base_version: number }>(
+      'SELECT base_version FROM inspection_responses WHERE id = ?',
+      'resp-1'
+    );
+    expect(row?.base_version).toBe(4);
+  });
+
+  describe('equipment divergence (RN-064)', () => {
+    const divergence = {
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      scannedEquipmentId: 'eq-9',
+      scannedEquipmentName: 'Gerador 02',
+      recordedAt: REOPENED_AT,
+    };
+
+    it('keeps the equipment the technician read next to the inspection, without queueing a send', async () => {
+      await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
+
+      await recordEquipmentDivergence(divergence);
+
+      const stored = await findInspection(OWNER, 'insp-1');
+      expect(stored?.detail.equipmentDivergence).toEqual({
+        scannedEquipmentId: 'eq-9',
+        scannedEquipmentName: 'Gerador 02',
+        recordedAt: REOPENED_AT,
+      });
+      expect(await countOpenOperations(OWNER)).toBe(0);
+      expect(stored?.detail.syncState).toBe('salvo-no-dispositivo');
+    });
+
+    it('survives the next download of the same inspection', async () => {
+      await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
+      await recordEquipmentDivergence(divergence);
+
+      await saveDownloadedInspection(OWNER, remoteInspection({ title: 'Outro título' }), NOW);
+
+      const stored = await findInspection(OWNER, 'insp-1');
+      expect(stored?.detail.title).toBe('Outro título');
+      expect(stored?.detail.equipmentDivergence?.scannedEquipmentName).toBe('Gerador 02');
+    });
+
+    it('is not recorded for an inspection that is already closed', async () => {
+      await saveDownloadedInspection(OWNER, remoteInspection({ status: 'APPROVED' }), NOW);
+
+      await expect(recordEquipmentDivergence(divergence)).rejects.toBeInstanceOf(
+        InspectionStateError
+      );
+    });
   });
 });

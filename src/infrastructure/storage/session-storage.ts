@@ -1,8 +1,16 @@
 import * as SecureStore from 'expo-secure-store';
+import { z } from 'zod';
 
 import type { Session } from '@/domain/session';
 
 const SESSION_KEY = 'fieldops.session';
+
+const sessionSchema = z.object({
+  userId: z.string().min(1),
+  name: z.string(),
+  email: z.string(),
+  role: z.enum(['ADMIN', 'SUPERVISOR', 'TECHNICIAN', 'CLIENT_VIEWER']),
+});
 
 export async function readSession(): Promise<Session | null> {
   try {
@@ -10,7 +18,8 @@ export async function readSession(): Promise<Session | null> {
     if (raw === null) {
       return null;
     }
-    return JSON.parse(raw) as Session;
+    const parsed = sessionSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

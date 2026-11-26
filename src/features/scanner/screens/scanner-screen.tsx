@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { Alert, Linking, View } from 'react-native';
 
 import { useIdentifyEquipment } from '@/application/equipment/identify-equipment';
+import { useRecordEquipmentDivergence } from '@/application/equipment/record-divergence';
 import { useInspectionDetail } from '@/application/inspections/use-inspection-detail';
 import { Button } from '@/design-system/components/button';
 import { Card } from '@/design-system/components/card';
@@ -28,6 +29,7 @@ export function ScannerScreen() {
   const inspection = useInspectionDetail(inspectionId ?? '');
   const expected = inspection.state === 'ready' ? inspection.detail.equipment : null;
   const identify = useIdentifyEquipment(expected);
+  const recordDivergence = useRecordEquipmentDivergence(inspectionId ?? '');
   const [permission, requestPermission] = useCameraPermissions();
   const [typing, setTyping] = useState(false);
   const cycleLocked = useRef(false);
@@ -46,7 +48,13 @@ export function ScannerScreen() {
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Estou no equipamento previsto',
-          onPress: () => navigation.dispatch(data.action),
+          onPress: () => {
+            recordDivergence.mutate({
+              scannedEquipmentId: divergence.scanned.equipment.id,
+              scannedEquipmentName: divergence.scanned.equipment.name,
+            });
+            navigation.dispatch(data.action);
+          },
         },
       ]
     );

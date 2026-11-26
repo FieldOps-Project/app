@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import type { ChecklistItem, ChecklistResponse, Conformity } from '@/domain/checklist';
+import {
+  isConformity,
+  type ChecklistItem,
+  type ChecklistResponse,
+  type Conformity,
+} from '@/domain/checklist';
 
 export const TEXT_SHORT_MAX = 255;
 export const TEXT_LONG_MAX = 2000;
@@ -40,8 +45,6 @@ export function parseDecimal(text: string): number | null {
 export function formatDecimal(value: number): string {
   return String(value).replace('.', ',');
 }
-
-const CONFORMITIES: readonly string[] = ['CONFORMING', 'NON_CONFORMING', 'NOT_APPLICABLE'];
 
 type Issue = (message: string) => void;
 
@@ -91,8 +94,7 @@ function toColumns(item: ChecklistItem, value: unknown, issue: Issue): ResponseC
     case 'CONFORMITY':
       return {
         ...EMPTY_COLUMNS,
-        conformity:
-          typeof value === 'string' && CONFORMITIES.includes(value) ? (value as Conformity) : null,
+        conformity: isConformity(value) ? value : null,
       };
     case 'SINGLE_CHOICE': {
       const choice = typeof value === 'string' ? value : null;

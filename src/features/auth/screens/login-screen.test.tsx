@@ -112,6 +112,16 @@ describe('LoginScreen', () => {
     expect(text).not.toContain('E-mail ou senha inválidos.');
   });
 
+  it('says the profile does not use the field app, and not that the password is wrong', async () => {
+    answer(fail({ kind: 'forbidden' }));
+    const renderer = filled();
+
+    await submit(renderer);
+
+    expect(renderedText(renderer)).toContain('Este perfil não usa o aplicativo de campo');
+    expect(renderedText(renderer)).not.toContain('senha');
+  });
+
   it('does not hand the technician an instruction to revise what cannot be revised', async () => {
     answer(fail({ kind: 'business', code: 'SOMETHING_NEW', message: 'internal detail' }));
     const renderer = filled();

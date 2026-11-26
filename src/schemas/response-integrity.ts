@@ -1,4 +1,4 @@
-import type { ChecklistItem, ChecklistResponse } from '@/domain/checklist';
+import { isConformity, type ChecklistItem, type ChecklistResponse } from '@/domain/checklist';
 import {
   OBSERVATION_MAX,
   TEXT_LONG_MAX,
@@ -25,8 +25,6 @@ const ALL_COLUMNS: readonly ColumnName[] = [
   'valueDate',
   'conformity',
 ];
-
-const CONFORMITIES = ['CONFORMING', 'NON_CONFORMING', 'NOT_APPLICABLE'];
 
 function isRealDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -61,7 +59,7 @@ function valueIssue(item: ChecklistItem, response: ChecklistResponse): string | 
       return null;
     }
     case 'CONFORMITY':
-      return response.conformity !== null && !CONFORMITIES.includes(response.conformity)
+      return response.conformity !== null && !isConformity(response.conformity)
         ? 'A conformidade informada é inválida.'
         : null;
     case 'DATE':

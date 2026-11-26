@@ -63,8 +63,13 @@ export function evidenceUploadUri(path: string): string | null {
   }
 }
 
+export function isCacheUri(uri: string): boolean {
+  const cache = Paths.cache.uri.replace(/\/+$/, '');
+  return uri.startsWith(`${cache}/`) && !uri.split('/').includes('..');
+}
+
 export function deleteFile(path: string | null): void {
-  if (path === null) {
+  if (path === null || (path.includes('://') && !isCacheUri(path))) {
     return;
   }
   try {
@@ -79,6 +84,9 @@ export async function storePhoto(
   photo: CapturedPhoto,
   target: { readonly inspectionId: string; readonly evidenceId: string }
 ): Promise<Result<StoredPhoto, StorePhotoFailure>> {
+  if (!isCacheUri(photo.uri)) {
+    return fail({ kind: 'storage' });
+  }
   const rendered: File[] = [];
   try {
     const full = await render(photo, PHOTO_MAX_EDGE, PHOTO_QUALITY);

@@ -2,6 +2,7 @@ import { getDatabase } from '@/infrastructure/database/database';
 import { writeTransaction } from '@/infrastructure/database/write-transaction';
 import type { NonConformity, Severity } from '@/domain/non-conformity';
 import {
+  assertItemEditable,
   lockInspection,
   markInspectionDirty,
 } from '@/infrastructure/repositories/inspection-repository';
@@ -38,6 +39,7 @@ export async function createNonConformity(command: CreateNonConformityCommand): 
       command.inspectionId,
       ['IN_PROGRESS']
     );
+    await assertItemEditable(transaction, command.inspectionId, command.inspectionItemId);
     const item = await transaction.getFirstAsync<{ id: string }>(
       'SELECT id FROM inspection_items WHERE id = ? AND inspection_id = ?',
       command.inspectionItemId,
@@ -166,8 +168,11 @@ export async function deleteNonConformity(
 ): Promise<DeletedNonConformity> {
   return writeTransaction(async (transaction) => {
     await lockInspection(transaction, command.ownerUserId, command.inspectionId, ['IN_PROGRESS']);
-    const existing = await transaction.getFirstAsync<{ id: string }>(
-      `SELECT id FROM non_conformities
+    const existing = await transaction.getFirstAsync<{
+      id: string;
+      inspection_item_id: string | null;
+    }>(
+      `SELECT id, inspection_item_id FROM non_conformities
         WHERE id = ? AND inspection_id = ? AND deleted_locally = 0`,
       command.nonConformityId,
       command.inspectionId
@@ -175,6 +180,7 @@ export async function deleteNonConformity(
     if (existing === null) {
       return { outcome: 'not-found' } as const;
     }
+    await assertItemEditable(transaction, command.inspectionId, existing.inspection_item_id);
 
     const evidences = await transaction.getAllAsync<{
       id: string;

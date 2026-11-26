@@ -102,7 +102,7 @@ function Notice({
   return (
     <View className="flex-row items-start gap-2">
       <Ionicons name={icon} size={20} color={colors[tone].DEFAULT} />
-      <Text variant="body" tone={tone} className="flex-1">
+      <Text variant="body" tone={tone} accessibilityLiveRegion="polite" className="flex-1">
         {children}
       </Text>
     </View>

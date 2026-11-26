@@ -6,10 +6,10 @@ import { httpMobileInspectionsGateway } from '@/infrastructure/api/mobile-inspec
 import { fakeAdapter, type Reply } from '@/infrastructure/api/testing/fake-api';
 import { getDatabase } from '@/infrastructure/database/database';
 import { openTestDatabase } from '@/infrastructure/database/testing/node-sqlite';
-import { discardEvidence } from '@/infrastructure/repositories/inspection-repository';
 import { createNonConformity } from '@/infrastructure/repositories/non-conformity-repository';
 import {
   completeInspection,
+  discardEvidence,
   findInspection,
   registerEvidence,
   readLastSync,

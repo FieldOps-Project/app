@@ -78,7 +78,7 @@ export function EvidenceViewScreen() {
       </View>
       {evidence.description === null ? null : <Text variant="body">{evidence.description}</Text>}
       {discard.error === null ? null : (
-        <Text variant="body" tone="danger">
+        <Text variant="body" tone="danger" accessibilityRole="alert">
           Não foi possível remover a evidência. Tente de novo.
         </Text>
       )}

@@ -10,7 +10,13 @@ export const RESPONSE_TYPES = [
 
 export type ResponseType = (typeof RESPONSE_TYPES)[number];
 
-export type Conformity = 'CONFORMING' | 'NON_CONFORMING' | 'NOT_APPLICABLE';
+export const CONFORMITIES = ['CONFORMING', 'NON_CONFORMING', 'NOT_APPLICABLE'] as const;
+
+export type Conformity = (typeof CONFORMITIES)[number];
+
+export function isConformity(value: unknown): value is Conformity {
+  return typeof value === 'string' && (CONFORMITIES as readonly string[]).includes(value);
+}
 
 export interface ItemRules {
   readonly observationRequiredOnFailure: boolean;

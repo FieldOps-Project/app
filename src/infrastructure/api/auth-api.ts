@@ -62,6 +62,10 @@ export async function login(
   if (session === null) {
     return fail({ kind: 'server' });
   }
+  if (session.user.role === 'CLIENT_VIEWER') {
+    void logout(session.tokens.refreshToken);
+    return fail({ kind: 'forbidden' });
+  }
 
   return ok(session);
 }

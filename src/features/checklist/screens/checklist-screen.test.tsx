@@ -1,9 +1,10 @@
 import { act } from 'react';
-import { FlatList } from 'react-native';
+import { AppState, FlatList } from 'react-native';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
 
 import type { InspectionDetailState } from '@/application/inspections/use-inspection-detail';
 import { Button } from '@/design-system/components/button';
+import { Input } from '@/design-system/components/input';
 import type { ChecklistItem } from '@/domain/checklist';
 import { computeProgress } from '@/domain/checklist-progress';
 import { syncStateLabel, type InspectionDetail } from '@/domain/inspection';
@@ -336,5 +337,113 @@ describe('ChecklistScreen', () => {
       expect(rows).toHaveLength(ITEMS.length);
       expect(rows.every((row) => row.editable === true)).toBe(true);
     });
+  });
+});
+
+describe('a typed answer that was not committed yet', () => {
+  const TEXT_ITEM = ITEMS.find((item) => item.responseType === 'TEXT_SHORT')!;
+  let onAppState: (state: string) => void = () => undefined;
+
+  let spy: jest.SpyInstance;
+
+  beforeEach(() => {
+    spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      onAppState = listener as (state: string) => void;
+      return { remove: jest.fn() };
+    });
+  });
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  async function typingRow(onSave: jest.Mock) {
+    let renderer: ReactTestRenderer | undefined;
+    act(() => {
+      renderer = create(
+        <ChecklistItemRow
+          item={TEXT_ITEM}
+          response={undefined}
+          evidences={[]}
+          needsObservation={false}
+          needsEvidence={false}
+          toCorrect={false}
+          editable
+          focused={false}
+          nonConformityCount={0}
+          onSave={onSave}
+          onCaptureEvidence={jest.fn()}
+          onRegisterNonConformity={jest.fn()}
+          onOpenEvidence={jest.fn()}
+        />
+      );
+    });
+    const field = renderer!.root
+      .findAllByType(Input)
+      .find((input) => input.props.label === 'Resposta');
+    await act(async () => {
+      field?.props.onChangeText('Sem vazamentos');
+    });
+    return renderer!;
+  }
+
+  it('is saved when the technician leaves the screen without tapping outside the field', async () => {
+    const onSave = jest.fn();
+    const renderer = await typingRow(onSave);
+    expect(onSave).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(onSave).toHaveBeenCalledWith(
+      TEXT_ITEM.id,
+      expect.objectContaining({
+        columns: expect.objectContaining({ valueText: 'Sem vazamentos' }),
+      })
+    );
+  });
+
+  it('is saved when the app goes to the background', async () => {
+    const onSave = jest.fn();
+    const renderer = await typingRow(onSave);
+
+    await act(async () => {
+      onAppState('background');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    await act(async () => renderer.unmount());
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves nothing when there is nothing to save', async () => {
+    const onSave = jest.fn();
+    let renderer: ReactTestRenderer | undefined;
+    act(() => {
+      renderer = create(
+        <ChecklistItemRow
+          item={TEXT_ITEM}
+          response={undefined}
+          evidences={[]}
+          needsObservation={false}
+          needsEvidence={false}
+          toCorrect={false}
+          editable
+          focused={false}
+          nonConformityCount={0}
+          onSave={onSave}
+          onCaptureEvidence={jest.fn()}
+          onRegisterNonConformity={jest.fn()}
+          onOpenEvidence={jest.fn()}
+        />
+      );
+    });
+
+    await act(async () => renderer!.unmount());
+
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

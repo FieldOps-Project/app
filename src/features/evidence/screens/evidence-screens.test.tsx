@@ -54,6 +54,8 @@ jest.mock('@/application/inspections/use-checklist-actions', () => ({
 jest.mock('@/application/evidence/evidence-files', () => ({
   evidenceImageUri: (path: string) => `file:///documents/${path}`,
   discardCapturedPhoto: (uri: string) => mockDelete(uri),
+  isCapturedPhotoUri: (uri: string | undefined) =>
+    uri !== undefined && uri.startsWith('file:///cache/'),
 }));
 
 const ITEM: ChecklistItem = {
@@ -189,6 +191,16 @@ describe('preview', () => {
     );
     mockAttach.mock.calls[0][1].onSuccess();
     expect(mockReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a photo address that is not in the camera cache, and deletes nothing', () => {
+    mockParams.current = { itemId: 'item-1', photoUri: 'file:///documents/SQLite/fieldops.db' };
+
+    const screen = render(<EvidencePreviewScreen />);
+
+    expect(texts(screen)).toContain('Nenhuma foto para conferir');
+    expect(screen.root.findAllByType(Image)).toHaveLength(0);
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   it('attaches the photo to the non-conformity and goes back to it', () => {

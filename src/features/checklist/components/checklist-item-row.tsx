@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
-import { View } from 'react-native';
+import { AppState, View } from 'react-native';
 
 import { Badge } from '@/design-system/components/badge';
 import { Button } from '@/design-system/components/button';
@@ -78,15 +78,42 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
     }
   }, [form, item, response]);
 
+  const lastCommitted = useRef<string | null>(null);
+
   function commit() {
     const submitted = form.getValues();
     void form.handleSubmit((answer) => {
       form.reset(submitted);
+      lastCommitted.current = JSON.stringify(submitted);
       if (!isSameAnswer(answer, response) && !(response === undefined && isEmptyAnswer(answer))) {
         onSave(item.id, answer);
       }
     })();
   }
+
+  const latest = useRef({ commit, editable });
+  useEffect(() => {
+    latest.current = { commit, editable };
+  });
+  useEffect(() => {
+    const flush = () => {
+      if (!latest.current.editable) {
+        return;
+      }
+      if (JSON.stringify(form.getValues()) !== lastCommitted.current) {
+        latest.current.commit();
+      }
+    };
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        flush();
+      }
+    });
+    return () => {
+      subscription.remove();
+      flush();
+    };
+  }, [form]);
 
   const observation = useWatch({ control: form.control, name: 'observation' });
   const Field = responseFieldFor(item.responseType);

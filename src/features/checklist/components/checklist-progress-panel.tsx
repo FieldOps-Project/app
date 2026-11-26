@@ -4,7 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { Card } from '@/design-system/components/card';
 import { ProgressBar } from '@/design-system/components/progress-bar';
 import { Text } from '@/design-system/components/text';
-import { colors } from '@/design-system/tokens/design-tokens';
+import { colors, minTouchTarget } from '@/design-system/tokens/design-tokens';
 import {
   pendingReasonLabel,
   type ChecklistProgress,
@@ -34,7 +34,7 @@ export function SectionTabs({ progress, onSelect }: SectionTabsProps) {
           accessibilityRole="button"
           accessibilityLabel={`${section.title}: ${section.answered} de ${section.applicable}${section.complete ? ', completa' : ''}`}
           onPress={() => onSelect(section.order)}
-          style={{ minHeight: 48 }}
+          style={{ minHeight: minTouchTarget }}
           className="flex-row items-center gap-1.5 rounded-full border border-neutral-300 bg-neutral-0 px-3 active:opacity-70 dark:border-neutral-700 dark:bg-neutral-900"
         >
           <Ionicons
@@ -74,7 +74,7 @@ export function PendingList({ pending, onSelect }: PendingListProps) {
             accessibilityRole="button"
             accessibilityHint="Leva até o item"
             onPress={() => onSelect(entry.itemId)}
-            style={{ minHeight: 48 }}
+            style={{ minHeight: minTouchTarget }}
             className="flex-row items-center gap-2 active:opacity-70"
           >
             <Ionicons name="alert-circle-outline" size={20} color={colors.danger.DEFAULT} />

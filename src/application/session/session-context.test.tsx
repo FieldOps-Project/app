@@ -136,6 +136,24 @@ describe('signIn', () => {
   });
 });
 
+describe('signIn when secure storage fails', () => {
+  it('signs nobody in, clears what was half written and revokes the new tokens', async () => {
+    jest.mocked(login).mockResolvedValue({ ok: true, value: { tokens: TOKENS, user: USER } });
+    jest.mocked(writeSession).mockRejectedValueOnce(new Error('keychain unavailable'));
+    await mountProvider();
+
+    let result: Awaited<ReturnType<typeof current.signIn>> | undefined;
+    await act(async () => {
+      result = await current.signIn({ email: USER.email, password: 'secret' });
+    });
+
+    expect(result).toEqual({ ok: false, error: { kind: 'server' } });
+    expect(current.session).toBeNull();
+    expect(clearTokens).toHaveBeenCalled();
+    expect(logout).toHaveBeenCalledWith(TOKENS.refreshToken);
+  });
+});
+
 describe('signOut', () => {
   beforeEach(async () => {
     await writeSession(USER);
@@ -231,5 +249,22 @@ describe('session ended by the server', () => {
 
     expect(current.sessionExpired).toBe(false);
     expect(current.session).toEqual(USER);
+  });
+});
+
+describe('signOut when secure storage fails', () => {
+  it('still leaves the session, clears the cache and revokes the token', async () => {
+    await writeSession(USER);
+    await writeTokens(TOKENS);
+    await mountProvider();
+    jest.mocked(clearTokens).mockRejectedValueOnce(new Error('keychain unavailable'));
+
+    await act(async () => {
+      await current.signOut().catch(() => undefined);
+    });
+
+    expect(current.session).toBeNull();
+    expect(queryClient.getQueryData(['cached'])).toBeUndefined();
+    expect(logout).toHaveBeenCalledWith(TOKENS.refreshToken);
   });
 });

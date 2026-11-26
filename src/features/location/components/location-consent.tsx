@@ -51,7 +51,7 @@ export function LocationConsent({ moment }: { moment: TransitionMoment }) {
 
 export function LocatingNotice() {
   return (
-    <Text variant="caption" tone="muted">
+    <Text variant="caption" tone="muted" accessibilityLiveRegion="polite">
       {`Obtendo a localização (até ${LOCATION_TIMEOUT_MS / 1000} s)...`}
     </Text>
   );

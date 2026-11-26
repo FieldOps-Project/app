@@ -31,6 +31,7 @@ const ROW: InspectionRow = {
   completed_at_device: null,
   review_json: null,
   review_history_json: null,
+  equipment_divergence_json: null,
   start_latitude: null,
   start_longitude: null,
   start_accuracy: null,

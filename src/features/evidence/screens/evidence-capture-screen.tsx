@@ -84,7 +84,7 @@ export function EvidenceCaptureScreen() {
         />
       </View>
       {failure === null ? null : (
-        <Text variant="body" tone="danger">
+        <Text variant="body" tone="danger" accessibilityRole="alert">
           {failure}
         </Text>
       )}

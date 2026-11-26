@@ -38,7 +38,7 @@ jest.mock('expo-file-system', () => {
   return {
     File: MockFile,
     Directory: MockDirectory,
-    Paths: { document: { uri: 'file:///documents' } },
+    Paths: { document: { uri: 'file:///documents' }, cache: { uri: 'file:///cache/' } },
   };
 });
 
@@ -159,5 +159,37 @@ describe('deleteFile', () => {
     deleteFile(null);
 
     expect(new File(CAMERA_FILE).exists).toBe(false);
+  });
+
+  it.each([
+    'file:///documents/SQLite/fieldops.db',
+    'file:///cache/../documents/SQLite/fieldops.db',
+    'file:///cachefake/photo.jpg',
+  ])('never deletes an absolute address outside the camera cache: %s', (uri) => {
+    mockFiles.set(uri, 10);
+
+    deleteFile(uri);
+
+    expect(mockFiles.has(uri)).toBe(true);
+  });
+
+  it('still deletes a stored evidence by its relative path', () => {
+    mockFiles.set('file:///documents/evidences/insp-1/ev-1.jpg', 10);
+
+    deleteFile('evidences/insp-1/ev-1.jpg');
+
+    expect(mockFiles.has('file:///documents/evidences/insp-1/ev-1.jpg')).toBe(false);
+  });
+});
+
+describe('storePhoto source', () => {
+  it('refuses a photo that does not come from the camera cache', async () => {
+    const outside = 'file:///documents/SQLite/fieldops.db';
+    mockFiles.set(outside, 10);
+
+    const result = await storePhoto({ uri: outside, width: 100, height: 100 }, TARGET);
+
+    expect(result).toEqual({ ok: false, error: { kind: 'storage' } });
+    expect(mockFiles.has(outside)).toBe(true);
   });
 });

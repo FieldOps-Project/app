@@ -7,6 +7,9 @@ export interface Session {
   readonly role: SessionRole;
 }
 
-export function canReviewInspections(session: Session): boolean {
-  return session.role === 'SUPERVISOR' || session.role === 'ADMIN';
-}
+export const ROLE_DESCRIPTIONS: Readonly<Record<SessionRole, string>> = {
+  ADMIN: 'Administrador',
+  SUPERVISOR: 'Supervisor',
+  TECHNICIAN: 'Técnico · executa inspeções em campo',
+  CLIENT_VIEWER: 'Visualizador',
+};

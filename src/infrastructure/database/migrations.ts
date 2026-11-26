@@ -209,4 +209,7 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE sync_metadata ADD COLUMN pull_cursor TEXT;
   ALTER TABLE sync_operations ADD COLUMN server_state_json TEXT;
   `,
+  `
+  ALTER TABLE inspections ADD COLUMN equipment_divergence_json TEXT;
+  `,
 ];
