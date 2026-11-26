@@ -4,6 +4,7 @@ import {
   useInspectionSummaries,
   usePendingOperationsCount,
 } from '@/application/inspections/use-inspections';
+import { useInspectionsDownload } from '@/application/sync/use-synchronization';
 import { summarizeDay } from '@/domain/inspection-filters';
 import { startOfDay, type DayOverview } from '@/domain/inspection-schedule';
 
@@ -39,4 +40,19 @@ export function useHomeOverview(now: Date = new Date()): HomeOverview {
     return { state: 'loading' };
   }
   return { state: 'ready', day: overview, pendingOperations: pending.data };
+}
+
+export function useHomeRefresh() {
+  const download = useInspectionsDownload();
+  const summaries = useInspectionSummaries();
+  const pending = usePendingOperationsCount();
+
+  return {
+    refreshing: download.isFetching,
+    refresh: () => {
+      void download.refetch();
+      void summaries.refetch();
+      void pending.refetch();
+    },
+  };
 }
