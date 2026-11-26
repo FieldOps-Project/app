@@ -34,6 +34,10 @@ jest.mock('@/application/non-conformities/use-non-conformities', () => ({
 jest.mock('@/application/inspections/use-checklist-actions', () => ({
   useSaveAnswer: () => ({ save: jest.fn(), error: null, reset: jest.fn() }),
 }));
+const mockReopen = jest.fn();
+jest.mock('@/application/inspections/use-execution-actions', () => ({
+  useReopenInspection: () => ({ mutate: mockReopen, isPending: false, error: null }),
+}));
 jest.mock('@/application/inspection-draft/inspection-draft-context', () => ({
   useInspectionDraft: () => ({ focusedItemFor: () => null, focusItem: jest.fn() }),
 }));
@@ -99,6 +103,20 @@ function render(): ReactTestRenderer {
     renderer = create(<ChecklistScreen />);
   });
   return renderer!;
+}
+
+interface RowProps {
+  readonly item: ChecklistItem;
+  readonly editable: boolean;
+  readonly toCorrect: boolean;
+}
+
+function itemRows(renderer: ReactTestRenderer): RowProps[] {
+  const list = renderer.root.findByType(FlatList);
+  const data = list.props.data as { kind: string }[];
+  return data
+    .filter((row) => row.kind === 'item')
+    .map((row) => list.props.renderItem({ item: row }).props as RowProps);
 }
 
 function rowFor(options: {
@@ -246,7 +264,77 @@ describe('ChecklistScreen', () => {
     mockState.current = ready('SUBMITTED');
     const renderer = render();
 
-    const rows = renderer.root.findAllByType(ChecklistItemRow);
-    expect(rows.every((row) => row.props.editable === false)).toBe(true);
+    const rows = itemRows(renderer);
+    expect(rows).toHaveLength(ITEMS.length);
+    expect(rows.every((row) => row.editable === false)).toBe(true);
+  });
+
+  describe('correction after a rejection (card #30)', () => {
+    const REVIEW = {
+      decision: 'REJECTED' as const,
+      reason: 'Horímetro divergente.',
+      itemsToCorrect: ['item-1', 'item-2'],
+    };
+
+    function withReview(
+      status: InspectionDetail['status'],
+      review: typeof REVIEW | { decision: 'REJECTED'; reason: string; itemsToCorrect: string[] }
+    ): InspectionDetailState {
+      const base = ready(status);
+      return base.state === 'ready' ? { ...base, detail: { ...base.detail, review } } : base;
+    }
+
+    beforeEach(() => mockReopen.mockClear());
+
+    it('shows the reason first and asks for an explicit reopening', () => {
+      mockState.current = withReview('REJECTED', REVIEW);
+      const renderer = render();
+
+      expect(renderedText(renderer)).toContain('Horímetro divergente.');
+      const reopen = renderer.root
+        .findAllByType(Button)
+        .find((button) => button.props.label === 'Reabrir para correção');
+      expect(reopen).toBeDefined();
+      act(() => reopen!.props.onPress());
+      expect(mockReopen).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps every row read-only until the technician reopens', () => {
+      mockState.current = withReview('REJECTED', REVIEW);
+      const renderer = render();
+
+      const rows = itemRows(renderer);
+      expect(rows.every((row) => row.editable === false)).toBe(true);
+      expect(rows.filter((row) => row.toCorrect).map((row) => row.item.id)).toEqual([
+        'item-1',
+        'item-2',
+      ]);
+    });
+
+    it('releases only the pointed-out items once reopened', () => {
+      mockState.current = withReview('IN_PROGRESS', REVIEW);
+      const renderer = render();
+
+      const rows = itemRows(renderer);
+      expect(rows.filter((row) => row.editable).map((row) => row.item.id)).toEqual([
+        'item-1',
+        'item-2',
+      ]);
+      expect(renderedText(renderer)).toContain('Correção em andamento');
+      expect(
+        renderer.root
+          .findAllByType(Button)
+          .some((button) => button.props.label === 'Reabrir para correção')
+      ).toBe(false);
+    });
+
+    it('releases the whole checklist when no item was pointed out', () => {
+      mockState.current = withReview('IN_PROGRESS', { ...REVIEW, itemsToCorrect: [] });
+      const renderer = render();
+
+      const rows = itemRows(renderer);
+      expect(rows).toHaveLength(ITEMS.length);
+      expect(rows.every((row) => row.editable === true)).toBe(true);
+    });
   });
 });

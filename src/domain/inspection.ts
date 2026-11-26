@@ -56,6 +56,10 @@ export interface InspectionReview {
   readonly itemsToCorrect: readonly string[];
 }
 
+export interface PastReview extends InspectionReview {
+  readonly reopenedAt: string;
+}
+
 export interface InspectionDetail extends InspectionSummary {
   readonly instructions: string | null;
   readonly version: number;
@@ -67,6 +71,7 @@ export interface InspectionDetail extends InspectionSummary {
   readonly startLocation: RecordedLocation;
   readonly completionLocation: RecordedLocation;
   readonly review: InspectionReview | null;
+  readonly reviewHistory: readonly PastReview[];
   readonly syncError: string | null;
 }
 

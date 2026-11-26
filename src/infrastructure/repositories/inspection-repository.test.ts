@@ -17,6 +17,7 @@ import {
   InspectionStateError,
   listInspectionSummaries,
   registerEvidence,
+  reopenInspection,
   saveDownloadedInspection,
   saveResponse,
   startInspection,
@@ -35,6 +36,7 @@ import {
 import {
   InspectionIncompleteError,
   InvalidResponseError,
+  ItemNotCorrectableError,
 } from '@/infrastructure/repositories/inspection-errors';
 import {
   checklistAnswer,
@@ -628,6 +630,164 @@ describe('refused completion', () => {
       'op-start',
       'op-r',
     ]);
+  });
+});
+
+describe('correction after a rejection (card #30)', () => {
+  const REJECTED_AT = '2026-08-12T15:00:00.000Z';
+  const REOPENED_AT = '2026-08-12T16:00:00.000Z';
+  const CORRECTED_AT = '2026-08-12T17:00:00.000Z';
+
+  async function rejected(itemsToCorrect: string[]) {
+    const base = remoteInspection();
+    const second = { ...base.items[0]!, id: 'item-2', itemOrder: 2, itemTitle: 'Extintor' };
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({
+        status: 'REJECTED',
+        items: [...base.items, second],
+        review: { decision: 'REJECTED', reason: 'Horímetro divergente.', itemsToCorrect },
+      }),
+      REJECTED_AT
+    );
+  }
+
+  function reopen(operationId = 'op-reopen') {
+    return reopenInspection({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId,
+      reopenedAtDevice: REOPENED_AT,
+    });
+  }
+
+  it('keeps the rejected inspection read-only until the technician reopens it', async () => {
+    await rejected(['item-1']);
+
+    await expect(
+      saveResponse({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        operationId: 'op-r',
+        response: checklistAnswer(),
+      })
+    ).rejects.toBeInstanceOf(InspectionStateError);
+  });
+
+  it('reopens on the device, offline, and queues the transition', async () => {
+    await rejected(['item-1']);
+
+    await reopen();
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.detail.status).toBe('IN_PROGRESS');
+    expect(stored?.detail.syncState).toBe('aguardando-envio');
+    expect(stored?.detail.review?.itemsToCorrect).toEqual(['item-1']);
+    const [operation] = await listOpenOperations(OWNER);
+    expect(operation).toMatchObject({
+      operationId: 'op-reopen',
+      operationType: 'TRANSITION',
+      baseVersion: 3,
+      payload: { action: 'REOPEN', reopenedAtDevice: REOPENED_AT },
+    });
+  });
+
+  it('refuses to reopen an inspection that was not rejected, leaving nothing queued', async () => {
+    await saveDownloadedInspection(OWNER, remoteInspection(), NOW);
+
+    await expect(reopen()).rejects.toBeInstanceOf(InspectionStateError);
+    expect(await countOpenOperations(OWNER)).toBe(0);
+  });
+
+  it('accepts new answers only for the items the supervisor pointed out', async () => {
+    await rejected(['item-1']);
+    await reopen();
+
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-fix',
+      response: checklistAnswer({ inspectionItemId: 'item-1', answeredAtDevice: CORRECTED_AT }),
+    });
+    await expect(
+      saveResponse({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        operationId: 'op-other',
+        response: checklistAnswer({ id: 'resp-2', inspectionItemId: 'item-2' }),
+      })
+    ).rejects.toBeInstanceOf(ItemNotCorrectableError);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.responses.map((response) => response.inspectionItemId)).toEqual(['item-1']);
+    expect((await listOpenOperations(OWNER)).map((op) => op.operationId)).toEqual([
+      'op-reopen',
+      'op-fix',
+    ]);
+  });
+
+  it('reopens the whole inspection when no item was pointed out', async () => {
+    await rejected([]);
+    await reopen();
+
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-any',
+      response: checklistAnswer({ inspectionItemId: 'item-2' }),
+    });
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.responses.map((response) => response.inspectionItemId)).toEqual(['item-2']);
+  });
+
+  it('keeps the earlier rejection consultable after a second one (RN-083)', async () => {
+    await rejected(['item-1']);
+    await reopen();
+
+    const afterFirst = await findInspection(OWNER, 'insp-1');
+    expect(afterFirst?.detail.reviewHistory).toEqual([
+      {
+        decision: 'REJECTED',
+        reason: 'Horímetro divergente.',
+        itemsToCorrect: ['item-1'],
+        reopenedAt: REOPENED_AT,
+      },
+    ]);
+
+    await database.runAsync("UPDATE inspections SET is_dirty = 0, status = 'SUBMITTED'");
+    const base = remoteInspection();
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({
+        status: 'REJECTED',
+        version: 5,
+        updatedAt: 'v5',
+        items: [...base.items, { ...base.items[0]!, id: 'item-2', itemOrder: 2 }],
+        review: { decision: 'REJECTED', reason: 'Ainda divergente.', itemsToCorrect: [] },
+      }),
+      REOPENED_AT
+    );
+
+    const second = await findInspection(OWNER, 'insp-1');
+    expect(second?.detail.review?.reason).toBe('Ainda divergente.');
+    expect(second?.detail.reviewHistory.map((past) => past.reason)).toEqual([
+      'Horímetro divergente.',
+    ]);
+  });
+
+  it('submits the corrected inspection through the same completion checks', async () => {
+    await rejected(['item-1']);
+    await reopen();
+    await expect(
+      completeInspection({
+        ownerUserId: OWNER,
+        inspectionId: 'insp-1',
+        operationId: 'op-submit',
+        completedAtDevice: NOW,
+        location: DENIED,
+      })
+    ).rejects.toBeInstanceOf(InspectionIncompleteError);
   });
 });
 

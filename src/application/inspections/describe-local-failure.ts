@@ -2,6 +2,7 @@ import { InspectionStateError } from '@/infrastructure/repositories/inspection-r
 import {
   InspectionIncompleteError,
   InvalidResponseError,
+  ItemNotCorrectableError,
 } from '@/infrastructure/repositories/inspection-errors';
 import { NON_CONFORMITY_ERRORS } from '@/infrastructure/repositories/non-conformity-errors';
 
@@ -9,6 +10,7 @@ const BUSINESS_ERRORS = [
   InspectionStateError,
   InspectionIncompleteError,
   InvalidResponseError,
+  ItemNotCorrectableError,
   ...NON_CONFORMITY_ERRORS,
 ] as const;
 

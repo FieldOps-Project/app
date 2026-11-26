@@ -1,4 +1,4 @@
-import type { InspectionStatus, SyncState } from '@/domain/inspection';
+import type { InspectionReview, InspectionStatus, SyncState } from '@/domain/inspection';
 
 export type InspectionAction = 'START' | 'CONTINUE' | 'CORRECT' | 'VIEW';
 
@@ -31,6 +31,37 @@ export function canStart(status: InspectionStatus): boolean {
 
 export function canEditAnswers(status: InspectionStatus): boolean {
   return status === 'IN_PROGRESS';
+}
+
+export function canReopen(status: InspectionStatus): boolean {
+  return status === 'REJECTED';
+}
+
+export function correctionScope(
+  status: InspectionStatus,
+  review: InspectionReview | null
+): ReadonlySet<string> | null {
+  const correcting = status === 'REJECTED' || status === 'IN_PROGRESS';
+  if (!correcting || review === null || review.decision !== 'REJECTED') {
+    return null;
+  }
+  return review.itemsToCorrect.length > 0 ? new Set(review.itemsToCorrect) : null;
+}
+
+export function canEditItem(
+  status: InspectionStatus,
+  review: InspectionReview | null,
+  itemId: string
+): boolean {
+  if (!canEditAnswers(status)) {
+    return false;
+  }
+  const scope = correctionScope(status, review);
+  return scope === null || scope.has(itemId);
+}
+
+export function requiresCorrection(status: InspectionStatus): boolean {
+  return status === 'REJECTED';
 }
 
 export function startBlockedReason(status: InspectionStatus): string | null {

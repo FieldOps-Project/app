@@ -11,3 +11,10 @@ export class InvalidResponseError extends Error {
     this.name = 'InvalidResponseError';
   }
 }
+
+export class ItemNotCorrectableError extends Error {
+  constructor() {
+    super('Este item não foi apontado para correção. Só os itens marcados podem ser alterados.');
+    this.name = 'ItemNotCorrectableError';
+  }
+}

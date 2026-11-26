@@ -97,8 +97,15 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
         </View>
       </View>
 
-      {detail.status === 'REJECTED' && detail.review !== null ? (
-        <Card title="Reprovada pelo supervisor" className="border-2 border-danger">
+      {(detail.status === 'REJECTED' || detail.status === 'IN_PROGRESS') &&
+      detail.review !== null &&
+      detail.review.decision === 'REJECTED' ? (
+        <Card
+          title={
+            detail.status === 'REJECTED' ? 'Reprovada pelo supervisor' : 'Correção em andamento'
+          }
+          className="border-2 border-danger"
+        >
           <Text variant="body">{detail.review.reason ?? 'Motivo não informado.'}</Text>
           {detail.review.itemsToCorrect.length > 0 ? (
             <View className="gap-1.5">
@@ -112,6 +119,24 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
               ))}
             </View>
           ) : null}
+        </Card>
+      ) : null}
+
+      {detail.reviewHistory.length > 0 ? (
+        <Card title="Reprovações anteriores">
+          {detail.reviewHistory.map((past, index) => (
+            <View key={`${past.reopenedAt}-${index}`} className="gap-1">
+              <Text variant="caption" tone="muted">
+                {`Corrigida em ${formatDateTime(past.reopenedAt)}`}
+              </Text>
+              <Text variant="body">{past.reason ?? 'Motivo não informado.'}</Text>
+              {past.itemsToCorrect.length > 0 ? (
+                <Text variant="caption" tone="muted">
+                  {`Itens: ${past.itemsToCorrect.map((itemId) => titleOf.get(itemId) ?? 'item fora do checklist').join(', ')}`}
+                </Text>
+              ) : null}
+            </View>
+          ))}
         </Card>
       ) : null}
 

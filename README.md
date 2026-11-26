@@ -147,14 +147,15 @@ API --(download)--> SQLite <--(leitura)-- telas
   fila depois dele e o arquivo fica no aparelho.
 - Uma falha marca só a própria operação. O `last_error` passa por `sanitizeSyncError`, que
   remove tokens e senhas e limita o tamanho.
-- **O que o motor envia.** Início, respostas, não conformidades, fotos, remoção de foto e
-  conclusão, nessa ordem de dependência, e a conclusão sempre por último. A foto vai como
-  `multipart/form-data` (`file` como `{ uri, name, type }` e `metadata` como `{ string, type:
-'application/json' }`, que é como o React Native serializa as partes, com o id gerado no
-  aparelho para o reenvio ser seguro) para `POST /inspections/{id}/evidence`; a não conformidade vai para
-  `POST /inspections/{id}/non-conformities`; a remoção, para `DELETE /evidence/{id}`. Esses
-  caminhos seguem o que as issues backend#22 e #23 descrevem, que ainda não existem no servidor,
-  e o formato exato do multipart é uma suposição a confirmar com o backend.
+- **O que o motor envia.** Início, respostas, não conformidades, fotos, remoção de foto,
+  reabertura para correção e conclusão, nessa ordem de dependência, e a conclusão sempre por
+  último. A foto vai como `multipart/form-data` (`file` como `{ uri, name, type }` e `metadata`
+  como `{ string, type: 'application/json' }`, que é como o React Native serializa as partes,
+  com o id gerado no aparelho para o reenvio ser seguro) para `POST /inspections/{id}/evidence`;
+  a não conformidade vai para `POST /inspections/{id}/non-conformities`; a remoção, para
+  `DELETE /evidence/{id}`; a reabertura, para `POST /inspections/{id}/reopen`. Esses formatos
+  foram conferidos contra o backend `develop` (início, respostas, não conformidade, foto,
+  remoção e conclusão aceitos com os payloads do app).
 - O motor processa em passadas: uma operação que espera outra (por exemplo, a foto tirada antes
   de o item ser respondido) fica para a passada seguinte em vez de travar a inspeção.
 - Uma foto que o servidor recusa de forma definitiva (413, 415 ou arquivo ausente do aparelho)
@@ -186,6 +187,30 @@ dependem de a tela estar certa:
 - **Última sincronização (RN-072).** A tela de sincronização mostra data e resultado da última
   tentativa (tudo sincronizado, parcial ou não concluída) e, se ela não foi completa, a data da
   última que foi.
+
+### Correção após reprovação
+
+O fluxo do documento 7.8 funciona sem conexão, porque cada passo grava no aparelho e entra na
+outbox:
+
+- A reprovação chega pela sincronização (`review` no detalhe mobile) e a lista destaca a inspeção
+  como **Requer correção**. O motivo aparece em primeiro plano no detalhe e no topo do checklist,
+  e os itens apontados ficam marcados como "A corrigir".
+- A inspeção reprovada fica só para consulta até o técnico tocar em **Reabrir para correção**
+  (`reopenInspection`): a reabertura nunca é automática. Ela muda o estado local para
+  `IN_PROGRESS` e enfileira `REOPEN`, que o motor envia para `POST /inspections/{id}/reopen`
+  antes das respostas corrigidas e da nova conclusão.
+- **Escopo da edição.** Com `itemsToCorrect`, só esses itens aceitam resposta; sem a lista, o
+  checklist inteiro reabre. A regra está em `saveResponse` (`ItemNotCorrectableError`), não só
+  na tela, e o servidor também a aplica.
+- **Reenvio.** A conclusão passa pela mesma validação de sempre (`completeInspection`) e gera uma
+  operação nova.
+- **Histórico (RN-083).** O endpoint de revisões do backend é restrito ao supervisor, e o detalhe
+  mobile traz só a reprovação mais recente. Por isso, ao reabrir, o app guarda a reprovação
+  atual em `review_history_json` (migração 5), e o detalhe mostra "Reprovações anteriores" mesmo
+  depois de uma segunda reprovação.
+- Limite conhecido: o aparelho que baixa a inspeção pela primeira vez já reprovada não recebe as
+  reprovações anteriores, só a última.
 
 ### Conectividade e envio automático
 

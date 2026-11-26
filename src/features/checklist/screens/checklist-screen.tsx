@@ -7,6 +7,7 @@ import { useInspectionDraft } from '@/application/inspection-draft/inspection-dr
 import { describeLocalFailure } from '@/application/inspections/describe-local-failure';
 import { useNonConformities } from '@/application/non-conformities/use-non-conformities';
 import { useSaveAnswer } from '@/application/inspections/use-checklist-actions';
+import { useReopenInspection } from '@/application/inspections/use-execution-actions';
 import {
   useInspectionDetail,
   type InspectionWork,
@@ -23,8 +24,13 @@ import { Text } from '@/design-system/components/text';
 import { toSections, type ChecklistItem, type ChecklistSection } from '@/domain/checklist';
 import { nextPending } from '@/domain/checklist-progress';
 import type { EvidenceSummary } from '@/domain/evidence';
-import type { InspectionStatus } from '@/domain/inspection';
-import { canEditAnswers } from '@/domain/inspection-actions';
+import type { InspectionDetail } from '@/domain/inspection';
+import {
+  canEditAnswers,
+  canEditItem,
+  canReopen,
+  correctionScope,
+} from '@/domain/inspection-actions';
 import { ChecklistItemRow } from '@/features/checklist/components/checklist-item-row';
 import {
   PendingList,
@@ -108,7 +114,7 @@ function Checklist({ work }: { work: InspectionWork }) {
     return counts;
   }, [nonConformities.data]);
   const toCorrect = useMemo(
-    () => new Set(detail.status === 'REJECTED' ? (detail.review?.itemsToCorrect ?? []) : []),
+    () => correctionScope(detail.status, detail.review) ?? new Set<string>(),
     [detail.status, detail.review]
   );
   const blocking = useMemo(() => {
@@ -266,7 +272,7 @@ function Checklist({ work }: { work: InspectionWork }) {
           ListHeaderComponent={
             <View className="gap-3">
               <NavigationDepthBadge />
-              <StatusNotice status={detail.status} inspectionId={detail.id} />
+              <StatusNotice detail={detail} />
               <FieldError
                 message={
                   saveAnswer.error === null
@@ -303,7 +309,7 @@ function Checklist({ work }: { work: InspectionWork }) {
                 needsObservation={blocking.get(row.item.id)?.has('OBSERVATION_REQUIRED') ?? false}
                 needsEvidence={blocking.get(row.item.id)?.has('EVIDENCE_REQUIRED') ?? false}
                 toCorrect={toCorrect.has(row.item.id)}
-                editable={editable}
+                editable={canEditItem(detail.status, detail.review, row.item.id)}
                 focused={row.item.id === focusedItemId}
                 nonConformityCount={nonConformityCounts.get(row.item.id) ?? 0}
                 onSave={save}
@@ -348,18 +354,27 @@ function SectionHeader({
   );
 }
 
-function StatusNotice({
-  status,
-  inspectionId,
-}: {
-  status: InspectionStatus;
-  inspectionId: string;
-}) {
+function StatusNotice({ detail }: { detail: InspectionDetail }) {
   const router = useRouter();
+  const { status, review } = detail;
+  const inspectionId = detail.id;
 
   switch (status) {
-    case 'IN_PROGRESS':
-      return null;
+    case 'IN_PROGRESS': {
+      if (review === null || review.decision !== 'REJECTED') {
+        return null;
+      }
+      return (
+        <Card title="Correção em andamento" className="border-2 border-danger">
+          <Text variant="body">{review.reason ?? 'Motivo não informado.'}</Text>
+          <Text variant="caption" tone="muted">
+            {review.itemsToCorrect.length > 0
+              ? 'Só os itens marcados como "A corrigir" podem ser alterados. Os demais ficam em leitura.'
+              : 'O supervisor não apontou itens específicos: todo o checklist está liberado.'}
+          </Text>
+        </Card>
+      );
+    }
     case 'ASSIGNED':
       return (
         <Card title="Inspeção não iniciada">
@@ -376,14 +391,7 @@ function StatusNotice({
         </Card>
       );
     case 'REJECTED':
-      return (
-        <Card title="Modo consulta">
-          <Text variant="body">
-            Inspeção reprovada. Os itens a corrigir estão marcados; a reabertura para correção ainda
-            não está disponível neste aparelho.
-          </Text>
-        </Card>
-      );
+      return <RejectedNotice detail={detail} />;
     case 'CANCELED':
       return (
         <Card title="Modo consulta">
@@ -397,4 +405,34 @@ function StatusNotice({
         </Card>
       );
   }
+}
+
+function RejectedNotice({ detail }: { detail: InspectionDetail }) {
+  const reopen = useReopenInspection(detail.id);
+  const { status, review } = detail;
+
+  return (
+    <Card title="Requer correção" className="border-2 border-danger">
+      <Text variant="body">{review?.reason ?? 'Motivo não informado.'}</Text>
+      <Text variant="caption" tone="muted">
+        {review !== null && review.itemsToCorrect.length > 0
+          ? 'Os itens a corrigir estão marcados. Ao reabrir, só eles poderão ser alterados.'
+          : 'Ao reabrir, todo o checklist poderá ser alterado.'}
+      </Text>
+      {canReopen(status) ? (
+        <Button
+          label="Reabrir para correção"
+          loading={reopen.isPending}
+          onPress={() => reopen.mutate()}
+        />
+      ) : null}
+      <FieldError
+        message={
+          reopen.error === null
+            ? undefined
+            : `Não foi possível reabrir: ${describeLocalFailure(reopen.error)}`
+        }
+      />
+    </Card>
+  );
 }

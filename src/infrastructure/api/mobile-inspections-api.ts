@@ -82,6 +82,7 @@ export interface MobileInspectionsGateway {
   detail(inspectionId: string): Promise<Result<MobileInspection, ApiFailure>>;
   start(inspectionId: string, payload: StartPayload): Promise<Result<void, ApiFailure>>;
   submit(inspectionId: string, payload: SubmitPayload): Promise<Result<void, ApiFailure>>;
+  reopen(inspectionId: string): Promise<Result<void, ApiFailure>>;
   putResponse(inspectionId: string, payload: ResponsePayload): Promise<Result<number, ApiFailure>>;
   createNonConformity(
     inspectionId: string,
@@ -145,6 +146,13 @@ export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
       method: 'POST',
       path: `/api/v1/inspections/${encodeURIComponent(inspectionId)}/submit`,
       data: payload,
+    });
+  },
+
+  reopen(inspectionId) {
+    return request<void>({
+      method: 'POST',
+      path: `/api/v1/inspections/${encodeURIComponent(inspectionId)}/reopen`,
     });
   },
 

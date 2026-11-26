@@ -108,3 +108,14 @@ describe('uploadEvidence', () => {
     append.mockRestore();
   });
 });
+
+describe('reopen', () => {
+  it('posts to the reopen endpoint of the inspection without a body', async () => {
+    await httpMobileInspectionsGateway.reopen('insp 1');
+
+    expect(jest.mocked(request).mock.calls[0]?.[0]).toEqual({
+      method: 'POST',
+      path: '/api/v1/inspections/insp%201/reopen',
+    });
+  });
+});
