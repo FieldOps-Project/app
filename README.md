@@ -376,7 +376,11 @@ Checklist quando o aplicativo não alcança a API:
 3. A API está ouvindo em todas as interfaces (`0.0.0.0`) e não só em `localhost`?
 4. O firewall da máquina libera a porta 8080?
 5. Em Android, tráfego HTTP em texto puro só é aceito em build de desenvolvimento. Em
-   produção a API precisa ser HTTPS.
+   produção a API precisa ser HTTPS. O `app.config.js` libera o texto puro (Android
+   `usesCleartextTraffic` e iOS ATS) somente quando `EXPO_PUBLIC_API_URL` começa com `http://`,
+   como num APK local apontado para um servidor sem TLS
+   (`EXPO_PUBLIC_API_URL=http://<ip>:8080 EXPO_PUBLIC_APP_ENV=local npx expo prebuild` e
+   `./gradlew assembleRelease`); com uma URL `https://` o build sai sem essa liberação.
 
 Se o login falhar com aviso de falta de conexão mesmo com internet, o endereço configurado
 em `EXPO_PUBLIC_API_URL` não é alcançável a partir do aparelho.
