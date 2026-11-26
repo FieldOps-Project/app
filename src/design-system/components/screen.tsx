@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
+import type { ReactElement, ReactNode } from 'react';
+import { ScrollView, View, type RefreshControlProps } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
 import { useScreenBanner } from '@/design-system/components/screen-banner';
@@ -12,6 +12,7 @@ export interface ScreenProps {
   edges?: readonly Edge[];
   padded?: boolean;
   className?: string;
+  refreshControl?: ReactElement<RefreshControlProps>;
 }
 
 export function Screen({
@@ -20,6 +21,7 @@ export function Screen({
   edges = ['top', 'bottom', 'left', 'right'],
   padded = true,
   className,
+  refreshControl,
 }: ScreenProps) {
   const banner = useScreenBanner();
 
@@ -37,6 +39,7 @@ export function Screen({
           contentContainerClassName="grow"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={refreshControl}
         >
           {content}
         </ScrollView>

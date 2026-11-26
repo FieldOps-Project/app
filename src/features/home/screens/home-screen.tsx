@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, RefreshControl, View } from 'react-native';
 
-import { useHomeOverview } from '@/application/inspections/use-home-overview';
+import { useHomeOverview, useHomeRefresh } from '@/application/inspections/use-home-overview';
 import { useSession } from '@/application/session/session-context';
 import { EnvironmentBadge } from '@/components/environment-badge';
 import { Button } from '@/design-system/components/button';
@@ -21,6 +21,7 @@ import { plural } from '@/utils/plural';
 export function HomeScreen() {
   const { session } = useSession();
   const overview = useHomeOverview();
+  const { refreshing, refresh } = useHomeRefresh();
   const router = useRouter();
 
   function openList(view: InspectionView) {
@@ -30,7 +31,10 @@ export function HomeScreen() {
   const firstName = session?.name.split(' ')[0] ?? 'técnico';
 
   return (
-    <Screen scrollable>
+    <Screen
+      scrollable
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+    >
       <View className="gap-1">
         <EnvironmentBadge />
         <Text variant="title">Olá, {firstName}</Text>
@@ -40,6 +44,9 @@ export function HomeScreen() {
             day: 'numeric',
             month: 'long',
           })}
+        </Text>
+        <Text variant="caption" tone="muted">
+          Puxe para baixo para atualizar.
         </Text>
       </View>
 
