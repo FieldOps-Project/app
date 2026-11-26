@@ -1025,6 +1025,46 @@ describe('migrations', () => {
       deleted_locally: 0,
     });
   });
+
+  it('clears the conformity an older version inferred for a yes/no answer', async () => {
+    const old = await openTestDatabase({ schemaVersion: 7 });
+    jest.mocked(getDatabase).mockResolvedValue(old);
+    const base = remoteInspection();
+    const item = base.items[0]!;
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({
+        items: [item, { ...item, id: 'item-2', responseType: 'BOOLEAN', itemOrder: 2 }],
+      }),
+      NOW
+    );
+    for (const [id, itemId, conformity] of [
+      ['resp-1', 'item-1', 'NON_CONFORMING'],
+      ['resp-2', 'item-2', 'NON_CONFORMING'],
+    ] as const) {
+      await old.runAsync(
+        `INSERT INTO inspection_responses (
+           id, inspection_id, inspection_item_id, value_boolean, conformity,
+           answered_at_device, base_version
+         ) VALUES (?, 'insp-1', ?, 0, ?, ?, 1)`,
+        id,
+        itemId,
+        conformity,
+        NOW
+      );
+    }
+
+    await migrate(old);
+
+    expect(
+      await old.getAllAsync(
+        'SELECT id, conformity FROM inspection_responses ORDER BY inspection_item_id'
+      )
+    ).toEqual([
+      { id: 'resp-1', conformity: 'NON_CONFORMING' },
+      { id: 'resp-2', conformity: null },
+    ]);
+  });
 });
 
 describe('local queries (card #21)', () => {
