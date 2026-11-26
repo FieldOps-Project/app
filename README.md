@@ -102,7 +102,7 @@ API, então trocar de ambiente é escolher o perfil, sem alterar código:
 
 As URLs de integração, demonstração e produção são endereços reservados (`.example`) até existir
 um servidor publicado; troque-as no `eas.json` quando o ambiente existir. Em desenvolvimento, o
-`.env` continua valendo. Fora de `production`, o início, o login e o perfil mostram o ambiente,
+`.env` continua valendo. Fora de `production` e de `local`, o início, o login e o perfil mostram o ambiente,
 para ninguém confundir dado de teste com dado real. A tela de perfil também mostra o
 identificador do aparelho, um UUID gerado na primeira abertura e guardado no `expo-secure-store`,
 que o suporte pode pedir.

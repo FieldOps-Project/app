@@ -25,14 +25,13 @@ function badgeFor(appEnv: string): string {
 
 describe('EnvironmentBadge', () => {
   it.each([
-    ['local', 'Ambiente: Local'],
     ['integration', 'Ambiente: Integração'],
     ['demo', 'Ambiente: Demonstração'],
   ])('flags the %s environment so test data is not taken for real', (appEnv, expected) => {
     expect(badgeFor(appEnv)).toContain(expected);
   });
 
-  it('stays out of the way in production', () => {
-    expect(badgeFor('production')).toBe('');
+  it.each(['local', 'production'])('stays out of the way in the %s environment', (appEnv) => {
+    expect(badgeFor(appEnv)).toBe('');
   });
 });

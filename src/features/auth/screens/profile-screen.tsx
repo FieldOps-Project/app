@@ -52,9 +52,11 @@ export function ProfileScreen() {
 
       <Card title="Este aparelho">
         <Text variant="body">{`Versão ${appVersionLabel}`}</Text>
-        <Text variant="body" tone="muted">
-          {`Ambiente: ${ENVIRONMENT_LABELS[env.appEnv]}`}
-        </Text>
+        {env.appEnv === 'local' ? null : (
+          <Text variant="body" tone="muted">
+            {`Ambiente: ${ENVIRONMENT_LABELS[env.appEnv]}`}
+          </Text>
+        )}
         <Text variant="caption" tone="muted">
           Identificador do aparelho
         </Text>
