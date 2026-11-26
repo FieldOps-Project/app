@@ -25,6 +25,7 @@ import {
   reopenAfterRefusedSubmit,
   type QueuedOperation,
 } from '@/infrastructure/repositories/outbox-repository';
+import { pullChanges, type PullOutcome } from '@/application/sync/pull-changes';
 import { refreshInspections, type RefreshOutcome } from '@/application/sync/refresh-inspections';
 
 const locationSchema = z
@@ -71,6 +72,7 @@ export interface SyncOutcome {
   readonly sent: number;
   readonly refused: number;
   readonly refresh: RefreshOutcome;
+  readonly pull: PullOutcome | null;
 }
 
 function invalidOperation(): Result<void, ApiFailure> {
@@ -287,7 +289,15 @@ async function run(
     return refresh;
   }
 
-  const partial = refused > 0 || refresh.value.failed > 0;
+  const pulled = await pullChanges(ownerUserId, gateway, now);
+  if (!pulled.ok && (isNetworkFailure(pulled.error) || pulled.error.kind === 'unauthorized')) {
+    await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());
+    return fail(pulled.error);
+  }
+
+  const pull = pulled.ok ? pulled.value : null;
+  const partial =
+    refused > 0 || refresh.value.failed > 0 || pull === null || pull.held || pull.conflicts > 0;
   await recordSyncRun(ownerUserId, partial ? 'PARTIAL' : 'SUCCESS', startedAt, now());
-  return ok({ sent, refused, refresh: refresh.value });
+  return ok({ sent, refused, refresh: refresh.value, pull });
 }

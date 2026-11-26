@@ -27,5 +27,9 @@ export const queryKeys = {
       [...queryKeys.synchronization.all(), 'last-run', ownerUserId] as const,
     download: (ownerUserId: string) =>
       [...queryKeys.synchronization.all(), 'download', ownerUserId] as const,
+    conflicts: (ownerUserId: string, inspectionId?: string) =>
+      inspectionId === undefined
+        ? ([...queryKeys.synchronization.all(), 'conflicts', ownerUserId] as const)
+        : ([...queryKeys.synchronization.all(), 'conflicts', ownerUserId, inspectionId] as const),
   },
 } as const;

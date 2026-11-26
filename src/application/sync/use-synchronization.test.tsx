@@ -20,7 +20,7 @@ jest.mock('@/infrastructure/network/network-status', () => ({
   subscribeToNetwork: () => () => undefined,
 }));
 
-const SYNCED = { sent: 0, refused: 0, refresh: { saved: 0, failed: 0 } };
+const SYNCED = { sent: 0, refused: 0, refresh: { saved: 0, failed: 0 }, pull: null };
 
 interface Seen {
   connection: ConnectivityValue;

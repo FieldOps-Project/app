@@ -10,6 +10,10 @@ import {
   type LastSync,
   type StoredInspection,
 } from '@/infrastructure/repositories/inspection-repository';
+import {
+  listConflicts,
+  type ConflictingRecord,
+} from '@/infrastructure/repositories/conflict-repository';
 import { countOpenOperations } from '@/infrastructure/repositories/outbox-repository';
 
 export function useOwnerUserId(): string {
@@ -53,6 +57,16 @@ export function useLastSync() {
     queryKey: queryKeys.synchronization.lastRun(ownerUserId),
     queryFn: () => readLastSync(ownerUserId),
     enabled: ownerUserId !== '',
+    staleTime: Infinity,
+  });
+}
+
+export function useInspectionConflicts(inspectionId: string) {
+  const ownerUserId = useOwnerUserId();
+  return useQuery<ConflictingRecord[], Error>({
+    queryKey: queryKeys.synchronization.conflicts(ownerUserId, inspectionId),
+    queryFn: () => listConflicts(ownerUserId, inspectionId),
+    enabled: ownerUserId !== '' && inspectionId !== '',
     staleTime: Infinity,
   });
 }

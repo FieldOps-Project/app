@@ -764,9 +764,11 @@ export async function findResponseBaseVersion(responseId: string): Promise<numbe
   const database = await getDatabase();
   const row = await database.getFirstAsync<{ base_version: number; acknowledged: number }>(
     `SELECT r.base_version,
-            EXISTS (
-              SELECT 1 FROM sync_operations o
-               WHERE o.entity_type = 'RESPONSE' AND o.entity_id = r.id AND o.status = 'COMPLETED'
+            (
+              r.last_synced_at IS NOT NULL OR EXISTS (
+                SELECT 1 FROM sync_operations o
+                 WHERE o.entity_type = 'RESPONSE' AND o.entity_id = r.id AND o.status = 'COMPLETED'
+              )
             ) AS acknowledged
        FROM inspection_responses r
       WHERE r.id = ?`,

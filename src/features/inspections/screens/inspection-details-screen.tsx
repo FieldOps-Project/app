@@ -28,6 +28,7 @@ import {
 import { isOverdue } from '@/domain/inspection-schedule';
 import { useInspectionId } from '@/features/inspections/hooks/use-inspection-id';
 import { InspectionLocationCard } from '@/features/location/components/inspection-location-card';
+import { ConflictCard } from '@/features/synchronization/components/conflict-card';
 import { formatDateTime } from '@/utils/format-date';
 import { plural } from '@/utils/plural';
 
@@ -139,6 +140,8 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
           ))}
         </Card>
       ) : null}
+
+      {detail.syncState === 'conflito' ? <ConflictCard inspectionId={detail.id} /> : null}
 
       {detail.syncError !== null &&
       (detail.syncState === 'falha' || detail.syncState === 'conflito') ? (

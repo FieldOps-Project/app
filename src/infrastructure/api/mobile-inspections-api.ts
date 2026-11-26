@@ -9,8 +9,10 @@ import {
   type MobileInspection,
   type MobileInspectionEntry,
 } from '@/schemas/mobile-inspection';
+import { syncPullSchema, type SyncPull } from '@/schemas/sync-pull';
 
 export const MOBILE_INSPECTIONS_PATH = '/api/v1/mobile/inspections';
+export const SYNC_PULL_PATH = '/api/v1/mobile/sync/pull';
 
 const savedResponseSchema = z.object({ version: z.number().int().min(0) });
 
@@ -80,6 +82,7 @@ export interface EvidenceUpload {
 export interface MobileInspectionsGateway {
   list(): Promise<Result<readonly MobileInspectionEntry[], ApiFailure>>;
   detail(inspectionId: string): Promise<Result<MobileInspection, ApiFailure>>;
+  pull(cursor: string | null): Promise<Result<SyncPull, ApiFailure>>;
   start(inspectionId: string, payload: StartPayload): Promise<Result<void, ApiFailure>>;
   submit(inspectionId: string, payload: SubmitPayload): Promise<Result<void, ApiFailure>>;
   reopen(inspectionId: string): Promise<Result<void, ApiFailure>>;
@@ -131,6 +134,14 @@ export const httpMobileInspectionsGateway: MobileInspectionsGateway = {
       path: `${MOBILE_INSPECTIONS_PATH}/${encodeURIComponent(inspectionId)}`,
     });
     return result.ok ? parseWith(mobileInspectionSchema, result.value) : result;
+  },
+
+  async pull(cursor) {
+    const result = await request<unknown>({
+      path: SYNC_PULL_PATH,
+      params: cursor === null ? undefined : { cursor },
+    });
+    return result.ok ? parseWith(syncPullSchema, result.value) : result;
   },
 
   start(inspectionId, payload) {

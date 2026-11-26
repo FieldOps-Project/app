@@ -1,3 +1,4 @@
+import { pullChanges } from '@/application/sync/pull-changes';
 import { synchronize } from '@/application/sync/synchronize';
 import { fail, ok } from '@/domain/result';
 import type { MobileInspectionsGateway } from '@/infrastructure/api';
@@ -24,6 +25,7 @@ jest.mock('@/config/env', () => ({ env: { apiUrl: 'http://api.test', appEnv: 'lo
 jest.mock('@/infrastructure/repositories/inspection-repository');
 jest.mock('@/infrastructure/repositories/outbox-repository');
 jest.mock('@/infrastructure/evidence/photo-storage');
+jest.mock('@/application/sync/pull-changes');
 
 const now = () => '2026-08-12T13:00:00.000Z';
 
@@ -48,6 +50,7 @@ function gateway(overrides: Partial<MobileInspectionsGateway> = {}): MobileInspe
   return {
     list: jest.fn(async () => ok([])),
     detail: jest.fn(async () => fail({ kind: 'notFound' as const })),
+    pull: jest.fn(async () => ok({ changes: [], nextCursor: null, hasMore: false })),
     start: jest.fn(async () => ok(undefined)),
     submit: jest.fn(async () => ok(undefined)),
     reopen: jest.fn(async () => ok(undefined)),
@@ -62,6 +65,7 @@ function gateway(overrides: Partial<MobileInspectionsGateway> = {}): MobileInspe
 beforeEach(() => {
   jest.resetAllMocks();
   jest.mocked(findServerUpdates).mockResolvedValue(new Map());
+  jest.mocked(pullChanges).mockResolvedValue(ok({ applied: 0, conflicts: 0, held: false }));
   jest.mocked(findResponseBaseVersion).mockResolvedValue(0);
   jest.mocked(claimOperation).mockImplementation(async (operationId) => {
     const queued = await jest.mocked(listOpenOperations).getMockImplementation()?.('u-1');
@@ -100,7 +104,12 @@ describe('synchronize', () => {
     expect(api.list).toHaveBeenCalled();
     expect(result).toEqual({
       ok: true,
-      value: { sent: 2, refused: 0, refresh: { saved: 0, failed: 0 } },
+      value: {
+        sent: 2,
+        refused: 0,
+        refresh: { saved: 0, failed: 0 },
+        pull: { applied: 0, conflicts: 0, held: false },
+      },
     });
     expect(recordSyncRun).toHaveBeenLastCalledWith(
       'u-1',
@@ -651,5 +660,81 @@ describe('refresh as part of synchronize', () => {
     await synchronize('u-1', api, now);
 
     expect(api.detail).not.toHaveBeenCalled();
+  });
+});
+
+describe('pulling server changes after sending', () => {
+  it('pulls after the download and reports success when nothing diverged', async () => {
+    queue([]);
+    const api = gateway();
+
+    await synchronize('u-1', api, now);
+
+    expect(pullChanges).toHaveBeenCalledWith('u-1', api, now);
+    expect(recordSyncRun).toHaveBeenLastCalledWith(
+      'u-1',
+      'SUCCESS',
+      expect.any(String),
+      expect.any(String)
+    );
+  });
+
+  it('marks the run partial when the pull found a conflict', async () => {
+    queue([]);
+    jest.mocked(pullChanges).mockResolvedValue(ok({ applied: 0, conflicts: 1, held: false }));
+
+    const result = await synchronize('u-1', gateway(), now);
+
+    expect(result.ok && result.value.pull?.conflicts).toBe(1);
+    expect(recordSyncRun).toHaveBeenLastCalledWith(
+      'u-1',
+      'PARTIAL',
+      expect.any(String),
+      expect.any(String)
+    );
+  });
+
+  it('marks the run partial when the pull held the cursor', async () => {
+    queue([]);
+    jest.mocked(pullChanges).mockResolvedValue(ok({ applied: 0, conflicts: 0, held: true }));
+
+    await synchronize('u-1', gateway(), now);
+
+    expect(recordSyncRun).toHaveBeenLastCalledWith(
+      'u-1',
+      'PARTIAL',
+      expect.any(String),
+      expect.any(String)
+    );
+  });
+
+  it('keeps what was sent and reports partial when the pull fails on the server', async () => {
+    queue([]);
+    jest.mocked(pullChanges).mockResolvedValue(fail({ kind: 'server' }));
+
+    const result = await synchronize('u-1', gateway(), now);
+
+    expect(result.ok && result.value.pull).toBeNull();
+    expect(recordSyncRun).toHaveBeenLastCalledWith(
+      'u-1',
+      'PARTIAL',
+      expect.any(String),
+      expect.any(String)
+    );
+  });
+
+  it('fails the run when the connection drops during the pull', async () => {
+    queue([]);
+    jest.mocked(pullChanges).mockResolvedValue(fail({ kind: 'network' }));
+
+    const result = await synchronize('u-1', gateway(), now);
+
+    expect(result).toEqual({ ok: false, error: { kind: 'network' } });
+    expect(recordSyncRun).toHaveBeenLastCalledWith(
+      'u-1',
+      'FAILED',
+      expect.any(String),
+      expect.any(String)
+    );
   });
 });
