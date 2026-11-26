@@ -114,15 +114,12 @@ describe('responseFormSchema', () => {
     });
   });
 
-  it('saves "Não" on a yes/no item as a non-conformity, so the failure rules apply', () => {
-    const answer = parse(item({ responseType: 'BOOLEAN' }), false);
-    expect(answer.success && answer.data.columns).toMatchObject({
-      valueBoolean: false,
-      conformity: 'NON_CONFORMING',
-    });
+  it('saves a yes/no answer as the boolean alone, without deciding whether it is a failure', () => {
+    const no = parse(item({ responseType: 'BOOLEAN' }), false);
+    expect(no.success && no.data.columns).toMatchObject({ valueBoolean: false, conformity: null });
 
     const yes = parse(item({ responseType: 'BOOLEAN' }), true);
-    expect(yes.success && yes.data.columns.conformity).toBe('CONFORMING');
+    expect(yes.success && yes.data.columns).toMatchObject({ valueBoolean: true, conformity: null });
   });
 
   it('refuses a date typed by hand', () => {

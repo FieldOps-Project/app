@@ -303,6 +303,10 @@ false` e vale como offline. Quando o NetInfo diz que há rede mas uma sincroniza
   em andamento), a linha do item **sugere** "Registrar não conformidade", sem obrigar. O item, a
   resposta e a inspeção ficam vinculados sozinhos (RN-052, RN-053); o técnico informa título,
   descrição e criticidade (baixa, média, alta ou crítica, sempre com rótulo em texto).
+- Só um item do tipo Conformidade tem resposta "Não conforme". Num item Sim/Não o aplicativo grava
+  apenas o valor: o backend recusa `conformity` nesse tipo e a regra do item não diz qual resposta
+  é a falha. Por isso "Não" não conta como falha, não exige observação nem foto e não sugere
+  registro.
 - O identificador é gerado no aparelho e o registro funciona por inteiro offline, fotos incluídas.
   Gravar a não conformidade enfileira uma operação `CREATE` que espera a da resposta; a foto de
   evidência enfileira um upload que espera a da resposta e a da não conformidade.

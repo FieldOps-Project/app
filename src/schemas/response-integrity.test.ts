@@ -45,7 +45,7 @@ describe('responseIssue accepts what each type allows', () => {
     ['TEXT_SHORT', answer({ valueText: 'ok' })],
     ['TEXT_LONG', answer({ valueText: 'a'.repeat(TEXT_LONG_MAX) })],
     ['NUMBER', answer({ valueNumber: 12.5 })],
-    ['BOOLEAN', answer({ valueBoolean: true, conformity: 'CONFORMING' })],
+    ['BOOLEAN', answer({ valueBoolean: true })],
     ['CONFORMITY', answer({ conformity: 'NON_CONFORMING' })],
     ['DATE', answer({ valueDate: '2026-02-28' })],
     ['TEXT_SHORT', answer()],

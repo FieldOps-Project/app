@@ -13,7 +13,7 @@ const TYPE_COLUMNS: Readonly<Record<string, readonly ColumnName[]>> = {
   TEXT_LONG: ['valueText'],
   SINGLE_CHOICE: ['valueText'],
   NUMBER: ['valueNumber'],
-  BOOLEAN: ['valueBoolean', 'conformity'],
+  BOOLEAN: ['valueBoolean'],
   CONFORMITY: ['conformity'],
   DATE: ['valueDate'],
 };

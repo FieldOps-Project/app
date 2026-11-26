@@ -1,11 +1,6 @@
 import { z } from 'zod';
 
-import {
-  isConformity,
-  type ChecklistItem,
-  type ChecklistResponse,
-  type Conformity,
-} from '@/domain/checklist';
+import { isConformity, type ChecklistItem, type ChecklistResponse } from '@/domain/checklist';
 
 export const TEXT_SHORT_MAX = 255;
 export const TEXT_LONG_MAX = 2000;
@@ -48,13 +43,6 @@ export function formatDecimal(value: number): string {
 
 type Issue = (message: string) => void;
 
-function booleanConformity(answer: boolean | null): Conformity | null {
-  if (answer === null) {
-    return null;
-  }
-  return answer ? 'CONFORMING' : 'NON_CONFORMING';
-}
-
 function optionalText(value: unknown, max: number, issue: Issue): string | null {
   const text = typeof value === 'string' ? value.trim() : '';
   if (text.length > max) {
@@ -89,7 +77,7 @@ function toColumns(item: ChecklistItem, value: unknown, issue: Issue): ResponseC
       return { ...EMPTY_COLUMNS, valueNumber: numberValue(item, value, issue) };
     case 'BOOLEAN': {
       const answer = typeof value === 'boolean' ? value : null;
-      return { ...EMPTY_COLUMNS, valueBoolean: answer, conformity: booleanConformity(answer) };
+      return { ...EMPTY_COLUMNS, valueBoolean: answer };
     }
     case 'CONFORMITY':
       return {

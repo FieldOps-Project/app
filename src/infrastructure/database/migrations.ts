@@ -212,4 +212,9 @@ export const MIGRATIONS: readonly string[] = [
   `
   ALTER TABLE inspections ADD COLUMN equipment_divergence_json TEXT;
   `,
+  `
+  UPDATE inspection_responses SET conformity = NULL
+   WHERE conformity IS NOT NULL
+     AND inspection_item_id IN (SELECT id FROM inspection_items WHERE response_type = 'BOOLEAN');
+  `,
 ];
