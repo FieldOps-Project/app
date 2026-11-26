@@ -18,10 +18,10 @@ const toneClasses: Record<TextTone, string> = {
   default: 'text-neutral-900 dark:text-neutral-50',
   muted: 'text-neutral-500 dark:text-neutral-400',
   brand: 'text-brand-700 dark:text-brand-300',
-  info: 'text-info-strong dark:text-info',
-  success: 'text-success-strong dark:text-success',
-  warning: 'text-warning-strong dark:text-warning',
-  danger: 'text-danger-strong dark:text-danger',
+  info: 'text-info-strong dark:text-info-light',
+  success: 'text-success-strong dark:text-success-light',
+  warning: 'text-warning-strong dark:text-warning-light',
+  danger: 'text-danger-strong dark:text-danger-light',
   inverse: 'text-neutral-0',
 };
 

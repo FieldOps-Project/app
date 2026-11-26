@@ -5,8 +5,8 @@ TypeScript, com Expo Router e estrutura por features.
 
 Este repositório contém a fundação técnica do produto (EP-01 / PBI-002): rotas, camadas,
 design system, lint, verificação de tipos e configuração por ambiente, além da autenticação
-(EP-02) e da execução de campo (EP-06). As inspeções do técnico ficam em SQLite no aparelho;
-o motor completo de sincronização (EP-08) entra em cards próprios.
+(EP-02), da execução de campo (EP-06) e do motor de sincronização offline (EP-08). As
+inspeções do técnico ficam em SQLite no aparelho e são enviadas por uma fila persistente.
 
 ## Pré-requisitos
 
@@ -54,11 +54,11 @@ arquivo `.env` **não é versionado**.
 > **Tudo que começa com `EXPO_PUBLIC_` é embutido no bundle** e fica legível para qualquer
 > pessoa que tenha o aplicativo instalado. Nunca coloque senha, chave de API, token ou
 > credencial de banco nessas variáveis. O aplicativo não guarda segredo de servidor: o que
-> for sensível e por dispositivo (token de sessão) vai para `expo-secure-store` quando a
-> autenticação entrar, em EP-02.
+> for sensível e por dispositivo (token de sessão) fica no `expo-secure-store`.
 
-A leitura é validada por Zod em [`src/config/env.ts`](src/config/env.ts). Se a URL estiver
-ausente ou malformada, o aplicativo falha na inicialização com uma mensagem explicando o
+A leitura é validada por Zod em [`src/config/env.ts`](src/config/env.ts). Fora do ambiente
+`local`, a URL precisa usar `https://`: senha e tokens não trafegam em texto puro. Se a URL
+estiver ausente ou malformada, o aplicativo falha na inicialização com uma mensagem explicando o
 que corrigir, em vez de quebrar depois com um erro de rede confuso.
 
 Variáveis `EXPO_PUBLIC_` são resolvidas no momento do bundle. Depois de editar o `.env`,
@@ -212,6 +212,10 @@ outbox:
 - Limite conhecido: o aparelho que baixa a inspeção pela primeira vez já reprovada não recebe as
   reprovações anteriores, só a última.
 
+O escopo vale para respostas, fotos e não conformidades: tirar ou remover uma foto, e registrar ou
+remover uma não conformidade, também só funcionam nos itens apontados (`assertItemEditable`, no
+repositório). Ao reabrir, a data e a localização de conclusão anteriores são apagadas.
+
 ### Download incremental e conflitos
 
 Depois de enviar a fila e baixar as inspeções, o motor chama `GET /api/v1/mobile/sync/pull` e
@@ -241,6 +245,20 @@ próxima edição vai no `baseVersion` do `PUT`.
 respostas), e não usa `POST /mobile/sync/push`: o envio continua pelos endpoints individuais
 porque o push não aceita as transições (início, conclusão e reabertura). Uma resposta local
 sem envio pendente cujo `id` difere do `id` do servidor (outro aparelho) mantém o `id` local.
+
+### Reaplicação e queda do servidor
+
+O envio de início, conclusão e reabertura não leva o id da operação (o backend não o lê nessas
+rotas). Se o servidor aplica o passo e a resposta se perde, o reenvio volta como recusa de
+negócio. Antes de tratar a recusa como falha, o motor consulta o detalhe da inspeção: se o estado
+no servidor já é o que o passo produziria (início → `IN_PROGRESS` ou adiante, conclusão →
+`SUBMITTED` ou `APPROVED`, reabertura → `IN_PROGRESS`), a operação é marcada como concluída em
+vez de reabrir a inspeção no aparelho. Respostas, não conformidades e fotos já são
+idempotentes pelo id gerado no aparelho.
+
+Duas falhas 5xx na mesma execução interrompem a rodada, como acontece na queda de rede, em vez
+de reenviar a fila inteira. Uma inspeção que continua retida por um conflito deixa a execução
+como "parcial".
 
 ### Conectividade e envio automático
 
@@ -322,6 +340,11 @@ false` e vale como offline. Quando o NetInfo diz que há rede mas uma sincroniza
   no fluxo da inspeção, e a confirmação não é gravada, porque o backend ainda não tem onde guardá-la.
 - Com a permissão da câmera negada, o técnico pode digitar o código ou o número de patrimônio.
 
+Quando o técnico lê outro equipamento e confirma que segue com o previsto (RN-064), a divergência
+fica registrada no aparelho (`inspections.equipment_divergence_json`, migração 7) e aparece no
+detalhe da inspeção. O contrato com o servidor ainda não tem campo para isso, então ela não é
+enviada.
+
 ## Apontar para a API na rede local
 
 O endereço que funciona depende de onde o aplicativo está rodando, porque `localhost`,
@@ -396,12 +419,12 @@ copiado para a falha, então nada sensível chega a um log, nem em desenvolvimen
 
 ### Tipos gerados do OpenAPI — pendência
 
-Os tipos do contrato devem ser **gerados**, não escritos à mão, a partir do OpenAPI da API
+Os tipos do contrato são **gerados**, não escritos à mão, a partir do OpenAPI da API
 (`npm run types:api` → [`generated/`](src/infrastructure/api/generated/README.md)). O
-contrato depende de `backend#3`, ainda aberto: sem `/v3/api-docs` publicado, não há de onde
-gerar. Até lá, apenas o formato de erro — a única parte que este card consome — é espelhado
-à mão em `api-error.ts`, para ser reconciliado com os tipos gerados quando o backend#3
-fechar. Pendência aceita de forma explícita, como o próprio card autoriza.
+backend#3 foi concluído e o login já consome os tipos gerados. A pendência que resta é o
+formato de erro, ainda espelhado à mão em `api-error.ts`, para trocar por
+`components["schemas"]["ApiError"]`. As respostas de inspeções, sincronização e evidências
+são validadas com zod em `src/schemas`, e não pelos tipos gerados.
 
 ### Chaves de consulta
 
@@ -496,7 +519,7 @@ src/app/
     ├── (tabs)/                 # Início · Inspeções · Sincronização · Perfil
     ├── inspections/[inspectionId]/{index,start,checklist,summary,non-conformities}.tsx
     ├── scanner.tsx
-    ├── evidence/{capture,preview}.tsx
+    ├── evidence/{capture,preview,view}.tsx
     └── sync/details.tsx
 ```
 

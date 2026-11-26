@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { ok, type Result } from '@/domain/result';
+import { fail, ok, type Result } from '@/domain/result';
 import type { Session } from '@/domain/session';
 import {
   login,
@@ -67,8 +67,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return result;
     }
 
-    await writeTokens(result.value.tokens);
-    await writeSession(result.value.user);
+    try {
+      await writeTokens(result.value.tokens);
+      await writeSession(result.value.user);
+    } catch {
+      await Promise.allSettled([clearTokens(), clearSession()]);
+      void logout(result.value.tokens.refreshToken);
+      return fail({ kind: 'server' as const });
+    }
     setSessionExpired(false);
     setSession(result.value.user);
     return ok(undefined);
@@ -77,14 +83,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const tokens = await readTokens();
 
-    await clearTokens();
-    await clearSession();
-    setSessionExpired(false);
-    setSession(null);
-    queryClient.clear();
-
-    if (tokens !== null) {
-      void logout(tokens.refreshToken);
+    try {
+      await clearTokens();
+      await clearSession();
+    } finally {
+      setSessionExpired(false);
+      setSession(null);
+      queryClient.clear();
+      if (tokens !== null) {
+        void logout(tokens.refreshToken);
+      }
     }
   }, [queryClient]);
 

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
-import { View } from 'react-native';
+import { useColorScheme, View } from 'react-native';
 
 import { Text, type TextTone } from '@/design-system/components/text';
 import { colors } from '@/design-system/tokens/design-tokens';
@@ -25,12 +25,21 @@ const labelTones: Record<BadgeTone, TextTone> = {
   danger: 'danger',
 };
 
-const iconColors: Record<BadgeTone, string> = {
-  neutral: colors.neutral[500],
-  info: colors.info.DEFAULT,
-  success: colors.success.DEFAULT,
-  warning: colors.warning.DEFAULT,
-  danger: colors.danger.DEFAULT,
+const iconColors: Record<'light' | 'dark', Record<BadgeTone, string>> = {
+  light: {
+    neutral: colors.neutral[500],
+    info: colors.info.DEFAULT,
+    success: colors.success.DEFAULT,
+    warning: colors.warning.DEFAULT,
+    danger: colors.danger.DEFAULT,
+  },
+  dark: {
+    neutral: colors.neutral[400],
+    info: colors.info.light,
+    success: colors.success.light,
+    warning: colors.warning.light,
+    danger: colors.danger.light,
+  },
 };
 
 export interface BadgeProps {
@@ -41,13 +50,17 @@ export interface BadgeProps {
 }
 
 export function Badge({ label, tone = 'neutral', icon, className }: BadgeProps) {
+  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+
   return (
     <View
       accessibilityRole="text"
       accessibilityLabel={label}
       className={`flex-row items-center gap-1.5 self-start rounded-full px-2.5 py-1 ${containerClasses[tone]} ${className ?? ''}`}
     >
-      {icon === undefined ? null : <Ionicons name={icon} size={14} color={iconColors[tone]} />}
+      {icon === undefined ? null : (
+        <Ionicons name={icon} size={14} color={iconColors[scheme][tone]} />
+      )}
       <Text variant="caption" tone={labelTones[tone]} className="font-semibold">
         {label}
       </Text>

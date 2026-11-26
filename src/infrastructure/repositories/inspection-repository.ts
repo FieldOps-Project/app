@@ -364,11 +364,38 @@ export async function markInspectionDirty(
   now: string
 ) {
   await transaction.runAsync(
-    `UPDATE inspections SET is_dirty = 1, local_sync_status = 'PENDING', local_updated_at = ?
+    `UPDATE inspections
+        SET is_dirty = 1, local_updated_at = ?,
+            local_sync_status = CASE WHEN EXISTS (
+              SELECT 1 FROM sync_operations
+               WHERE inspection_id = ? AND status = 'CONFLICT'
+            ) THEN 'CONFLICT' ELSE 'PENDING' END
       WHERE id = ?`,
     now,
+    inspectionId,
     inspectionId
   );
+}
+
+export async function assertItemEditable(
+  transaction: SQLiteDatabase,
+  inspectionId: string,
+  itemId: string | null
+): Promise<void> {
+  if (itemId === null) {
+    return;
+  }
+  const row = await transaction.getFirstAsync<InspectionRow>(
+    'SELECT * FROM inspections WHERE id = ?',
+    inspectionId
+  );
+  if (row === null) {
+    throw new InspectionStateError(null);
+  }
+  const { status, review } = toDetail(row);
+  if (!canEditItem(status, review, itemId)) {
+    throw new ItemNotCorrectableError();
+  }
 }
 
 export interface StartCommand {
@@ -458,14 +485,21 @@ export async function reopenInspection(command: ReopenCommand): Promise<void> {
       'SELECT * FROM inspections WHERE id = ?',
       command.inspectionId
     );
-    const { review, reviewHistory } = toDetail(row as InspectionRow);
+    if (row === null) {
+      throw new InspectionStateError(null);
+    }
+    const { review, reviewHistory } = toDetail(row);
     const history =
       review === null || review.decision !== 'REJECTED'
         ? reviewHistory
         : [...reviewHistory, { ...review, reopenedAt: now }];
 
     await transaction.runAsync(
-      `UPDATE inspections SET status = 'IN_PROGRESS', review_history_json = ? WHERE id = ?`,
+      `UPDATE inspections
+          SET status = 'IN_PROGRESS', review_history_json = ?, completed_at_device = NULL,
+              completion_latitude = NULL, completion_longitude = NULL, completion_accuracy = NULL,
+              completion_location_at = NULL, completion_location_missing = NULL
+        WHERE id = ?`,
       JSON.stringify(history),
       command.inspectionId
     );
@@ -506,14 +540,7 @@ export async function saveResponse({
     const { base_version } = await lockInspection(transaction, ownerUserId, inspectionId, [
       'IN_PROGRESS',
     ]);
-    const inspectionRow = await transaction.getFirstAsync<InspectionRow>(
-      'SELECT * FROM inspections WHERE id = ?',
-      inspectionId
-    );
-    const { status, review } = toDetail(inspectionRow as InspectionRow);
-    if (!canEditItem(status, review, response.inspectionItemId)) {
-      throw new ItemNotCorrectableError();
-    }
+    await assertItemEditable(transaction, inspectionId, response.inspectionItemId);
 
     const itemRow = await transaction.getFirstAsync<ItemRow>(
       'SELECT * FROM inspection_items WHERE id = ? AND inspection_id = ?',
@@ -661,6 +688,7 @@ export async function registerEvidence(command: RegisterEvidenceCommand): Promis
       command.inspectionId,
       ['IN_PROGRESS']
     );
+    await assertItemEditable(transaction, command.inspectionId, command.inspectionItemId);
     const response = await transaction.getFirstAsync<{ id: string }>(
       'SELECT id FROM inspection_responses WHERE inspection_item_id = ? AND inspection_id = ?',
       command.inspectionItemId,
@@ -777,12 +805,41 @@ export async function findResponseBaseVersion(responseId: string): Promise<numbe
   return row !== null && row.acknowledged === 1 ? row.base_version : 0;
 }
 
+export interface EquipmentDivergenceCommand {
+  readonly ownerUserId: string;
+  readonly inspectionId: string;
+  readonly scannedEquipmentId: string;
+  readonly scannedEquipmentName: string;
+  readonly recordedAt: string;
+}
+
+export async function recordEquipmentDivergence(
+  command: EquipmentDivergenceCommand
+): Promise<void> {
+  await writeTransaction(async (transaction) => {
+    await lockInspection(transaction, command.ownerUserId, command.inspectionId, [
+      'ASSIGNED',
+      'IN_PROGRESS',
+    ]);
+    await transaction.runAsync(
+      'UPDATE inspections SET equipment_divergence_json = ? WHERE id = ?',
+      JSON.stringify({
+        scannedEquipmentId: command.scannedEquipmentId,
+        scannedEquipmentName: command.scannedEquipmentName,
+        recordedAt: command.recordedAt,
+      }),
+      command.inspectionId
+    );
+  });
+}
+
 export async function recordResponseVersion(responseId: string, version: number): Promise<void> {
-  const database = await getDatabase();
-  await database.runAsync(
-    'UPDATE inspection_responses SET base_version = ? WHERE id = ?',
-    version,
-    responseId
+  await writeTransaction((transaction) =>
+    transaction.runAsync(
+      'UPDATE inspection_responses SET base_version = ? WHERE id = ?',
+      version,
+      responseId
+    )
   );
 }
 
@@ -812,8 +869,9 @@ export async function discardEvidence(command: DiscardEvidenceCommand): Promise<
     const evidence = await transaction.getFirstAsync<{
       local_uri: string | null;
       thumbnail_uri: string | null;
+      inspection_item_id: string | null;
     }>(
-      `SELECT local_uri, thumbnail_uri FROM evidences
+      `SELECT local_uri, thumbnail_uri, inspection_item_id FROM evidences
         WHERE id = ? AND inspection_id = ? AND deleted_locally = 0`,
       command.evidenceId,
       command.inspectionId
@@ -821,6 +879,7 @@ export async function discardEvidence(command: DiscardEvidenceCommand): Promise<
     if (evidence === null) {
       return { outcome: 'not-found' } as const;
     }
+    await assertItemEditable(transaction, command.inspectionId, evidence.inspection_item_id);
 
     const { reachedServer } = await cancelPendingOperations(
       transaction,
@@ -878,6 +937,42 @@ export interface CompleteCommand {
   readonly location: LocationCapture;
 }
 
+async function assertCompletable(transaction: SQLiteDatabase, inspectionId: string) {
+  const checklist = await readChecklist(transaction, inspectionId);
+  const progress = computeProgress({
+    items: checklist.items,
+    responses: checklist.responses,
+    evidenceCounts: checklist.evidenceCounts,
+  });
+  if (progress.pending.length > 0) {
+    throw new InspectionIncompleteError();
+  }
+  const withoutEvidence = await transaction.getFirstAsync<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM non_conformities nc
+      WHERE nc.inspection_id = ? AND nc.severity = 'CRITICAL' AND nc.deleted_locally = 0
+        AND NOT EXISTS (
+          SELECT 1 FROM evidences ev
+           WHERE ev.non_conformity_id = nc.id AND ev.deleted_locally = 0)`,
+    inspectionId
+  );
+  if ((withoutEvidence?.total ?? 0) > 0) {
+    throw new NonConformityEvidenceError();
+  }
+}
+
+export async function checkCompletable(ownerUserId: string, inspectionId: string): Promise<void> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ status: InspectionStatus }>(
+    'SELECT status FROM inspections WHERE id = ? AND owner_user_id = ?',
+    inspectionId,
+    ownerUserId
+  );
+  if (row === null || row.status !== 'IN_PROGRESS') {
+    throw new InspectionStateError(row?.status ?? null);
+  }
+  await assertCompletable(database, inspectionId);
+}
+
 export async function completeInspection(command: CompleteCommand): Promise<void> {
   const now = command.completedAtDevice;
 
@@ -888,26 +983,7 @@ export async function completeInspection(command: CompleteCommand): Promise<void
       command.inspectionId,
       ['IN_PROGRESS']
     );
-    const checklist = await readChecklist(transaction, command.inspectionId);
-    const progress = computeProgress({
-      items: checklist.items,
-      responses: checklist.responses,
-      evidenceCounts: checklist.evidenceCounts,
-    });
-    if (progress.pending.length > 0) {
-      throw new InspectionIncompleteError();
-    }
-    const withoutEvidence = await transaction.getFirstAsync<{ total: number }>(
-      `SELECT COUNT(*) AS total FROM non_conformities nc
-        WHERE nc.inspection_id = ? AND nc.severity = 'CRITICAL' AND nc.deleted_locally = 0
-          AND NOT EXISTS (
-            SELECT 1 FROM evidences ev
-             WHERE ev.non_conformity_id = nc.id AND ev.deleted_locally = 0)`,
-      command.inspectionId
-    );
-    if ((withoutEvidence?.total ?? 0) > 0) {
-      throw new NonConformityEvidenceError();
-    }
+    await assertCompletable(transaction, command.inspectionId);
     const dependencyIds = await openOperationIds(transaction, command.inspectionId);
 
     await transaction.runAsync(

@@ -26,10 +26,10 @@ const colors = {
     900: '#12151b',
     950: '#0a0c10',
   },
-  success: { DEFAULT: '#15803d', soft: '#dcfce7', strong: '#166534' },
-  warning: { DEFAULT: '#b45309', soft: '#fef3c7', strong: '#92400e' },
-  danger: { DEFAULT: '#b91c1c', soft: '#fee2e2', strong: '#991b1b' },
-  info: { DEFAULT: '#0369a1', soft: '#e0f2fe', strong: '#075985' },
+  success: { DEFAULT: '#15803d', soft: '#dcfce7', strong: '#166534', light: '#4ade80' },
+  warning: { DEFAULT: '#b45309', soft: '#fef3c7', strong: '#92400e', light: '#fbbf24' },
+  danger: { DEFAULT: '#b91c1c', soft: '#fee2e2', strong: '#991b1b', light: '#f87171' },
+  info: { DEFAULT: '#0369a1', soft: '#e0f2fe', strong: '#075985', light: '#38bdf8' },
 };
 
 const spacing = {

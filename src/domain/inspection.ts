@@ -60,6 +60,12 @@ export interface PastReview extends InspectionReview {
   readonly reopenedAt: string;
 }
 
+export interface EquipmentDivergence {
+  readonly scannedEquipmentId: string;
+  readonly scannedEquipmentName: string;
+  readonly recordedAt: string;
+}
+
 export interface InspectionDetail extends InspectionSummary {
   readonly instructions: string | null;
   readonly version: number;
@@ -72,6 +78,7 @@ export interface InspectionDetail extends InspectionSummary {
   readonly completionLocation: RecordedLocation;
   readonly review: InspectionReview | null;
   readonly reviewHistory: readonly PastReview[];
+  readonly equipmentDivergence: EquipmentDivergence | null;
   readonly syncError: string | null;
 }
 

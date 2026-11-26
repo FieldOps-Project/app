@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { CONFORMITIES } from '@/domain/checklist';
+
 export const pulledChangeSchema = z.object({
   entityType: z.string(),
   entityId: z.string(),
@@ -22,7 +24,7 @@ export const pulledResponseSchema = z.object({
   valueNumber: z.number().nullable().default(null),
   valueBoolean: z.boolean().nullable().default(null),
   valueDate: z.string().nullable().default(null),
-  conformity: z.enum(['CONFORMING', 'NON_CONFORMING', 'NOT_APPLICABLE']).nullable().default(null),
+  conformity: z.enum(CONFORMITIES).nullable().default(null),
   observation: z.string().nullable().default(null),
   answeredAtDevice: z.string(),
   version: z.number().int().min(0),

@@ -203,6 +203,17 @@ function InspectionDetails({ work }: { work: InspectionWork }) {
 
       <InspectionLocationCard detail={detail} />
 
+      {detail.equipmentDivergence === null ? null : (
+        <Card title="Equipamento lido diferente do previsto" className="border-2 border-warning">
+          <Line icon="warning-outline" tone="warning">
+            {`Em ${formatDateTime(detail.equipmentDivergence.recordedAt)} você leu ${detail.equipmentDivergence.scannedEquipmentName} e seguiu com o equipamento previsto.`}
+          </Line>
+          <Text variant="caption" tone="muted">
+            Este aviso fica só neste aparelho: o servidor ainda não tem campo para registrá-lo.
+          </Text>
+        </Card>
+      )}
+
       <Card title="Equipamento">
         {detail.equipment === null ? (
           <Text variant="body" tone="muted">

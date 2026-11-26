@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Image, View } from 'react-native';
 
-import { discardCapturedPhoto } from '@/application/evidence/evidence-files';
+import { discardCapturedPhoto, isCapturedPhotoUri } from '@/application/evidence/evidence-files';
 import { useAttachPhoto } from '@/application/inspections/use-checklist-actions';
 import { Button } from '@/design-system/components/button';
 import { ErrorState } from '@/design-system/components/error-state';
@@ -41,7 +41,7 @@ export function EvidencePreviewScreen() {
   const returnFromEvidence = useReturnFromEvidence(inspectionId, nonConformityId);
   const [description, setDescription] = useState('');
 
-  if (photoUri === undefined || photoUri === '' || itemId === '') {
+  if (!isCapturedPhotoUri(photoUri) || itemId === '') {
     return (
       <Screen edges={BELOW_HEADER_EDGES}>
         <ErrorState
@@ -115,7 +115,7 @@ export function EvidencePreviewScreen() {
         placeholder="O que a foto mostra"
       />
       {attach.error === null ? null : (
-        <Text variant="body" tone="danger">
+        <Text variant="body" tone="danger" accessibilityRole="alert">
           {attach.error.message}
         </Text>
       )}

@@ -22,6 +22,9 @@ function describeLoginFailure(failure: PresentableApiFailure): string {
       ? 'Seu acesso está desativado ou bloqueado. Fale com o administrador.'
       : 'E-mail ou senha inválidos.';
   }
+  if (failure.kind === 'forbidden') {
+    return 'Este perfil não usa o aplicativo de campo. Acesse pela interface web.';
+  }
   if (failure.kind === 'business') {
     return 'Não foi possível entrar. Confira o e-mail e a senha e tente novamente.';
   }
@@ -91,7 +94,7 @@ export function LoginScreen() {
         {failure === null ? null : isNetworkFailure(failure) ? (
           <OfflineNotice message="Sem conexão com o servidor. Verifique a internet e tente novamente." />
         ) : (
-          <Text variant="body" tone="danger">
+          <Text variant="body" tone="danger" accessibilityRole="alert">
             {describeLoginFailure(failure)}
           </Text>
         )}

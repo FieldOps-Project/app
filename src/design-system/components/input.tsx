@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { forwardRef } from 'react';
-import { TextInput, View, type TextInputProps } from 'react-native';
+import { TextInput, useColorScheme, View, type TextInputProps } from 'react-native';
 
 import { Text } from '@/design-system/components/text';
 import { colors, minTouchTarget } from '@/design-system/tokens/design-tokens';
@@ -18,6 +18,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   ref
 ) {
   const isInvalid = error !== undefined;
+  const dark = useColorScheme() === 'dark';
 
   return (
     <View className={`gap-1.5 ${className ?? ''}`}>
@@ -39,8 +40,12 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
       />
       {isInvalid ? (
         <View className="flex-row items-center gap-1.5">
-          <Ionicons name="alert-circle" size={16} color={colors.danger.DEFAULT} />
-          <Text variant="caption" tone="danger" className="flex-1">
+          <Ionicons
+            name="alert-circle"
+            size={16}
+            color={dark ? colors.danger.light : colors.danger.DEFAULT}
+          />
+          <Text variant="caption" tone="danger" accessibilityRole="alert" className="flex-1">
             {error}
           </Text>
         </View>

@@ -21,7 +21,10 @@ const { APP_ENVIRONMENTS, ENVIRONMENT_LABELS } = load({});
 
 describe('env', () => {
   it.each(APP_ENVIRONMENTS)('switches to %s without touching code', (appEnv) => {
-    const { env, isProduction } = load({ EXPO_PUBLIC_APP_ENV: appEnv });
+    const { env, isProduction } = load({
+      EXPO_PUBLIC_APP_ENV: appEnv,
+      EXPO_PUBLIC_API_URL: 'https://api.fieldops.test/',
+    });
 
     expect(env.appEnv).toBe(appEnv);
     expect(isProduction).toBe(appEnv === 'production');
@@ -37,6 +40,21 @@ describe('env', () => {
 
   it('refuses an environment that does not exist', () => {
     expect(() => load({ EXPO_PUBLIC_APP_ENV: 'staging' })).toThrow('Configuração de ambiente');
+  });
+
+  it.each(['integration', 'demo', 'production'])(
+    'refuses a plain http API url in the %s environment',
+    (appEnv) => {
+      expect(() =>
+        load({ EXPO_PUBLIC_APP_ENV: appEnv, EXPO_PUBLIC_API_URL: 'http://api.fieldops.test' })
+      ).toThrow('precisa usar https://');
+    }
+  );
+
+  it('accepts a plain http API url only in the local environment', () => {
+    expect(
+      load({ EXPO_PUBLIC_APP_ENV: 'local', EXPO_PUBLIC_API_URL: 'http://10.0.2.2:8080' }).env.apiUrl
+    ).toBe('http://10.0.2.2:8080');
   });
 
   it('names every environment for the person using the app', () => {

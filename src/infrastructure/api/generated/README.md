@@ -9,7 +9,7 @@ documento OpenAPI publicado pelo backend.
 `FieldOps-Project/backend#3` (OpenAPI/Swagger versionado) foi concluído: o
 contrato vive em `backend/openapi/openapi.json` e `schema.d.ts` aqui é gerado a
 partir dele. O card #6 (login) já consome os tipos gerados (`LoginRequest`,
-`LoginResponse`, `AuthUser`) em `src/features/auth/api/auth-api.ts`.
+`LoginResponse`, `AuthUser`) em `src/infrastructure/api/auth-api.ts`.
 
 O formato de erro segue espelhado à mão em [`../api-error.ts`](../api-error.ts)
 em vez de usar `components["schemas"]["ApiError"]` diretamente — essa

@@ -1,12 +1,15 @@
 import * as SecureStore from 'expo-secure-store';
+import { z } from 'zod';
 
 const TOKENS_KEY = 'fieldops.tokens';
 
-export interface AuthTokens {
-  readonly accessToken: string;
-  readonly refreshToken: string;
-  readonly expiresAt: number;
-}
+const tokensSchema = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1),
+  expiresAt: z.number(),
+});
+
+export type AuthTokens = Readonly<z.infer<typeof tokensSchema>>;
 
 export async function readTokens(): Promise<AuthTokens | null> {
   try {
@@ -14,7 +17,8 @@ export async function readTokens(): Promise<AuthTokens | null> {
     if (raw === null) {
       return null;
     }
-    return JSON.parse(raw) as AuthTokens;
+    const parsed = tokensSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

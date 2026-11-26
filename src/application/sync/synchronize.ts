@@ -6,7 +6,7 @@ import {
   isNetworkFailure,
   type ApiFailure,
   type MobileInspectionsGateway,
-  type ResponsePayload,
+  type PresentableApiFailure,
 } from '@/infrastructure/api';
 import { deleteFile, evidenceUploadUri } from '@/infrastructure/evidence/photo-storage';
 import {
@@ -46,6 +46,18 @@ const transitionPayloadSchema = z.discriminatedUnion('action', [
   }),
   z.object({ action: z.literal('REOPEN'), reopenedAtDevice: z.string() }),
 ]);
+
+const responsePayloadSchema = z.object({
+  id: z.string(),
+  inspectionItemId: z.string(),
+  valueText: z.string().nullable(),
+  valueNumber: z.number().nullable(),
+  valueBoolean: z.boolean().nullable(),
+  valueDate: z.string().nullable(),
+  conformity: z.string().nullable(),
+  observation: z.string().nullable(),
+  answeredAtDevice: z.string(),
+});
 
 const nonConformityPayloadSchema = z.object({
   id: z.string(),
@@ -136,9 +148,15 @@ async function send(
 ): Promise<Result<void, ApiFailure>> {
   switch (operation.entityType) {
     case 'RESPONSE': {
-      const payload = operation.payload as ResponsePayload;
+      const payload = responsePayloadSchema.safeParse(operation.payload);
+      if (!payload.success) {
+        return invalidOperation();
+      }
       const baseVersion = await findResponseBaseVersion(operation.entityId);
-      const saved = await gateway.putResponse(operation.inspectionId, { ...payload, baseVersion });
+      const saved = await gateway.putResponse(operation.inspectionId, {
+        ...payload.data,
+        baseVersion,
+      });
       if (!saved.ok) {
         return saved;
       }
@@ -181,11 +199,155 @@ function isUpload(operation: QueuedOperation): boolean {
   return operation.entityType === 'EVIDENCE' && operation.operationType === 'UPLOAD';
 }
 
+type TransitionAction = z.infer<typeof transitionPayloadSchema>['action'];
+
+const APPLIED_STATUSES: Readonly<Record<TransitionAction, readonly string[]>> = {
+  START: ['IN_PROGRESS', 'SUBMITTED', 'APPROVED', 'REJECTED'],
+  SUBMIT: ['SUBMITTED', 'APPROVED'],
+  REOPEN: ['IN_PROGRESS'],
+};
+
+const MAX_SERVER_FAILURES_PER_RUN = 2;
+
+function transitionAction(operation: QueuedOperation): TransitionAction | null {
+  if (operation.entityType !== 'INSPECTION') {
+    return null;
+  }
+  const parsed = transitionPayloadSchema.safeParse(operation.payload);
+  return parsed.success ? parsed.data.action : null;
+}
+
 function isSubmit(operation: QueuedOperation): boolean {
-  return (
-    operation.entityType === 'INSPECTION' &&
-    (operation.payload as { action?: unknown } | null)?.action === 'SUBMIT'
+  return transitionAction(operation) === 'SUBMIT';
+}
+
+async function appliedOnServer(
+  gateway: MobileInspectionsGateway,
+  operation: QueuedOperation
+): Promise<boolean> {
+  const action = transitionAction(operation);
+  if (action === null) {
+    return false;
+  }
+  const current = await gateway.detail(operation.inspectionId);
+  return current.ok && APPLIED_STATUSES[action].includes(current.value.status);
+}
+
+interface Drain {
+  readonly sent: number;
+  readonly refused: number;
+  readonly conflicted: number;
+}
+
+interface Queue {
+  readonly all: readonly QueuedOperation[];
+  readonly open: Set<string>;
+  readonly waiting: Map<string, QueuedOperation>;
+}
+
+async function recordRefusal(
+  operation: QueuedOperation,
+  failure: PresentableApiFailure,
+  queue: Queue,
+  now: () => string
+): Promise<void> {
+  const reason = describeApiFailure(failure);
+  if (failure.kind === 'business' && isSubmit(operation)) {
+    await reopenAfterRefusedSubmit(operation, reason, now());
+    return;
+  }
+
+  await markFailed(operation, failure.kind === 'conflict' ? 'CONFLICT' : 'FAILED', reason, now());
+  const completion = queue.all.find(
+    (candidate) =>
+      candidate.inspectionId === operation.inspectionId &&
+      isSubmit(candidate) &&
+      queue.open.has(candidate.operationId)
   );
+  if (failure.kind === 'business' && isUpload(operation) && completion !== undefined) {
+    await reopenAfterRefusedSubmit(completion, reason, now());
+    queue.open.delete(completion.operationId);
+    queue.waiting.delete(completion.operationId);
+  }
+}
+
+async function drainQueue(
+  ownerUserId: string,
+  gateway: MobileInspectionsGateway,
+  now: () => string
+): Promise<Result<Drain, ApiFailure>> {
+  const all = await listOpenOperations(ownerUserId);
+  const queue: Queue = {
+    all,
+    open: new Set(all.map((operation) => operation.operationId)),
+    waiting: new Map(all.map((operation) => [operation.operationId, operation])),
+  };
+  const held = new Set<string>();
+  const conflicted = new Set<string>();
+  let sent = 0;
+  let refused = 0;
+  let serverFailures = 0;
+  let progressed = true;
+
+  while (progressed) {
+    progressed = false;
+
+    for (const listed of [...queue.waiting.values()]) {
+      if (listed.status === 'CONFLICT') {
+        held.add(listed.inspectionId);
+        conflicted.add(listed.inspectionId);
+        queue.waiting.delete(listed.operationId);
+        continue;
+      }
+      if (held.has(listed.inspectionId)) {
+        queue.waiting.delete(listed.operationId);
+        continue;
+      }
+      if (listed.dependencyIds.some((id) => queue.open.has(id))) {
+        continue;
+      }
+
+      queue.waiting.delete(listed.operationId);
+      progressed = true;
+      const operation = await claimOperation(listed.operationId, now());
+      if (operation === null) {
+        continue;
+      }
+      const result = await send(gateway, operation);
+
+      if (result.ok) {
+        await markCompleted(operation, now());
+        queue.open.delete(operation.operationId);
+        sent += 1;
+        continue;
+      }
+
+      const failure = result.error;
+      if (isNetworkFailure(failure) || failure.kind === 'unauthorized') {
+        await releaseOperation(operation.operationId, now());
+        return fail(failure);
+      }
+      if (failure.kind === 'business' && (await appliedOnServer(gateway, operation))) {
+        await markCompleted(operation, now());
+        queue.open.delete(operation.operationId);
+        sent += 1;
+        continue;
+      }
+
+      await recordRefusal(operation, failure, queue, now);
+      held.add(operation.inspectionId);
+      refused += 1;
+
+      if (failure.kind === 'server') {
+        serverFailures += 1;
+        if (serverFailures >= MAX_SERVER_FAILURES_PER_RUN) {
+          return fail(failure);
+        }
+      }
+    }
+  }
+
+  return ok({ sent, refused, conflicted: conflicted.size });
 }
 
 let running: Promise<Result<SyncOutcome, ApiFailure>> | null = null;
@@ -209,80 +371,13 @@ async function run(
   const startedAt = now();
   await releaseInterruptedOperations(ownerUserId, startedAt);
 
-  const queue = await listOpenOperations(ownerUserId);
-  const open = new Set(queue.map((operation) => operation.operationId));
-  const held = new Set<string>();
-  let sent = 0;
-  let refused = 0;
-
-  const waiting = new Map(queue.map((operation) => [operation.operationId, operation]));
-  let progressed = true;
-
-  while (progressed) {
-    progressed = false;
-
-    for (const listed of [...waiting.values()]) {
-      if (listed.status === 'CONFLICT') {
-        held.add(listed.inspectionId);
-        waiting.delete(listed.operationId);
-        continue;
-      }
-      if (held.has(listed.inspectionId)) {
-        waiting.delete(listed.operationId);
-        continue;
-      }
-      if (listed.dependencyIds.some((id) => open.has(id))) {
-        continue;
-      }
-
-      waiting.delete(listed.operationId);
-      progressed = true;
-      const operation = await claimOperation(listed.operationId, now());
-      if (operation === null) {
-        continue;
-      }
-      const result = await send(gateway, operation);
-
-      if (result.ok) {
-        await markCompleted(operation, now());
-        open.delete(operation.operationId);
-        sent += 1;
-        continue;
-      }
-
-      const failure = result.error;
-      if (isNetworkFailure(failure) || failure.kind === 'unauthorized') {
-        await releaseOperation(operation.operationId, now());
-        await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());
-        return fail(failure);
-      }
-
-      const reason = describeApiFailure(failure);
-      if (failure.kind === 'business' && isSubmit(operation)) {
-        await reopenAfterRefusedSubmit(operation, reason, now());
-      } else {
-        await markFailed(
-          operation,
-          failure.kind === 'conflict' ? 'CONFLICT' : 'FAILED',
-          reason,
-          now()
-        );
-        const completion = queue.find(
-          (candidate) =>
-            candidate.inspectionId === operation.inspectionId &&
-            isSubmit(candidate) &&
-            open.has(candidate.operationId)
-        );
-        if (failure.kind === 'business' && isUpload(operation) && completion !== undefined) {
-          await reopenAfterRefusedSubmit(completion, reason, now());
-          open.delete(completion.operationId);
-          waiting.delete(completion.operationId);
-        }
-      }
-      held.add(operation.inspectionId);
-      refused += 1;
-    }
+  const drained = await drainQueue(ownerUserId, gateway, now);
+  if (!drained.ok) {
+    await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());
+    return drained;
   }
+  const { sent, refused, conflicted } = drained.value;
+
   const refresh = await refreshInspections(ownerUserId, gateway, now);
   if (!refresh.ok) {
     await recordSyncRun(ownerUserId, 'FAILED', startedAt, now());
@@ -297,7 +392,12 @@ async function run(
 
   const pull = pulled.ok ? pulled.value : null;
   const partial =
-    refused > 0 || refresh.value.failed > 0 || pull === null || pull.held || pull.conflicts > 0;
+    refused > 0 ||
+    conflicted > 0 ||
+    refresh.value.failed > 0 ||
+    pull === null ||
+    pull.held ||
+    pull.conflicts > 0;
   await recordSyncRun(ownerUserId, partial ? 'PARTIAL' : 'SUCCESS', startedAt, now());
   return ok({ sent, refused, refresh: refresh.value, pull });
 }

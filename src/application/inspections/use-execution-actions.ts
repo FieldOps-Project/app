@@ -7,6 +7,7 @@ import { queryKeys } from '@/infrastructure/api';
 import { newId } from '@/infrastructure/ids';
 import { captureLocation } from '@/infrastructure/location/capture-location';
 import {
+  checkCompletable,
   completeInspection,
   reopenInspection,
   startInspection,
@@ -18,7 +19,8 @@ function useTransition(
     operationId: string,
     deviceTime: string,
     location: LocationCapture
-  ) => Promise<void>
+  ) => Promise<void>,
+  precheck?: (ownerUserId: string) => Promise<void>
 ) {
   const ownerUserId = useOwnerUserId();
   const queryClient = useQueryClient();
@@ -26,6 +28,7 @@ function useTransition(
 
   const mutation = useMutation<LocationCapture, Error>({
     mutationFn: async () => {
+      await precheck?.(ownerUserId);
       const deviceTime = new Date().toISOString();
       setLocating(true);
       const location = await captureLocation().finally(() => setLocating(false));
@@ -51,8 +54,10 @@ export function useStartInspection(inspectionId: string) {
 }
 
 export function useCompleteInspection(inspectionId: string) {
-  return useTransition((ownerUserId, operationId, completedAtDevice, location) =>
-    completeInspection({ ownerUserId, inspectionId, operationId, completedAtDevice, location })
+  return useTransition(
+    (ownerUserId, operationId, completedAtDevice, location) =>
+      completeInspection({ ownerUserId, inspectionId, operationId, completedAtDevice, location }),
+    (ownerUserId) => checkCompletable(ownerUserId, inspectionId)
   );
 }
 

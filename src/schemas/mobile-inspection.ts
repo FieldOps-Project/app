@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { CONFORMITIES } from '@/domain/checklist';
+
 const nullableText = z
   .string()
   .nullish()
@@ -23,7 +25,7 @@ export const inspectionStatusSchema = z.enum([
 
 export const inspectionPrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
 
-const conformitySchema = z.enum(['CONFORMING', 'NON_CONFORMING', 'NOT_APPLICABLE']);
+const conformitySchema = z.enum(CONFORMITIES);
 
 const itemRulesSchema = z
   .object({

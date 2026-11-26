@@ -56,6 +56,10 @@ jest.mock('expo-camera', () => ({
 jest.mock('@/application/inspections/use-inspection-detail', () => ({
   useInspectionDetail: () => mockDetail.current,
 }));
+const mockRecord = jest.fn();
+jest.mock('@/application/equipment/record-divergence', () => ({
+  useRecordEquipmentDivergence: () => ({ mutate: mockRecord }),
+}));
 jest.mock('@/application/equipment/identify-equipment', () => ({
   useIdentifyEquipment: () => ({
     mutate: mockMutate,
@@ -275,6 +279,10 @@ describe('result', () => {
     const buttons = alert.mock.calls[0]?.[2] ?? [];
     act(() => buttons.find((entry) => entry.text === 'Estou no equipamento previsto')?.onPress?.());
     expect(mockDispatch).toHaveBeenCalledWith(action);
+    expect(mockRecord).toHaveBeenCalledWith({
+      scannedEquipmentId: 'eq-2',
+      scannedEquipmentName: 'Gerador 02',
+    });
   });
 
   it('asks the same confirmation when the technician leaves by the back button', () => {
@@ -291,6 +299,7 @@ describe('result', () => {
       expect.any(Array)
     );
     expect(mockDispatch).not.toHaveBeenCalled();
+    expect(mockRecord).not.toHaveBeenCalled();
   });
 
   it('opens an inspection of the scanned equipment without asking about the expected one', () => {
