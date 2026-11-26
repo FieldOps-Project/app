@@ -49,6 +49,7 @@ interface Call {
   readonly method: string | undefined;
   readonly url: string | undefined;
   readonly data?: unknown;
+  readonly params?: Record<string, unknown>;
 }
 
 function recordFormData() {
@@ -71,6 +72,12 @@ function recordFormData() {
 let database: SQLiteDatabase;
 let calls: Call[];
 let reply: (call: Call) => Reply;
+let pulled: (call: Call) => Reply;
+
+const EMPTY_PULL: Reply = {
+  status: 200,
+  data: { changes: [], nextCursor: null, hasMore: false },
+};
 
 function wasSent(method: string, urlEnd: string): number {
   return calls.filter((call) => call.method === method && call.url?.endsWith(urlEnd)).length;
@@ -101,6 +108,9 @@ async function queueStartAndAnswer() {
 }
 
 function serverAnswers(config: Call): Reply {
+  if (config.url?.endsWith('/mobile/sync/pull') === true) {
+    return pulled(config);
+  }
   if (config.method === 'get') {
     return LISTING;
   }
@@ -115,8 +125,14 @@ beforeEach(async () => {
   jest.mocked(getDatabase).mockResolvedValue(database);
   calls = [];
   reply = serverAnswers;
+  pulled = () => EMPTY_PULL;
   httpClient.defaults.adapter = fakeAdapter((config) => {
-    const call = { method: config.method, url: config.url, data: config.data };
+    const call = {
+      method: config.method,
+      url: config.url,
+      data: config.data,
+      params: config.params as Record<string, unknown> | undefined,
+    };
     calls.push(call);
     return reply(call);
   });
@@ -501,5 +517,147 @@ describe('a photo taken before its item was answered', () => {
       'post /api/v1/inspections/insp-1/evidence',
     ]);
     expect(await countOpenOperations(OWNER)).toBe(0);
+  });
+});
+
+function pulledAnswer(overrides: Record<string, unknown> = {}) {
+  return {
+    entityType: 'INSPECTION_RESPONSE',
+    entityId: 'resp-1',
+    changeType: 'UPSERT',
+    version: 2,
+    payload: {
+      id: 'resp-1',
+      inspectionId: 'insp-1',
+      inspectionItemId: 'item-1',
+      valueText: null,
+      valueNumber: null,
+      valueBoolean: null,
+      valueDate: null,
+      conformity: 'NON_CONFORMING',
+      observation: 'Trinca.',
+      answeredAtDevice: FIXTURE_TIME,
+      version: 2,
+      ...overrides,
+    },
+  };
+}
+
+function page(changes: unknown[], nextCursor: string | null, hasMore = false): Reply {
+  return { status: 200, data: { changes, nextCursor, hasMore } };
+}
+
+async function storedCursor(): Promise<string | null> {
+  const row = await database.getFirstAsync<{ pull_cursor: string | null }>(
+    'SELECT pull_cursor FROM sync_metadata WHERE owner_user_id = ?',
+    OWNER
+  );
+  return row?.pull_cursor ?? null;
+}
+
+describe('pulling the answers already saved on the server', () => {
+  it('recovers an answer the device does not have and edits it from the server version', async () => {
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({ status: 'IN_PROGRESS' }),
+      FIXTURE_TIME
+    );
+    pulled = () => page([pulledAnswer()], 'cursor-1');
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.responses[0]).toMatchObject({
+      id: 'resp-1',
+      conformity: 'NON_CONFORMING',
+      observation: 'Trinca.',
+    });
+    expect(await storedCursor()).toBe('cursor-1');
+
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-edit',
+      response: checklistAnswer({ conformity: 'CONFORMING', observation: null }),
+    });
+    pulled = () => EMPTY_PULL;
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    const put = calls.find((call) => call.method === 'put');
+    expect(JSON.parse(put?.data as string)).toMatchObject({ id: 'resp-1', baseVersion: 2 });
+  });
+
+  it('asks for the next page with the cursor it stored and keeps paging until the end', async () => {
+    await saveDownloadedInspection(
+      OWNER,
+      remoteInspection({ status: 'IN_PROGRESS' }),
+      FIXTURE_TIME
+    );
+    pulled = (call) =>
+      call.params?.cursor === 'cursor-1'
+        ? page([], 'cursor-2')
+        : page([pulledAnswer()], 'cursor-1', true);
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    const asked = calls
+      .filter((call) => call.url?.endsWith('/mobile/sync/pull'))
+      .map((call) => call.params?.cursor);
+    expect(asked).toEqual([undefined, 'cursor-1']);
+    expect(await storedCursor()).toBe('cursor-2');
+  });
+
+  it('keeps the cursor when an answer belongs to an inspection not stored yet', async () => {
+    pulled = () => page([pulledAnswer()], 'cursor-1');
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    expect(await storedCursor()).toBeNull();
+    expect(await readLastSync(OWNER)).toMatchObject({ result: 'PARTIAL' });
+    expect(await count('inspection_responses')).toBe(0);
+  });
+
+  it('keeps the cursor when the pull page itself fails', async () => {
+    pulled = () => ({ status: 500 });
+
+    const result = await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    expect(result.ok).toBe(true);
+    expect(await storedCursor()).toBeNull();
+    expect(await readLastSync(OWNER)).toMatchObject({ result: 'PARTIAL' });
+  });
+
+  it('preserves the local value and keeps both sides when the server changed it meanwhile', async () => {
+    await queueStartAndAnswer();
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+    await saveResponse({
+      ownerUserId: OWNER,
+      inspectionId: 'insp-1',
+      operationId: 'op-edit',
+      response: checklistAnswer({ conformity: 'CONFORMING', observation: 'Revisada.' }),
+    });
+    reply = (call) => (call.method === 'put' ? { status: 409 } : serverAnswers(call));
+    pulled = () => page([pulledAnswer({ version: 5 })], 'cursor-9');
+
+    await synchronize(OWNER, httpMobileInspectionsGateway);
+
+    const stored = await findInspection(OWNER, 'insp-1');
+    expect(stored?.responses[0]).toMatchObject({
+      conformity: 'CONFORMING',
+      observation: 'Revisada.',
+    });
+    expect(stored?.detail.syncState).toBe('conflito');
+    const [held] = await listOpenOperations(OWNER);
+    expect(held).toMatchObject({ status: 'CONFLICT' });
+    const kept = await database.getFirstAsync<{ server_state_json: string }>(
+      'SELECT server_state_json FROM sync_operations WHERE operation_id = ?',
+      held?.operationId ?? ''
+    );
+    expect(JSON.parse(kept?.server_state_json ?? '{}')).toMatchObject({
+      conformity: 'NON_CONFORMING',
+      observation: 'Trinca.',
+      version: 5,
+    });
+    expect(await readLastSync(OWNER)).toMatchObject({ result: 'PARTIAL' });
   });
 });

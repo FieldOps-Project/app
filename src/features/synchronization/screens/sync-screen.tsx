@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { FlatList, View } from 'react-native';
+import { FlatList, Pressable, View } from 'react-native';
 
 import {
   useInspectionList,
@@ -114,19 +114,44 @@ export function SyncScreen() {
             />
           )
         }
-        renderItem={({ item: { inspection } }) => (
-          <Card>
-            <View className="flex-row items-center justify-between gap-3">
-              <View className="flex-1">
-                <Text variant="body">{inspection.clientName}</Text>
-                <Text variant="caption" tone="muted">
-                  {inspection.title}
-                </Text>
+        renderItem={({ item: { inspection } }) => {
+          const conflicted = inspection.syncState === 'conflito';
+          const card = (
+            <Card className={conflicted ? 'border-2 border-warning' : undefined}>
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text variant="body">{inspection.clientName}</Text>
+                  <Text variant="caption" tone="muted">
+                    {inspection.title}
+                  </Text>
+                </View>
+                <SyncStateBadge state={inspection.syncState} />
               </View>
-              <SyncStateBadge state={inspection.syncState} />
-            </View>
-          </Card>
-        )}
+              {conflicted ? (
+                <Text variant="caption" tone="warning">
+                  Alterada no servidor. Seus dados foram preservados. Toque para ver os dois
+                  valores.
+                </Text>
+              ) : null}
+            </Card>
+          );
+          return conflicted ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Ver o conflito da inspeção ${inspection.title}`}
+              onPress={() =>
+                router.push({
+                  pathname: '/inspections/[inspectionId]',
+                  params: { inspectionId: inspection.id },
+                })
+              }
+            >
+              {card}
+            </Pressable>
+          ) : (
+            card
+          );
+        }}
         ListFooterComponent={
           <Button
             label="Ver detalhes da fila"

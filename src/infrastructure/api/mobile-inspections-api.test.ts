@@ -119,3 +119,50 @@ describe('reopen', () => {
     });
   });
 });
+
+describe('pull', () => {
+  it('sends the stored cursor back unchanged and parses the page', async () => {
+    jest.mocked(request).mockResolvedValue(
+      ok({
+        changes: [
+          {
+            entityType: 'INSPECTION',
+            entityId: 'a',
+            changeType: 'UPSERT',
+            version: 2,
+            payload: {},
+          },
+        ],
+        nextCursor: 'opaque==',
+        hasMore: false,
+        serverTime: '2026-11-26T10:00:00Z',
+      })
+    );
+
+    const result = await httpMobileInspectionsGateway.pull('prev==');
+
+    expect(jest.mocked(request).mock.calls[0]?.[0]).toMatchObject({
+      path: '/api/v1/mobile/sync/pull',
+      params: { cursor: 'prev==' },
+    });
+    expect(result.ok && result.value.nextCursor).toBe('opaque==');
+    expect(result.ok && result.value.changes).toHaveLength(1);
+  });
+
+  it('asks for the first page without a cursor parameter', async () => {
+    jest.mocked(request).mockResolvedValue(ok({ changes: [], nextCursor: null, hasMore: false }));
+
+    await httpMobileInspectionsGateway.pull(null);
+
+    expect(jest.mocked(request).mock.calls[0]?.[0].params).toBeUndefined();
+  });
+
+  it('fails as a server error when the page has an unexpected shape', async () => {
+    jest.mocked(request).mockResolvedValue(ok({ changes: 'x' }));
+
+    expect(await httpMobileInspectionsGateway.pull(null)).toEqual({
+      ok: false,
+      error: { kind: 'server' },
+    });
+  });
+});

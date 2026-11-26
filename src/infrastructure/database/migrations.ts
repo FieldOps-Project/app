@@ -205,4 +205,8 @@ export const MIGRATIONS: readonly string[] = [
   `
   ALTER TABLE inspections ADD COLUMN review_history_json TEXT;
   `,
+  `
+  ALTER TABLE sync_metadata ADD COLUMN pull_cursor TEXT;
+  ALTER TABLE sync_operations ADD COLUMN server_state_json TEXT;
+  `,
 ];

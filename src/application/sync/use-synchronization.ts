@@ -17,6 +17,7 @@ function invalidateLocalReads(queryClient: QueryClient, ownerUserId: string): Pr
     queryClient.invalidateQueries({ queryKey: queryKeys.nonConformities.all() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.pending(ownerUserId) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.lastRun(ownerUserId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.synchronization.conflicts(ownerUserId) }),
   ]).then(() => undefined);
 }
 

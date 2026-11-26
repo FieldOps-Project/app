@@ -212,6 +212,36 @@ outbox:
 - Limite conhecido: o aparelho que baixa a inspeção pela primeira vez já reprovada não recebe as
   reprovações anteriores, só a última.
 
+### Download incremental e conflitos
+
+Depois de enviar a fila e baixar as inspeções, o motor chama `GET /api/v1/mobile/sync/pull` e
+aplica o que o servidor devolve. Hoje o aplicativo só usa as **respostas** (`INSPECTION_RESPONSE`),
+que é o que o detalhe `GET /mobile/inspections/{id}` ainda não traz (`responses` vem vazio, issue
+backend#74): o pull devolve o `id` e a `version` de cada resposta, e é com essa versão que a
+próxima edição vai no `baseVersion` do `PUT`.
+
+- **O cursor é opaco e só avança depois de gravar.** Cada página é aplicada em uma transação do
+  SQLite e o `pull_cursor` (em `sync_metadata`) é gravado na mesma transação. Se a gravação falha,
+  o cursor fica onde estava e a página volta na próxima sincronização.
+- **O cursor também fica parado** quando a página traz uma resposta de uma inspeção que ainda não
+  está no aparelho: avançar perderia essa resposta para sempre. A execução vira "parcial" e a
+  próxima tentativa recomeça nessa página.
+- **O pull nunca sobrescreve uma resposta com envio pendente.** Se a resposta local está
+  pendente e o servidor já está em uma versão maior que a conhecida (ou tem outra resposta para o
+  mesmo item), a operação vira `CONFLICT`, o servidor é guardado em `sync_operations.server_state_json`
+  e o valor local continua intacto. Operações em conflito não são reenviadas.
+- **Conflito aparece nos três lugares do card #28:** o selo "Conflito" na lista, o cartão
+  "Conflito de sincronização" no detalhe (valor deste aparelho ao lado do valor do servidor) e a
+  tela de sincronização, que leva à inspeção afetada. O texto diz que não há botão de resolver: a
+  saída é ação administrativa ou nova inspeção (a resolução colaborativa está fora do MVP).
+- A resposta ao `PUT` já devolve 409 quando a versão está velha. O pull logo em seguida na mesma
+  execução é o que traz o valor do servidor para mostrar os dois lados.
+
+**Limites conhecidos.** O pull ainda não trata `NON_CONFORMITY` nem `INSPECTION_EVIDENCE` (só as
+respostas), e não usa `POST /mobile/sync/push`: o envio continua pelos endpoints individuais
+porque o push não aceita as transições (início, conclusão e reabertura). Uma resposta local
+sem envio pendente cujo `id` difere do `id` do servidor (outro aparelho) mantém o `id` local.
+
 ### Conectividade e envio automático
 
 - **Offline é modo de operação, não erro.** O `ConnectivityProvider` escuta o NetInfo e um aviso
